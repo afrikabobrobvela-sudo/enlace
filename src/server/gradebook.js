@@ -104,20 +104,22 @@ export function weightsRecord(course, settings, tasks) {
 // ---- Lectura ---------------------------------------------------------------------------------
 
 export async function loadTask(db, id, course) {
-  const row = await one(db, 'SELECT * FROM aula_tasks WHERE id=? AND course=?', id, course);
+  const row = await one(db, 'SELECT * FROM aula_tasks WHERE id=? AND course=? AND deleted_at IS NULL', id, course);
   if (!row) fail('Elemento no encontrado.', 404);
   return row;
 }
 
 /** Todo lo de calificaciones de un curso. Si se indica `userId`, solo lo que esa persona puede ver. */
 export async function courseGradebook(db, course, { teacher, userId }) {
-  const tasks = await all(db, 'SELECT * FROM aula_tasks WHERE course=? ORDER BY created', course);
+  const tasks = await all(db, 'SELECT * FROM aula_tasks WHERE course=? AND deleted_at IS NULL ORDER BY created', course);
   const settings = await one(db, 'SELECT * FROM aula_grade_settings WHERE course=?', course);
+  // Las entregas de una actividad en la papelera se conservan, pero no se muestran ni cuentan.
+  const active = 'AND s.task IN (SELECT id FROM aula_tasks WHERE course=s.course AND deleted_at IS NULL)';
   const submissions = teacher
-    ? await all(db, 'SELECT * FROM aula_submissions WHERE course=? ORDER BY created', course)
+    ? await all(db, `SELECT s.* FROM aula_submissions s WHERE s.course=? ${active} ORDER BY s.created`, course)
     : await all(
         db,
-        'SELECT s.* FROM aula_submissions s JOIN aula_members m ON m.id=s.member WHERE s.course=? AND m.user_id=? ORDER BY s.created',
+        `SELECT s.* FROM aula_submissions s JOIN aula_members m ON m.id=s.member WHERE s.course=? AND m.user_id=? ${active} ORDER BY s.created`,
         course,
         userId,
       );
@@ -140,7 +142,7 @@ export async function courseGradebook(db, course, { teacher, userId }) {
   records.push(gradingRecord(course, settings, categories));
   if (teacher) {
     // Rúbricas asignadas a actividades de este curso (aunque su autor haya dejado de compartirlas).
-    const rubrics = await all(db, 'SELECT * FROM aula_rubrics WHERE id IN (SELECT rubric FROM aula_tasks WHERE course=? AND rubric IS NOT NULL)', course);
+    const rubrics = await all(db, 'SELECT * FROM aula_rubrics WHERE id IN (SELECT rubric FROM aula_tasks WHERE course=? AND rubric IS NOT NULL AND deleted_at IS NULL)', course);
     records.push(...rubrics.map(rubricRecord));
   }
   return records;
@@ -294,7 +296,7 @@ export function assertAvailable(task) {
 // ---- Ponderaciones -----------------------------------------------------------------------------
 
 export async function saveWeights(db, { course, userId, id, revision, weights }) {
-  const tasks = await all(db, 'SELECT id FROM aula_tasks WHERE course=?', course);
+  const tasks = await all(db, 'SELECT id FROM aula_tasks WHERE course=? AND deleted_at IS NULL', course);
   const valid =
     weights &&
     typeof weights === 'object' &&
@@ -327,11 +329,11 @@ export async function saveWeights(db, { course, userId, id, revision, weights })
   }
   await run(
     db,
-    'UPDATE aula_tasks SET weight=(SELECT j.value FROM json_each(?) j WHERE j.key=aula_tasks.id) WHERE course=?',
+    'UPDATE aula_tasks SET weight=(SELECT j.value FROM json_each(?) j WHERE j.key=aula_tasks.id) WHERE course=? AND deleted_at IS NULL',
     JSON.stringify(weights),
     course,
   );
-  const taskWeights = await all(db, 'SELECT id, weight FROM aula_tasks WHERE course=?', course);
+  const taskWeights = await all(db, 'SELECT id, weight FROM aula_tasks WHERE course=? AND deleted_at IS NULL', course);
   return weightsRecord(course, await one(db, 'SELECT * FROM aula_grade_settings WHERE course=?', course), taskWeights);
 }
 

@@ -83,6 +83,7 @@ function render() {
     attendance: renderAttendance,
     progress: renderProgress,
     admin: renderAdmin,
+    trash: renderTrash,
     notices: renderNotices
   };
   (routes[section] || renderHub)();
@@ -132,7 +133,7 @@ function renderForum() {
   const f = find(detail);
   if (!f)
     return renderForums();
-  $('#main').innerHTML = `<button class="back" data-section="forums">❮ Lista de foros</button><h1>${esc(f.data.title)}</h1><p class="body-text">${esc(f.data.body)}</p><div class="toolbar">${button('Publicar mensaje', 'new-post', f.id)}</div>${records('post').filter(p => p.data.forum === f.id).map(p => `<article class="forum-post"><h2>${esc(p.data.title)}</h2><p class="muted">${esc(p.data.name)} · ${fmt(p.created)}</p><p class="body-text">${esc(p.data.body)}</p></article>`).join('') || '<p class="empty">Todavía no hay publicaciones.</p>'}`;
+  $('#main').innerHTML = `<button class="back" data-section="forums">❮ Lista de foros</button><h1>${esc(f.data.title)}</h1><p class="body-text">${esc(f.data.body)}</p><div class="toolbar">${button('Publicar mensaje', 'new-post', f.id)}</div>${records('post').filter(p => p.data.forum === f.id).map(p => `<article class="forum-post"><h2>${esc(p.data.title)}</h2><p class="muted">${esc(p.data.name)} · ${fmt(p.created)}</p><p class="body-text">${esc(p.data.body)}</p>${teaches() || p.author === me.id ? trashButton('post', p.id) : ''}</article>`).join('') || '<p class="empty">Todavía no hay publicaciones.</p>'}`;
 }
 function renderQuizzes() {
   $('#main').innerHTML = `<h1>Evaluaciones</h1><div class="home-tabs"><button class="active">${teaches() ? 'Administrar evaluaciones' : 'Mis evaluaciones'}</button></div><div class="toolbar">${teaches() ? button('Nueva evaluación', 'new-quiz') : ''}</div><div class="table-wrap"><table><thead><tr><th>Evaluación</th><th>Preguntas</th><th>Estado</th></tr></thead><tbody>${records('quiz').map(q => `<tr><td>${button(esc(q.data.title), 'quiz', q.id, 'table-link')}</td><td>${q.data.questions.length}</td><td>${q.data.visible ? 'Publicada' : 'Oculta'}</td></tr>`).join('') || '<tr><td colspan="3">No hay evaluaciones.</td></tr>'}</tbody></table></div>`;
@@ -294,7 +295,7 @@ function renderMembers() {
   $('#main').innerHTML = `<h1>Listado de alumnos</h1><div class="toolbar">${teaches() ? button('Inscribir alumno', 'new-member') + button('Importar lista', 'bulk-members', '', 'secondary') : ''}<input data-search type="search" placeholder="Buscar…" aria-label="Buscar alumno"></div>${teaches() ? '<p class="real-status">La inscripción vincula el curso al correo del alumno: verá el curso cuando entre con ese mismo correo (su cuenta de Google). No se envían invitaciones.</p>' : ''}<div class="table-wrap"><table><thead><tr><th>Nombre</th>${teaches() ? '<th>Matrícula</th><th>Correo</th><th>Estado</th><th>Acción</th>' : ''}</tr></thead><tbody>${current.members.map(m => `<tr data-search-row><td>${esc(m.name)}</td>${teaches() ? `<td>${esc(m.matricula)}</td><td>${esc(m.email)}</td><td>${m.user_id ? 'Cuenta vinculada' : 'Pendiente de ingreso'}</td><td>${button('Retirar', 'remove-member', m.id, 'text-btn')}</td>` : ''}</tr>`).join('') || '<tr><td>No hay alumnos inscritos.</td></tr>'}</tbody></table></div>`;
 }
 function renderAdmin() {
-  $('#main').innerHTML = `<h1>Administración del curso</h1><section class="admin-section"><h2>Configuración</h2><div class="admin-links">${button('Información del curso', 'edit-course', '', 'table-link')}${button('Exportar respaldo del curso', 'backup', '', 'table-link')}${current.canDelete ? button('Eliminar curso / grupo', 'delete-course', current.course.id, 'danger-link') : ''}</div></section><section class="admin-section"><h2>Administración de estudiantes</h2><div class="admin-links"><button class="table-link" data-section="members">Listado de alumnos</button><button class="table-link" data-section="groups">Equipos de trabajo</button><button class="table-link" data-section="progress">Progreso de la clase</button></div></section><section class="admin-section"><h2>Evaluación</h2><div class="admin-links"><button class="table-link" data-section="tasks">Actividades</button><button class="table-link" data-section="grades">Calificaciones</button><button class="table-link" data-section="quizzes">Evaluaciones</button></div></section><p class="real-status">El respaldo exporta registros y metadatos en JSON. Descarga los archivos adjuntos por separado. Conserva copias periódicas fuera de la plataforma.</p>`;
+  $('#main').innerHTML = `<h1>Administración del curso</h1><section class="admin-section"><h2>Configuración</h2><div class="admin-links">${button('Información del curso', 'edit-course', '', 'table-link')}${button('Exportar respaldo del curso', 'backup', '', 'table-link')}${current.canDelete ? button('Eliminar curso / grupo', 'delete-course', current.course.id, 'danger-link') : ''}</div></section><section class="admin-section"><h2>Administración de estudiantes</h2><div class="admin-links"><button class="table-link" data-section="members">Listado de alumnos</button><button class="table-link" data-section="groups">Equipos de trabajo</button><button class="table-link" data-section="progress">Progreso de la clase</button></div></section><section class="admin-section"><h2>Evaluación</h2><div class="admin-links"><button class="table-link" data-section="tasks">Actividades</button><button class="table-link" data-section="grades">Calificaciones</button><button class="table-link" data-section="quizzes">Evaluaciones</button></div></section><section class="admin-section"><h2>Papelera</h2><div class="admin-links"><button class="table-link" data-section="trash">Elementos eliminados</button></div><p class="muted">Lo que eliminas del curso se puede restaurar desde aquí con todo su contenido, entregas y calificaciones.</p></section><p class="real-status">El respaldo exporta registros y metadatos en JSON. Descarga los archivos adjuntos por separado. Conserva copias periódicas fuera de la plataforma.</p>`;
 }
 async function save(kind, data, old) {
   return request('/api/record', {
@@ -375,7 +376,7 @@ function simpleRecord(kind, old) {
     notice: 'publicación',
     forum: 'foro'
   };
-  modal(`${old ? 'Editar' : 'Crear'} ${names[kind]}`, field('Título', 'title', old?.data.title || '', 'text', 'required maxlength="200"') + textarea('Contenido', 'body', old?.data.body || '', false) + visible(old?.data.visible), f => save(kind, {
+  modal(`${old ? 'Editar' : 'Crear'} ${names[kind]}`, field('Título', 'title', old?.data.title || '', 'text', 'required maxlength="200"') + textarea('Contenido', 'body', old?.data.body || '', false) + visible(old?.data.visible) + (old ? `<p class="modal-danger">${trashButton(kind, old.id, 'Eliminar ' + names[kind])}</p>` : ''), f => save(kind, {
     title: f.get('title'),
     body: f.get('body'),
     visible: f.get('visible') === 'on'
@@ -410,7 +411,7 @@ async function upload(files, scope, existing = []) {
 function materialModal(old) {
   const d = old?.data || {};
   let uploaded = null;
-  modal(old ? 'Editar material' : 'Agregar material', field('Título', 'title', d.title || '', 'text', 'required') + `<label>Unidad<select name="module"><option value="">Sin unidad</option>${records('module').map(m => `<option value="${m.id}" ${(d.module || moduleId) === m.id ? 'selected' : ''}>${esc(m.data.title)}</option>`).join('')}</select></label>` + textarea('Descripción', 'body', d.body || '', false) + field('Enlace (opcional)', 'url', d.url || '', 'url') + `<label>Adjuntar archivos<input type="file" name="files" multiple></label><p class="pending-message">Máximo cinco archivos de 20 MB cada uno. Se conservan los archivos existentes.</p>${fileLinks(d.fileIds)}` + visible(d.visible), async (f) => {
+  modal(old ? 'Editar material' : 'Agregar material', field('Título', 'title', d.title || '', 'text', 'required') + `<label>Unidad<select name="module"><option value="">Sin unidad</option>${records('module').map(m => `<option value="${m.id}" ${(d.module || moduleId) === m.id ? 'selected' : ''}>${esc(m.data.title)}</option>`).join('')}</select></label>` + textarea('Descripción', 'body', d.body || '', false) + field('Enlace (opcional)', 'url', d.url || '', 'url') + `<label>Adjuntar archivos<input type="file" name="files" multiple></label><p class="pending-message">Máximo cinco archivos de 20 MB cada uno. Se conservan los archivos existentes.</p>${fileLinks(d.fileIds)}` + visible(d.visible) + (old ? `<p class="modal-danger">${trashButton('material', old.id, 'Eliminar material')}</p>` : ''), async (f) => {
     if (!uploaded)
       uploaded = await upload(f.getAll('files'), 'material', d.fileIds || []);
     await save('material', {
@@ -428,7 +429,7 @@ function quizFields(q, i) {
 }
 function quizModal(old) {
   let count = old?.data.questions.length || 1;
-  modal(old ? 'Editar evaluación' : 'Nueva evaluación', field('Título', 'title', old?.data.title || '', 'text', 'required') + textarea('Instrucciones', 'body', old?.data.body || '', false) + visible(old?.data.visible ?? false) + `<div id="questions">${Array.from({ length: count }, (_, i) => quizFields(old?.data.questions[i], i)).join('')}</div><button type="button" class="secondary" id="addQuestion">＋ Agregar pregunta</button><p class="pending-message">Un intento por alumno. Una evaluación con respuestas recibidas no permite modificar las preguntas.</p>`, f => save('quiz', {
+  modal(old ? 'Editar evaluación' : 'Nueva evaluación', field('Título', 'title', old?.data.title || '', 'text', 'required') + textarea('Instrucciones', 'body', old?.data.body || '', false) + visible(old?.data.visible ?? false) + `<div id="questions">${Array.from({ length: count }, (_, i) => quizFields(old?.data.questions[i], i)).join('')}</div><button type="button" class="secondary" id="addQuestion">＋ Agregar pregunta</button><p class="pending-message">Un intento por alumno. Una evaluación con respuestas recibidas no permite modificar las preguntas.</p>` + (old ? `<p class="modal-danger">${trashButton('quiz', old.id, 'Eliminar evaluación')}</p>` : ''), f => save('quiz', {
     title: f.get('title'),
     body: f.get('body'),
     visible: f.get('visible') === 'on',
@@ -682,6 +683,26 @@ document.addEventListener('click', async (e) => {
         toast(published === 1 ? 'Se publicó 1 calificación.' : `Se publicaron ${published} calificaciones.`);
         break;
       }
+      case 'trash': {
+        const kind = b.dataset.kind;
+        if (!(await trashItem(kind, id)))
+          return;
+        if ($('#modal').open)
+          $('#modal').close();
+        // Si se eliminó lo que estaba abierto, vuelve a la lista correspondiente.
+        const back = { task: ['task', 'editor', 'review', 'tasks'], forum: ['forum', 'forums'], quiz: ['quiz', 'quizzes'] }[kind];
+        if (back?.includes(section)) {
+          section = back[back.length - 1];
+          detail = null;
+        }
+        dirty = false;
+        await reload();
+        toast(kind === 'post' ? 'Publicación eliminada.' : 'Se movió a la papelera. Puedes restaurarlo desde Administración del curso → Papelera.');
+        break;
+      }
+      case 'restore':
+        await restoreItem(b.dataset.kind, id);
+        break;
       case 'logout':
         await request('/auth/logout', {});
         location.href = '/';

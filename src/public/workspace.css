@@ -1020,3 +1020,14 @@ footer {
     padding: 24px 20px;
   }
 }
+
+/* Papelera: el botón "Eliminar" va separado de las acciones de guardar. */
+.modal-danger {
+  margin-top: 1.25rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid #e5e7eb;
+}
+.forum-post .danger-link,
+.editor-bottom .danger-link {
+  margin-left: auto;
+}

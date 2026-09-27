@@ -78,7 +78,7 @@ export const gradingRoutes = {
       if (Math.abs(total - 100) > 0.01) fail(`Los pesos de las categorías deben sumar 100 % (ahora suman ${Math.round(total * 100) / 100} %).`);
     }
     const byKey = new Map(categories.map((c) => [c.key, c]));
-    const taskIds = new Set((await all(db, 'SELECT id FROM aula_tasks WHERE course=?', body.course)).map((t) => t.id));
+    const taskIds = new Set((await all(db, 'SELECT id FROM aula_tasks WHERE course=? AND deleted_at IS NULL', body.course)).map((t) => t.id));
     const seen = new Set();
     const assignments = (Array.isArray(body.assignments) ? body.assignments : []).map((item) => {
       if (!taskIds.has(item?.task) || seen.has(item.task)) fail('Actividad no encontrada o repetida.');

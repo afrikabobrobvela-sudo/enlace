@@ -128,6 +128,9 @@ export const records = sqliteTable(
     revision: integer('revision').notNull().default(1),
     created: text('created').notNull(),
     updated: text('updated').notNull(),
+    // Papelera: un elemento eliminado conserva sus datos y puede restaurarse (NULL = activo).
+    deletedAt: text('deleted_at'),
+    deletedBy: text('deleted_by'),
   },
   (t) => [index('aula_records_course_kind').on(t.course, t.kind)],
 );
@@ -174,6 +177,9 @@ export const tasks = sqliteTable(
     points: real('points').notNull().default(1), // valor dentro de su categoría
     rubric: text('rubric').references(() => rubrics.id, { onDelete: 'set null' }),
     groupCategory: text('group_category').notNull().default(''), // '' = entrega individual
+    // Papelera (migración 0007): la actividad eliminada conserva entregas y calificaciones.
+    deletedAt: text('deleted_at'),
+    deletedBy: text('deleted_by'),
     revision: integer('revision').notNull().default(1),
     created: text('created').notNull(),
     updated: text('updated').notNull(),

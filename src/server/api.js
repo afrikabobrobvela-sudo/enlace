@@ -38,6 +38,9 @@ const MAX_BULK_STUDENTS = 500;
 /** Tipos que siguen guardándose como JSON libre en aula_records. */
 const CONTENT_KINDS = ['module', 'material', 'notice', 'forum', 'post', 'group', 'quiz'];
 const TEACHER_CONTENT_KINDS = ['module', 'material', 'notice', 'forum', 'quiz', 'group'];
+/** Lo que va a la papelera (los equipos se eliminan directamente: no guardan trabajo de los alumnos). */
+const TRASH_KINDS = ['module', 'material', 'notice', 'forum', 'post', 'quiz', 'task'];
+const trashTitle = (kind, data) => (kind === 'post' ? `${data.title || 'Publicación'} · ${data.name || ''}` : data.title || '');
 
 export async function api(request, env) {
   try {
@@ -64,7 +67,7 @@ export async function api(request, env) {
 const unpack = (row) => (row ? { ...row, data: parseJson(row.data, {}) } : null);
 
 async function contentRecord(db, id, course, kind) {
-  const r = unpack(await one(db, 'SELECT * FROM aula_records WHERE id=? AND course=?', id, course));
+  const r = unpack(await one(db, 'SELECT * FROM aula_records WHERE id=? AND course=? AND deleted_at IS NULL', id, course));
   if (!r || !CONTENT_KINDS.includes(r.kind) || (kind && r.kind !== kind)) fail('Elemento no encontrado.', 404);
   return r;
 }
@@ -184,7 +187,7 @@ const routes = {
     const rows = (
       await all(
         db,
-        `SELECT * FROM aula_records WHERE course=? AND kind IN (${CONTENT_KINDS.map(() => '?').join(',')}) ORDER BY created`,
+        `SELECT * FROM aula_records WHERE course=? AND deleted_at IS NULL AND kind IN (${CONTENT_KINDS.map(() => '?').join(',')}) ORDER BY created`,
         courseId,
         ...CONTENT_KINDS,
       )
@@ -260,9 +263,9 @@ const routes = {
     const body = await readJson(request);
     requireTeacher(await access(db, user, body.course));
     const moduleId = 'courseguide:' + body.course;
-    if (await one(db, 'SELECT id FROM aula_records WHERE id=?', moduleId)) {
-      fail('Este curso ya tiene una guía inicial. Edita sus apartados en Contenido.', 409);
-    }
+    const guide = await one(db, 'SELECT deleted_at FROM aula_records WHERE id=?', moduleId);
+    if (guide?.deleted_at) fail('La guía inicial de este curso está en la papelera. Restáurala desde Administración del curso → Papelera.', 409);
+    if (guide) fail('Este curso ya tiene una guía inicial. Edita sus apartados en Contenido.', 409);
     if (!Array.isArray(body.sections) || body.sections.length !== 7) fail('La guía requiere sus siete apartados.');
     const sections = body.sections.map((s) => ({
       title: text(s.title, 200),
@@ -555,6 +558,89 @@ const routes = {
     return json(saved, previous ? 200 : 201);
   },
 
+  // ---- Papelera ----
+  // Eliminar no borra nada: el elemento deja de mostrarse y cualquier docente del curso puede restaurarlo.
+  // Las entregas, calificaciones e intentos de una actividad o evaluación eliminada se conservan.
+
+  'DELETE /api/record': async ({ db, user, request }) => {
+    const body = await readJson(request);
+    const a = await access(db, user, body.course);
+    if (!TRASH_KINDS.includes(body.kind)) fail('Este elemento no se puede eliminar.');
+    const now = nowIso();
+    if (body.kind === 'task') {
+      requireTeacher(a);
+      const task = await loadTask(db, body.id, body.course);
+      await run(db, 'UPDATE aula_tasks SET deleted_at=?, deleted_by=? WHERE id=? AND deleted_at IS NULL', now, user.id, task.id);
+      return json({ ok: true });
+    }
+    const record = await contentRecord(db, body.id, body.course, body.kind);
+    if (record.kind === 'post') {
+      // El docente modera el foro; cada quien puede retirar su propia publicación.
+      if (!a.teach && record.author !== user.id) fail('Solo el docente o quien la escribió puede eliminar esta publicación.', 403);
+    } else {
+      requireTeacher(a);
+    }
+    if (record.kind === 'module') {
+      const inside = await one(
+        db,
+        "SELECT count(*) AS n FROM aula_records WHERE course=? AND kind='material' AND deleted_at IS NULL AND json_extract(data,'$.module')=?",
+        body.course,
+        record.id,
+      );
+      if (inside.n) fail(`La unidad tiene ${inside.n === 1 ? '1 material' : `${inside.n} materiales`}. Elimínalos o muévelos a otra unidad primero.`, 409);
+    }
+    await run(db, 'UPDATE aula_records SET deleted_at=?, deleted_by=? WHERE id=? AND deleted_at IS NULL', now, user.id, record.id);
+    return json({ ok: true });
+  },
+
+  'GET /api/trash': async ({ db, user, url }) => {
+    const course = url.searchParams.get('course');
+    requireTeacher(await access(db, user, course));
+    const records = await all(
+      db,
+      `SELECT r.id, r.kind, r.data, r.deleted_at, u.name AS deleted_by FROM aula_records r LEFT JOIN aula_users u ON u.id=r.deleted_by
+       WHERE r.course=? AND r.deleted_at IS NOT NULL`,
+      course,
+    );
+    const tasks = await all(
+      db,
+      `SELECT t.id, t.title, t.deleted_at, u.name AS deleted_by,
+         (SELECT count(*) FROM aula_submissions s WHERE s.task=t.id) AS submissions
+       FROM aula_tasks t LEFT JOIN aula_users u ON u.id=t.deleted_by WHERE t.course=? AND t.deleted_at IS NOT NULL`,
+      course,
+    );
+    const items = [
+      ...records.map((r) => ({ id: r.id, kind: r.kind, title: trashTitle(r.kind, parseJson(r.data, {})), deletedAt: r.deleted_at, deletedBy: r.deleted_by || '' })),
+      ...tasks.map((t) => ({ id: t.id, kind: 'task', title: t.title, deletedAt: t.deleted_at, deletedBy: t.deleted_by || '', submissions: t.submissions })),
+    ].sort((x, y) => (x.deletedAt < y.deletedAt ? 1 : -1));
+    return json({ items });
+  },
+
+  'POST /api/trash/restore': async ({ db, user, request }) => {
+    const body = await readJson(request);
+    requireTeacher(await access(db, user, body.course));
+    if (body.kind === 'task') {
+      const result = await run(
+        db,
+        'UPDATE aula_tasks SET deleted_at=NULL, deleted_by=NULL, revision=revision+1 WHERE id=? AND course=? AND deleted_at IS NOT NULL',
+        body.id,
+        body.course,
+      );
+      if (!result.meta.changes) fail('Elemento no encontrado en la papelera.', 404);
+      return json({ ok: true });
+    }
+    const record = unpack(await one(db, 'SELECT * FROM aula_records WHERE id=? AND course=? AND deleted_at IS NOT NULL', body.id, body.course));
+    if (!record || !TRASH_KINDS.includes(record.kind)) fail('Elemento no encontrado en la papelera.', 404);
+    // Un material o una publicación no puede volver a una unidad o un foro que sigue en la papelera.
+    const parentId = record.kind === 'material' ? record.data.module : record.kind === 'post' ? record.data.forum : null;
+    if (parentId) {
+      const parent = await one(db, 'SELECT deleted_at FROM aula_records WHERE id=? AND course=?', parentId, body.course);
+      if (parent?.deleted_at) fail(record.kind === 'material' ? 'Restaura primero la unidad a la que pertenece.' : 'Restaura primero el foro al que pertenece.', 409);
+    }
+    await run(db, 'UPDATE aula_records SET deleted_at=NULL, deleted_by=NULL, revision=revision+1 WHERE id=?', record.id);
+    return json({ ok: true });
+  },
+
   'POST /api/grade': async ({ db, user, request }) => {
     const body = await readJson(request);
     requireTeacher(await access(db, user, body.course));
@@ -757,11 +843,12 @@ async function downloadFile({ db, env, user, url, request }, id) {
         db,
         `SELECT 1 AS ok FROM aula_records r, json_each(r.data,'$.fileIds') j
          WHERE r.course=?1 AND r.kind='material' AND j.value=?2 AND json_type(r.data,'$.visible') IS NOT 'false'
+           AND r.deleted_at IS NULL
            AND (coalesce(json_extract(r.data,'$.module'),'')=''
                 OR EXISTS (SELECT 1 FROM aula_records p WHERE p.id=json_extract(r.data,'$.module') AND p.course=?1
-                           AND json_type(p.data,'$.visible') IS NOT 'false'))
+                           AND p.deleted_at IS NULL AND json_type(p.data,'$.visible') IS NOT 'false'))
          UNION ALL
-         SELECT 1 FROM aula_tasks t, json_each(t.file_ids) j WHERE t.course=?1 AND t.visible=1 AND j.value=?2
+         SELECT 1 FROM aula_tasks t, json_each(t.file_ids) j WHERE t.course=?1 AND t.visible=1 AND t.deleted_at IS NULL AND j.value=?2
          LIMIT 1`,
         file.course,
         id,

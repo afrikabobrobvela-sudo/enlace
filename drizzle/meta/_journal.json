@@ -50,6 +50,13 @@
       "when": 1790546862687,
       "tag": "0006_sesiones",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1790547044990,
+      "tag": "0007_papelera",
+      "breakpoints": true
     }
   ]
 }
