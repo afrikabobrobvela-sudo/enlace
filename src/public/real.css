@@ -1,0 +1,461 @@
+:root {
+  --buap: #003b5c;
+  --buap-accent: #00a6b2;
+  color: #252b31;
+}
+
+.primary {
+  background: var(--buap);
+}
+
+.primary:hover {
+  background: #00547e;
+}
+
+.profile-square {
+  background: #003b5c;
+}
+
+.course-cover,
+.course:nth-child(2) .course-cover,
+.course:nth-child(3) .course-cover,
+.hub-banner {
+  background: linear-gradient(115deg,#003b5c,#007a91);
+}
+
+.course-cover {
+  border-bottom: 4px solid #00a6b2;
+}
+
+.home-courses {
+  max-width: none;
+}
+
+.cards {
+  grid-template-columns: repeat(auto-fit,minmax(250px,330px));
+}
+
+.home-tabs .active,
+#topnav button.active {
+  border-color: #00a6b2;
+}
+
+.real-status {
+  padding: 12px 18px;
+  border: 1px solid #d9e5eb;
+  background: #f4f8fa;
+  border-radius: 5px;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.empty-start {
+  padding: 65px 22px;
+  text-align: center;
+  background: white;
+  border: 1px solid #e2e8ed;
+  border-radius: 8px;
+}
+
+.empty-start h1 {
+  font-size: 29px;
+}
+
+.empty-start p {
+  color: #607381;
+  max-width: 580px;
+  margin: 20px auto;
+  line-height: 1.7;
+}
+
+.stack {
+  display: grid;
+  gap: 18px;
+}
+
+.real-form label {
+  display: block;
+  font-weight: 600;
+  margin: 20px 0 9px;
+}
+
+.real-form input:not([type=checkbox]):not([type=radio]),
+.real-form textarea,
+.real-form select {
+  display: block;
+  width: 100%;
+  margin-top: 9px;
+}
+
+.real-form textarea {
+  min-height: 170px;
+  resize: vertical;
+  line-height: 1.6;
+}
+
+.check-label {
+  display: flex!important;
+  gap: 10px;
+  align-items: center;
+  font-size: 15px;
+}
+
+.check-label input {
+  width: 20px;
+  height: 20px;
+  accent-color: #003b5c;
+}
+
+.real-form .form-actions {
+  margin-top: 25px;
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.real-form .row {
+  display: flex;
+  gap: 18px;
+}
+
+.real-form .row>label {
+  flex: 1;
+  min-width: 0;
+}
+
+.file-list {
+  padding: 10px 0;
+  display: grid;
+  gap: 10px;
+}
+
+.file-list a {
+  color: #006fbf;
+  overflow-wrap: anywhere;
+}
+
+.body-text {
+  white-space: pre-wrap;
+  line-height: 1.8;
+  overflow-wrap: anywhere;
+}
+
+.error {
+  background: #fff1ee;
+  border: 1px solid #e6b6aa;
+  padding: 18px;
+  color: #963d27;
+  line-height: 1.7;
+}
+
+#formError {
+  color: #b12b26;
+  line-height: 1.5;
+}
+
+.notice .toolbar {
+  margin: 8px 0;
+}
+
+.deadline {
+  color: #5b6e7d;
+  font-size: 14px;
+}
+
+.badge {
+  display: inline-block;
+}
+
+.badge.hidden {
+  background: #edf0f3;
+  color: #58636b;
+}
+
+#roleLabel {
+  font-size: 14px;
+  color: #667887;
+}
+
+#connection {
+  padding: 12px 32px;
+  background: #fff1da;
+  color: #744c17;
+}
+
+.member-list label {
+  display: flex!important;
+  gap: 8px;
+  align-items: center;
+}
+
+#fields .member-list input {
+  width: 20px;
+  display: inline;
+}
+
+.material>div {
+  flex: 1;
+}
+
+.material {
+  flex-wrap: wrap;
+}
+
+.content-tree {
+  position: static;
+}
+
+.content-detail .toolbar {
+  margin: 15px 0;
+}
+
+.content-detail .toolbar button {
+  font-size: 14px;
+}
+
+.quiz-edit-question {
+  border: 1px solid #d4dde5;
+  border-radius: 6px;
+  padding: 20px;
+  margin: 18px 0;
+}
+
+.quiz-edit-question legend {
+  font-weight: 600;
+}
+
+.quiz-edit-question .row {
+  align-items: end;
+}
+
+.pending-message {
+  font-size: 13px;
+  color: #647789;
+}
+
+button:disabled {
+  opacity: .6;
+  cursor: wait;
+}
+
+#topnav {
+  min-height: 0;
+}
+
+.header-tools a {
+  font-size: 14px;
+  text-decoration: none;
+}
+
+.gradebook .sticky-name {
+  min-width: 240px;
+}
+
+dialog {
+  width: min(690px,94vw);
+}
+
+.editor-main input,
+.editor-main textarea {
+  width: 100%;
+}
+
+.editor-sidebar label {
+  font-size: 14px;
+}
+
+.admin-section a {
+  color: #006fbf;
+}
+
+.review-panel button {
+  width: 100%;
+}
+
+.course-content h3 {
+  min-height: 0;
+}
+
+.home-courses .home-title-row {
+  margin-bottom: 25px;
+}
+
+.scroll-table {
+  overflow: auto;
+}
+
+#main [data-search-row][hidden] {
+  display: none;
+}
+
+@media(max-width:700px) {
+  .cards {
+    grid-template-columns: 1fr;
+  }
+  .header-tools {
+    gap: 10px;
+  }
+  #roleLabel {
+    display: none;
+  }
+  .real-form .row {
+    display: block;
+  }
+  .content-layout {
+    min-height: 0;
+  }
+  .content-detail {
+    min-height: 400px;
+  }
+  .header-tools a {
+    font-size: 13px;
+  }
+  .empty-start {
+    padding: 35px 20px;
+  }
+}
+
+/* Activity attachments and touch-friendly upload controls. */
+.attachment-box {
+  margin: 24px 0;
+  padding: 24px;
+  border: 2px dashed #9eb7c5;
+  border-radius: 10px;
+  background: #f6fafc;
+  min-width: 0;
+}
+
+.attachment-box h2 {
+  font-size: 1.15rem;
+  margin: 0 0 12px;
+}
+
+.attachment-box.dragging {
+  border-color: #00a6b2;
+  background: #e6f6f8;
+}
+
+.file-picker {
+  display: inline-flex!important;
+  position: relative;
+  overflow: hidden;
+  background: #003b5c;
+  color: white;
+  padding: 12px 20px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.file-picker input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+  width: 100%;
+  height: 100%;
+}
+
+.file-picker:focus-within {
+  outline: 3px solid #00a6b2;
+  outline-offset: 3px;
+}
+
+.attachment-list {
+  list-style: none;
+  padding: 0;
+  margin: 12px 0;
+}
+
+.attachment-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 0;
+  border-bottom: 1px solid #d8e4eb;
+}
+
+.attachment-list li>div {
+  min-width: 0;
+}
+
+.attachment-list strong {
+  overflow-wrap: anywhere;
+}
+
+.attachment-list small {
+  display: block;
+  color: #536b78;
+  font-size: .875rem;
+  margin-top: 4px;
+}
+
+.attachment-box progress {
+  width: 100%;
+  accent-color: #00a6b2;
+}
+
+.editor-main,
+.editor-sidebar,
+.details-body {
+  min-width: 0;
+}
+
+.real-form input,
+.real-form textarea,
+.real-form select {
+  box-sizing: border-box;
+  max-width: 100%;
+}
+
+@media(max-width:900px) {
+  .editor-layout {
+    display: block!important;
+  }
+  .editor-sidebar {
+    margin-top: 24px;
+  }
+  .attachment-box {
+    padding: 16px;
+  }
+  .editor-bottom {
+    flex-wrap: wrap;
+    position: static!important;
+  }
+  .editor-main {
+    padding-bottom: 20px;
+  }
+}
+
+.task-materials {
+  margin: 24px 0;
+  padding: 24px;
+  border: 1px solid #cbdce6;
+  border-left: 4px solid #00a6b2;
+  border-radius: 8px;
+  background: #f6fafc;
+}
+
+.task-materials h2 {
+  font-size: 1.15rem;
+  margin: 0;
+}
+
+.task-materials .panel-head {
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.task-materials .file-list a {
+  padding: 12px;
+  background: white;
+  border: 1px solid #d8e4eb;
+  border-radius: 6px;
+  overflow-wrap: anywhere;
+}
+
+.attachment-box .file-picker {
+  min-height: 48px;
+  align-items: center;
+}

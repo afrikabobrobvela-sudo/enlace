@@ -1,0 +1,335 @@
+.grade-tabs {
+  margin-top: 0;
+}
+
+.grade-note {
+  font-size: 15px;
+  line-height: 1.7;
+  color: #5c6169;
+  padding: 16px 20px;
+  background: #f4f7fb;
+  border-left: 4px solid #006fbf;
+}
+
+.gradebook {
+  max-height: 65vh;
+  overflow: auto;
+}
+
+.gradebook table {
+  min-width: 850px;
+}
+
+.gradebook th {
+  text-align: center;
+  vertical-align: middle;
+}
+
+.gradebook td {
+  min-width: 160px;
+  vertical-align: middle;
+}
+
+.gradebook .sticky-name {
+  position: sticky;
+  left: 0;
+  min-width: 285px;
+  background: white;
+  z-index: 1;
+}
+
+.gradebook thead .sticky-name {
+  background: #f8f9fc;
+}
+
+.gradebook .sticky-name .table-link {
+  font-size: 17px;
+}
+
+.gradebook .sticky-name .muted {
+  font-size: 13px;
+  margin: 7px 0 0 45px;
+}
+
+.grade-input {
+  max-width: 100px;
+  width: 100%;
+  font-size: 16px;
+  padding: 9px;
+}
+
+.grade-pass {
+  background: #e9f5f9;
+  color: #006fbf;
+}
+
+.grade-low {
+  background: #fff0eb;
+  color: #9a3720;
+}
+
+.grade-feedback {
+  font-size: 14px;
+  max-width: 250px;
+}
+
+.forum-block {
+  padding: 25px 0;
+  border-top: 1px solid #d9dfe5;
+}
+
+.forum-block h2 {
+  font-size: 27px;
+  font-weight: 400;
+}
+
+.forum-block .content-copy {
+  margin: 22px 0;
+}
+
+.forum-post {
+  padding: 25px;
+  border: 1px solid #d6dee6;
+  border-radius: 6px;
+  margin: 20px 0;
+}
+
+.quiz-question {
+  border: 1px solid #d4dce5;
+  padding: 25px;
+  border-radius: 6px;
+  margin: 25px 0;
+  max-width: 850px;
+}
+
+.quiz-question legend {
+  font-size: 19px;
+  padding: 0 8px;
+  line-height: 1.5;
+}
+
+.quiz-question label {
+  display: flex;
+  gap: 13px;
+  align-items: center;
+  padding: 12px 0;
+  cursor: pointer;
+}
+
+.quiz-question input {
+  width: 20px;
+  height: 20px;
+  accent-color: #006fbf;
+}
+
+.quiz-result {
+  background: #eaf5fa;
+  padding: 24px;
+  border-left: 4px solid #006fbf;
+  margin-top: 25px;
+  font-size: 19px;
+}
+
+.admin-section {
+  margin: 34px 0;
+}
+
+.admin-section h2 {
+  font-size: 29px;
+  font-weight: 400;
+  margin-bottom: 25px;
+}
+
+.admin-links {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 22px;
+  max-width: 950px;
+}
+
+.admin-links button {
+  text-align: left;
+  font-size: 20px;
+  line-height: 1.6;
+}
+
+.admin-links button:before {
+  content: '▦';
+  margin-right: 13px;
+  color: #788d9d;
+}
+
+#topnav {
+  overflow: visible;
+  flex-wrap: wrap;
+}
+
+#topnav .more-menu {
+  margin-left: auto;
+  position: relative;
+  padding: 0;
+  background: none;
+}
+
+#topnav .more-menu summary {
+  font-size: 17px;
+  padding: 15px 0;
+  list-style: none;
+}
+
+#topnav .more-menu summary:after {
+  content: '⌄';
+  margin-left: 10px;
+}
+
+.menu-panel {
+  position: absolute;
+  right: 0;
+  top: 100%;
+  width: 275px;
+  background: white;
+  box-shadow: 0 5px 20px #23374626;
+  border: 1px solid #cdd7e1;
+  border-radius: 6px;
+  padding: 10px;
+  z-index: 20;
+}
+
+#topnav .menu-panel button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  font-size: 16px;
+  padding: 13px;
+  color: #006fbf;
+}
+
+.menu-panel button:hover {
+  background: #eef4fa;
+}
+
+.profile-square {
+  border: 0;
+  cursor: pointer;
+}
+
+.member-list {
+  border: 1px solid #d9e0e7;
+  padding: 15px;
+  border-radius: 5px;
+}
+
+.member-list label {
+  display: flex!important;
+  align-items: center;
+  gap: 10px;
+}
+
+#fields .member-list input {
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  margin: 0;
+}
+
+.review-grid {
+  display: grid;
+  grid-template-columns: minmax(0,1.7fr) minmax(300px,1fr);
+  gap: 28px;
+  margin-top: 30px;
+}
+
+.submission-preview {
+  padding: 28px;
+  background: #f5f6f8;
+  border: 1px solid #dbe1e8;
+  min-height: 400px;
+}
+
+.submitted-text {
+  background: white;
+  min-height: 220px;
+  padding: 30px;
+  line-height: 1.9;
+  white-space: pre-wrap;
+}
+
+.review-panel {
+  padding: 27px;
+  background: #f0f3f8;
+  border: 1px solid #dbe1e8;
+}
+
+.review-panel label {
+  display: block;
+  font-size: 15px;
+  font-weight: 600;
+  margin: 26px 0;
+}
+
+.review-panel input,
+.review-panel textarea {
+  display: block;
+  width: 100%;
+  margin-top: 10px;
+}
+
+.review-panel textarea {
+  min-height: 170px;
+  resize: vertical;
+}
+
+progress {
+  width: 160px;
+  height: 12px;
+  accent-color: #006fbf;
+}
+
+body:has(.content-layout) footer {
+  margin-top: 40px;
+}
+
+@media(max-width:700px) {
+  #topnav {
+    gap: 5px 18px;
+    min-height: 58px;
+  }
+  #topnav button {
+    font-size: 15px;
+    padding: 12px 0;
+  }
+  .admin-links {
+    grid-template-columns: 1fr;
+  }
+  .admin-section h2 {
+    font-size: 25px;
+  }
+  .gradebook .sticky-name {
+    min-width: 220px;
+  }
+  .review-grid {
+    grid-template-columns: 1fr;
+  }
+  .submission-preview,.review-panel {
+    padding: 20px;
+  }
+  .grade-tabs {
+    gap: 20px;
+  }
+  .grade-tabs button {
+    font-size: 15px;
+  }
+  .forum-block h2 {
+    font-size: 24px;
+  }
+  .menu-panel {
+    right: 0;
+  }
+  .header-tools #acSettings {
+    display: block;
+    font-size: 26px;
+  }
+  .header-tools {
+    gap: 9px;
+  }
+}

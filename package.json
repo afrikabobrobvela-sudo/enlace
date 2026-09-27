@@ -1,0 +1,28 @@
+{
+  "name": "enlace",
+  "version": "12.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.13"
+  },
+  "scripts": {
+    "configurar": "node scripts/configurar.mjs",
+    "build": "node scripts/build.mjs",
+    "dev": "node scripts/build.mjs && wrangler dev",
+    "deploy": "node scripts/build.mjs && wrangler deploy",
+    "deploy:pruebas": "node scripts/build.mjs && wrangler deploy --env pruebas",
+    "db:migrate:local": "wrangler d1 migrations apply enlace-db --local",
+    "db:migrate": "wrangler d1 migrations apply enlace-db --remote",
+    "db:migrate:pruebas": "wrangler d1 migrations apply enlace-pruebas-db --remote --env pruebas",
+    "db:generate": "drizzle-kit generate",
+    "respaldo": "node scripts/respaldo.mjs",
+    "respaldo:pruebas": "node scripts/respaldo.mjs --pruebas",
+    "test": "node scripts/build.mjs && node scripts/test-api.mjs && node scripts/test-auth.mjs && node scripts/test-migration.mjs && node scripts/test-fase1.mjs && node scripts/test-fase2.mjs && node scripts/test-fase2b.mjs && node scripts/test-qr.mjs && node scripts/test-auth-ui.mjs && node scripts/test-admin-ui.mjs && node scripts/test-teacher-files.mjs && node scripts/test-workspace-ui.mjs && node scripts/test-fase1-ui.mjs && node scripts/test-fase2-ui.mjs && node scripts/test-fase2b-ui.mjs"
+  },
+  "devDependencies": {
+    "drizzle-kit": "0.31.10",
+    "drizzle-orm": "0.45.2",
+    "wrangler": "^4.0.0"
+  }
+}

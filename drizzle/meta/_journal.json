@@ -1,0 +1,48 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1790355462225,
+      "tag": "0000_safe_stellaris",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1790460983892,
+      "tag": "0001_new_diamondback",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1790424000000,
+      "tag": "0002_identidad_y_calificaciones",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1790510400000,
+      "tag": "0003_asistencia_y_publicacion",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1790596800000,
+      "tag": "0004_asistencia_qr",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1790683200000,
+      "tag": "0005_categorias_rubricas_equipos",
+      "breakpoints": true
+    }
+  ]
+}

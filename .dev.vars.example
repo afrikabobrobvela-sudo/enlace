@@ -1,0 +1,14 @@
+# Copia este archivo como .dev.vars para usar `npm run dev` en tu computadora.
+# .dev.vars NO se sube a git (está en .gitignore).
+
+# Cadena aleatoria de al menos 32 caracteres. Genera una con:
+#   node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"
+SESSION_SECRET=
+
+# Credenciales del cliente OAuth de Google Cloud (tipo "Aplicación web").
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
+
+# Opcional, solo con un dominio verificado en Resend (sin dominio, Resend solo entrega a tu propio correo).
+# RESEND_API_KEY=
+# EMAIL_FROM=Enlace <aula@tu-dominio.mx>

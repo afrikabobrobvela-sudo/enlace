@@ -1,0 +1,241 @@
+# Enlace · versión 12
+
+Plataforma académica independiente para la Academia de Física (BUAP), con interfaz inspirada en Brightspace.
+No es el código de D2L Brightspace ni una plataforma oficial de la BUAP.
+
+Esta versión se despliega en **tu propia cuenta de Cloudflare** (Workers + D1 + R2, plan gratuito) y ya no depende de ChatGPT Sites.
+
+## Novedades de la versión 12 (fase 2B)
+
+**Categorías con pesos.** En *Calificaciones → Administrar calificaciones* eliges cómo se calcula: *pesos por actividad* (como hasta ahora; los cursos existentes no cambian) o *categorías con pesos* (por ejemplo, exámenes 60 %, tareas 30 %, asistencia 10 %). Enlace avisa en vivo si los pesos no suman 100 %. Cada actividad tiene un *valor* dentro de su categoría (con valor 2 cuenta el doble). Una categoría puede usar el **porcentaje de asistencia** llevado a escala de 10. Las actividades sin categoría no cuentan, y Enlace te dice cuántas hay.
+
+**Calificación final.** Nueva columna en la tabla (solo la ve el docente) con las reglas que definas: decimales (entero, uno o dos), redondeo desde .5 hacia arriba o truncado, mínima aprobatoria, asentar 5 (o 0) a quien no aprueba, y si las actividades vencidas sin calificar cuentan como 0. El promedio parcial nunca cuenta lo que falta por calificar. *Exportar calificaciones* incluye la final y cada categoría, listas para capturar en el sistema institucional.
+
+**Rúbricas.** Creas rúbricas en una cuadrícula (criterios × niveles, con puntos y descripción opcional por nivel) y las asignas en el editor de cada actividad. Al calificar, eliges un nivel por criterio con un toque, puedes comentar cada criterio, y Enlace propone la calificación (puntos obtenidos entre el máximo, en escala de 10), que puedes ajustar. El alumno ve el desglose cuando publicas. Tus rúbricas sirven en todos tus cursos; las que marcas como compartidas forman el **banco de la Academia**, que tus colegas pueden usar y copiar, pero solo tú editas. Las evaluaciones ya hechas conservan su detalle aunque la rúbrica cambie o se elimine.
+
+**Entregas por equipo.** En el editor de la actividad, *Tipo de entrega → Por equipo* y eliges una categoría de equipos de *Grupos*. Lo que entrega cualquier integrante queda a nombre de todo su equipo (todos ven la entrega y sus archivos; otros equipos no). Al calificar, *Aplicar a todo el equipo* asigna la misma calificación, comentarios y rúbrica a cada integrante; si lo desmarcas, ajustas a una sola persona.
+
+**Pendiente de la fase 2:** periodos, cursos maestros, altas masivas de cursos, notificaciones y app (2C).
+
+## Novedades de la versión 11 (fase 2A)
+
+**Asistencia con código QR (AulaPass).** En *Pasar lista*, el botón *Registro con QR* proyecta un código que los alumnos escanean con la cámara de su teléfono; Enlace se abre y registra su asistencia. Protecciones contra el fraude:
+
+- El código se firma de nuevo cada 10 segundos y solo se acepta durante unos 30: una foto reenviada por WhatsApp deja de servir casi de inmediato.
+- PIN de 4 dígitos (activado por omisión) que proyectas u ocultas para dictarlo. Tras 5 intentos fallidos el alumno queda bloqueado en esa clase y debes registrarlo tú.
+- Un teléfono solo puede registrar a un alumno por clase.
+- Solo pueden registrarse alumnos inscritos en el curso, y el registro se cierra solo al terminar el tiempo que elijas.
+- Opcional: retardo automático después de N minutos. Al cerrar, puedes marcar falta a quien no se registró.
+
+La pantalla muestra en vivo cuántos se han registrado y quiénes acaban de hacerlo, y tiene botón de pantalla completa para el proyector. Los alumnos conviene que inicien sesión en Enlace en su teléfono una vez al inicio del semestre: si tienen que iniciar sesión al escanear, el código puede expirar y basta con volver a escanearlo. El código QR lo genera Enlace mismo, sin servicios externos.
+
+**Alumnos en riesgo.** La pantalla *Progreso* ahora señala a quién atender: asistencia debajo del mínimo del curso, dos o más actividades vencidas sin entregar, o promedio parcial menor a 6 (riesgo alto si cumple dos o más criterios). Se exporta a Excel para tutorías.
+
+**Descargar entregas (ZIP).** En cada actividad, un botón descarga todas las entregas en un ZIP con una carpeta por alumno (nombre y matrícula), el texto de cada entrega y un `resumen.csv` con fecha, entrega tardía y calificación. El ZIP se arma en tu navegador (en el plan gratuito de Cloudflare el servidor no tiene tiempo de procesador para archivos grandes); hasta 1.5 GB por actividad.
+
+## Novedades de la versión 10
+
+**Pasar lista.** Nueva pestaña *Asistencia* en cada curso. *Generar calendario* crea las sesiones del semestre a partir de tus días de clase (sin duplicar fechas y saltando días inhábiles). *Pasar lista de hoy* abre la lista con cuatro botones grandes por alumno: Presente, Retardo, Falta y Justificada, más una nota opcional. Cada toque se guarda solo; si se va el internet, los cambios esperan en ese dispositivo y se envían al reconectar (no borres los datos del navegador antes de reconectar). El resumen muestra a cada alumno con su porcentaje y una alerta si baja del mínimo. En *Reglas* defines el mínimo (80 % por omisión), cuántos retardos equivalen a una falta y si las faltas justificadas cuentan como asistencia. *Exportar a Excel* descarga la tabla completa. Cada alumno ve solo su propia asistencia.
+
+**Vista previa.** Junto a *Descargar* aparece *Vista previa* para PDF (con zoom y páginas que se cargan al desplazarte), imágenes (JPG, PNG, GIF y WEBP con zoom y giro; HEIC de iPhone solo en Safari), audio (MP3, M4A, WAV, OGG) y video (MP4, WEBM; MOV según el navegador). Word, Excel y PowerPoint por ahora solo se descargan. El servidor revisa el contenido real del archivo: una página web renombrada como .pdf nunca se muestra dentro de Enlace.
+
+**Revisar en secuencia.** Al calificar, *‹ Anterior* y *Siguiente ›* (o las flechas del teclado) cambian de alumno sin volver a la lista, el PDF de la entrega se abre junto al formulario y *Guardar y siguiente* avanza solo. *Solo entregas sin calificar* salta a quienes faltan.
+
+**Calificaciones en borrador.** Si desmarcas *Publicar al guardar*, la calificación y los comentarios quedan en borrador: el alumno no los ve. En *Calificaciones*, el botón *Publicar N borradores* de cada actividad los publica todos a la vez. Las calificaciones que ya existían siguen visibles.
+
+**Equipos en lote.** En *Grupos*, *Crear equipos en lote* reparte a los alumnos en N equipos o en equipos de K integrantes (al azar o por orden alfabético, con tamaños equilibrados), o los toma de una lista pegada desde Excel con las columnas *equipo* y *correo*. Muestra la propuesta antes de crear y permite revolverla. *Eliminar categoría* borra todos los equipos de una categoría (los alumnos y sus calificaciones no se tocan).
+
+**Fórmulas.** En instrucciones, materiales, noticias, foros, preguntas y comentarios puedes escribir LaTeX: `$v = v_0 + a t$` dentro del texto y `$$x(t) = x_0 + v_0 t + \tfrac{1}{2} a t^2$$` como ecuación centrada (también `\( … \)` y `\[ … \]`). Para unidades usa `$9.8\,\text{m/s}^2$`. Si necesitas un signo de pesos literal, escribe `\$`. Dentro de los campos de edición se ve el texto tal cual; la fórmula aparece al guardar.
+
+**Entorno de pruebas, respaldos y GitHub.** Ver las secciones correspondientes más abajo.
+
+## Actualizar tu Enlace ya publicado
+
+1. Descomprime la versión 10 en una carpeta **nueva** (no encima de la anterior).
+2. Haz un respaldo desde esa carpeta: `npm run respaldo` (ver *Respaldos*).
+3. Doble clic en `configurar.cmd` (Windows) o `configurar.command` (Mac), o `npm run configurar`. Encuentra tu base `enlace-db` y tu almacenamiento, te pide tu correo de administración y tu dirección `.workers.dev`, aplica las migraciones pendientes (0003: asistencia y borradores; 0004: registro con QR; 0005: categorías, rúbricas y equipos) y publica. No cambia tus claves: nadie pierde su sesión.
+
+Si prefieres hacerlo a mano: copia tu `database_id` y tu correo del `wrangler.toml` anterior al nuevo (y `ALLOWED_EMAIL_DOMAINS` si lo usabas) y ejecuta `npm install`, `npm run db:migrate` y `npm run deploy`, **en ese orden**: si publicas antes de migrar, Asistencia y Calificaciones fallarán hasta que apliques la migración.
+
+## Entorno de pruebas
+
+Una copia independiente de Enlace (`enlace-pruebas.TU-SUBDOMINIO.workers.dev`), con su propia base y sus propios archivos, para probar cambios antes de que los vean tus alumnos. Se configura una sola vez:
+
+```
+npx wrangler d1 create enlace-pruebas-db          (pega el id en [[env.pruebas.d1_databases]] de wrangler.toml)
+npx wrangler r2 bucket create enlace-pruebas-archivos
+npm run db:migrate:pruebas
+npm run deploy:pruebas
+npx wrangler secret put SESSION_SECRET --env pruebas         (un valor distinto al de producción)
+npx wrangler secret put GOOGLE_CLIENT_ID --env pruebas
+npx wrangler secret put GOOGLE_CLIENT_SECRET --env pruebas
+```
+
+Para generar un `SESSION_SECRET` aleatorio: `node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"`. Puedes usar el mismo cliente de Google, pero agrega en *Authorized redirect URIs* la dirección `https://enlace-pruebas.TU-SUBDOMINIO.workers.dev/auth/google/callback`. Después, cada cambio se prueba con `npm run db:migrate:pruebas` y `npm run deploy:pruebas`, y solo entonces se publica con `npm run configurar`.
+
+## Respaldos
+
+- **Automáticos (D1 Time Travel).** Cloudflare guarda el historial de la base: puedes regresarla a cualquier minuto de los últimos 7 días en el plan gratuito. `npx wrangler d1 time-travel info enlace-db` muestra el estado actual y `npx wrangler d1 time-travel restore enlace-db --timestamp=2026-10-05T14:00:00Z` la regresa a ese momento (hora UTC). Todo lo posterior a ese momento se pierde, así que antes de restaurar descarga un respaldo.
+- **Copias descargadas.** `npm run respaldo` guarda la base completa (cursos, alumnos, calificaciones, asistencia y entregas) en `respaldos/enlace-db-FECHA.sql`. Hazlo cada semana y antes de cada actualización, fuera del horario de clases (en bases grandes, la exportación pausa las consultas unos segundos), y guarda una copia en Google Drive. Para restaurar una copia se crea una base nueva y se carga con `npx wrangler d1 execute NOMBRE --remote --file=respaldos/ARCHIVO.sql`.
+- Los archivos adjuntos viven en R2, que es almacenamiento redundante de Cloudflare; no se incluyen en la copia descargada.
+
+## GitHub
+
+Crea un repositorio **privado** (tu `wrangler.toml` incluye tu correo) y sube esta carpeta sin `node_modules/` (el archivo `.gitignore` ya lo excluye). El flujo `.github/workflows/pruebas.yml` corre `npm test` en cada cambio: una palomita verde significa que las nueve suites pasaron. La publicación automática desde GitHub es posible (en el panel de Cloudflare, en la configuración de *Builds* del Worker), pero mientras te familiarizas conviene publicar a mano con `npm run configurar`, que aplica las migraciones antes de publicar.
+
+## Qué cambió respecto a la versión 8
+
+**Inicio de sesión propio.** La identidad ya no viene de cabeceras `oai-authenticated-*` de ChatGPT Sites (ahora se rechazan). El Worker emite su propia cookie de sesión firmada con HMAC. La forma principal de entrar es "Continuar con Google", que funciona en `*.workers.dev` sin dominio propio. El acceso con enlace por correo está implementado, pero solo se activa si configuras Resend con un dominio verificado: sin dominio, Resend únicamente entrega a tu propio correo.
+
+**Calificaciones en tablas propias.** Actividades, entregas, calificaciones, ponderaciones e intentos de evaluación pasan de JSON genérico en `aula_records` a las tablas `aula_tasks`, `aula_submissions`, `aula_grade_settings` y `aula_attempts`, con llaves foráneas y restricciones en la propia base (por ejemplo, una calificación fuera de 0–10 la rechaza SQLite aunque falle la validación del servidor). Cada calificación registra quién la puso y cuándo. La migración copia los datos sin borrar los originales.
+
+**Administración de docentes desde la interfaz.** Botón "Docentes" en la página de inicio (solo administración): agregar, cambiar entre Docente y Administración, retirar, y ver cursos y último acceso de cada quien. `AULA_OWNER_EMAIL` solo define la cuenta principal.
+
+**Inscripción masiva.** En "Alumnos", el botón "Importar lista" acepta una lista pegada desde Excel o un CSV (nombre, correo y matrícula en cualquier orden).
+
+**Correcciones de la versión 8.**
+
+- `GET /api/courses` hacía tres consultas por curso. En el plan gratuito de D1 el límite es de 50 consultas por solicitud, así que la cuenta de administración dejaba de cargar sus cursos a partir de unos 16. Ahora son 2 consultas sin importar cuántos cursos haya.
+- Cada solicitud a la API hacía dos escrituras en la base (una recorría todas las entregas). Ahora hace una sola lectura; la vinculación de inscripciones ocurre al iniciar sesión.
+- Un campo ausente en una solicitud (`undefined`) provocaba un error 500 en D1; ahora se trata como vacío y responde el error adecuado.
+- El nombre de la cuenta principal estaba fijo en el código.
+
+**Código legible.** Se eliminaron `prototype/`, los archivos de Sites y el código minificado. El servidor está dividido en módulos comentados.
+
+## Estructura
+
+```
+src/worker.js              Punto de entrada del Worker (enruta /api, /auth y la interfaz)
+src/server/http.js         Respuestas, validación, consultas a D1, tokens firmados
+src/server/auth.js         Sesión, Google, enlace por correo, cierre de sesión
+src/server/access.js       Permisos por curso
+src/server/gradebook.js    Actividades, entregas, calificaciones (y borradores), ponderaciones, intentos
+src/server/attendance.js   Asistencia: sesiones, registros, reglas y registro con QR
+src/server/grading.js      Categorías, reglas de la calificación final y banco de rúbricas
+src/server/api.js          Rutas de la API, equipos en lote y vista previa de archivos
+src/public/                Interfaz (HTML, CSS, JS). Versión 10: attendance.js, preview.js, teams.js, math.js.
+                           Versión 11: qr.js, checkin.js, zip.js, risk.js. Versión 12: grading.js, rubrics.js
+src/public/vendor/         pdf.js y KaTeX con sus licencias
+src/generated/             Interfaz incrustada; la genera `npm run build` (no se edita)
+drizzle/                   Migraciones SQL (0000 a 0005) y metadatos
+db/schema.ts               Descripción del esquema con Drizzle
+scripts/                   Compilación, configuración, respaldos y pruebas
+.github/workflows/         Pruebas automáticas en GitHub
+```
+
+## Poner Enlace en tu cuenta de Cloudflare
+
+Necesitas Node.js 22.13 o superior, una cuenta gratuita de Cloudflare y una cuenta de Google.
+
+**1. Instalar dependencias.** En esta carpeta ejecuta `npm install` (no `npm ci`: el archivo de bloqueo se genera en este paso).
+
+**2. Conectar Wrangler con tu cuenta.** `npx wrangler login` abre el navegador para autorizar.
+
+**3. Crear la base de datos.**
+
+```
+npx wrangler d1 create enlace-db
+```
+
+Copia el `database_id` que imprime y pégalo en `wrangler.toml`.
+
+**4. Crear el almacenamiento de archivos.**
+
+```
+npx wrangler r2 bucket create enlace-archivos
+```
+
+Si Cloudflare indica que R2 no está activo, actívalo primero desde el panel (sección R2). Puede pedir un método de pago aunque no rebases el nivel gratuito.
+
+**5. Poner tu correo de administración.** En `wrangler.toml`, cambia `AULA_OWNER_EMAIL` por el correo de tu cuenta de Google. Debe ser exactamente ese correo: es con el que entrarás.
+
+**6. Crear las tablas.** `npm run db:migrate`
+
+**7. Primer despliegue.** `npm run deploy`. Al terminar muestra tu dirección, del tipo `https://enlace.TU-SUBDOMINIO.workers.dev`. Todavía no podrás entrar: faltan los pasos 8 y 9.
+
+**8. Crear el acceso con Google** en [console.cloud.google.com](https://console.cloud.google.com):
+
+1. Crea un proyecto (por ejemplo, "Enlace BUAP").
+2. Entra a *Google Auth Platform*. En *Branding* pon el nombre "Enlace" y tu correo de soporte.
+3. En *Audience* elige *External*.
+4. En *Clients* → *Create client* → tipo *Web application*. En *Authorized redirect URIs* agrega:
+   - `https://enlace.TU-SUBDOMINIO.workers.dev/auth/google/callback`
+   - `http://localhost:8787/auth/google/callback` (para pruebas en tu computadora)
+5. Guarda el *Client ID* y el *Client secret*.
+6. La app empieza en modo *Testing*: solo pueden entrar los correos que agregues como usuarios de prueba (máximo 100). Para abrirla a todos los alumnos, en *Audience* pulsa *Publish app*. Como Enlace solo pide nombre y correo (`openid email profile`), Google no exige revisión para publicarla.
+
+**9. Guardar los secretos en Cloudflare.**
+
+```
+node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"
+npx wrangler secret put SESSION_SECRET        (pega la cadena que imprimió el comando anterior)
+npx wrangler secret put GOOGLE_CLIENT_ID
+npx wrangler secret put GOOGLE_CLIENT_SECRET
+```
+
+**10. Entrar.** Abre tu dirección, pulsa "Continuar con Google" con el correo del paso 5 y entrarás como administración. En "Docentes" agrega a tus colegas con el correo de su cuenta de Google.
+
+Para cambios posteriores basta con `npm run deploy`. Si una versión futura trae una migración nueva, ejecuta antes `npm run db:migrate`.
+
+### Opcional: solo correos institucionales
+
+En `wrangler.toml` descomenta `ALLOWED_EMAIL_DOMAINS` (por ejemplo `alumno.buap.mx,correo.buap.mx`). Quien intente entrar con otro correo verá "Entra con tu correo institucional de la BUAP". Úsalo solo si todas las personas tienen su correo institucional como cuenta de Google.
+
+### Opcional: acceso con enlace por correo
+
+Requiere un dominio propio verificado en [Resend](https://resend.com). Con el dominio listo:
+
+```
+npx wrangler secret put RESEND_API_KEY
+```
+
+y agrega en `[vars]` de `wrangler.toml` una línea `EMAIL_FROM = "Enlace <aula@tu-dominio.mx>"`. La pantalla de acceso mostrará el formulario de correo automáticamente. Cada enlace vence en 20 minutos y sirve una sola vez; se permiten 3 envíos por correo cada 15 minutos.
+
+## Trabajar en tu computadora
+
+```
+cp .dev.vars.example .dev.vars        (y llena SESSION_SECRET, GOOGLE_CLIENT_ID y GOOGLE_CLIENT_SECRET)
+npm run db:migrate:local
+npm run dev                           (abre http://localhost:8787)
+```
+
+La cookie de sesión usa el prefijo `__Host-`, que exige conexión segura. Chrome y Firefox tratan `localhost` como seguro; si en tu navegador la sesión no se conserva, usa `npx wrangler dev --local-protocol https`.
+
+## Pruebas
+
+`npm test` compila la interfaz y ejecuta catorce suites con una base SQLite temporal (con llaves foráneas activas, como D1). No tocan tu base real.
+
+- `test-api.mjs`: todas las verificaciones de la versión 8 más sesiones firmadas, cabeceras falsificadas, ponderaciones, restricciones de la base, docentes, inscripción masiva y el límite de 50 consultas.
+- `test-auth.mjs`: flujo completo de Google y del enlace por correo con respuestas simuladas (estado, nonce, audiencia, correo verificado, dominios, redirecciones abiertas, uso único, revocación, cierre de sesión).
+- `test-migration.mjs`: genera datos con el servidor de la versión 8 real (`scripts/fixtures/server-v8.js`), aplica la migración 0002 y comprueba con la versión 9 que todo llegó idéntico.
+- `test-fase1.mjs`: asistencia (permisos, calendario, registros, borrado en cascada), borradores de calificación, equipos en lote y vista previa (tipo real del archivo, descargas parciales para video, permisos).
+- `test-fase2.mjs`: registro con QR (firma que caduca, códigos alterados o del futuro, PIN con intentos limitados, un teléfono por alumno, permisos robados, retardos, cierre y reapertura).
+- `test-fase2b.mjs`: categorías (validaciones, borrado sin perder actividades), reglas finales, banco de rúbricas (propias, compartidas, solo el autor edita), evaluación con rúbrica oculta en borrador, y entregas por equipo (archivos visibles solo para el equipo, calificación de equipo y ajuste individual).
+- `test-qr.mjs`: generador de QR. Sus huellas corresponden a códigos que se decodificaron con OpenCV; si una cambia, hay que volver a verificarlo.
+- `test-auth-ui.mjs`, `test-admin-ui.mjs`, `test-teacher-files.mjs`, `test-workspace-ui.mjs`, `test-fase1-ui.mjs`, `test-fase2-ui.mjs`, `test-fase2b-ui.mjs`: interfaz (incluye las reglas del porcentaje de asistencia, el reparto de equipos, la revisión en secuencia, la exportación a Excel sin fórmulas inyectadas, que la firma del QR del navegador sea la que acepta el servidor, el ZIP verificado por un lector independiente, las reglas de riesgo, el cálculo por categorías y puntos, el redondeo de la calificación final y la evaluación con rúbrica).
+
+## Datos de la versión 8
+
+La base de ChatGPT Sites pertenece a ese alojamiento; este Worker no puede conectarse a ella. Como el inicio de sesión allí nunca funcionó, lo más probable es que no haya datos reales que traer. Si en algún momento tienes una base D1 con datos de la versión 8, `npm run db:migrate` aplica la migración 0002 y esta consulta confirma que no quedó nada sin copiar (las dos columnas deben coincidir):
+
+```sql
+SELECT r.kind,
+       count(*) AS originales,
+       CASE r.kind WHEN 'task' THEN (SELECT count(*) FROM aula_tasks)
+                   WHEN 'submission' THEN (SELECT count(*) FROM aula_submissions)
+                   WHEN 'attempt' THEN (SELECT count(*) FROM aula_attempts) END AS migrados
+FROM aula_records r WHERE r.kind IN ('task', 'submission', 'attempt') GROUP BY r.kind;
+```
+
+Las cuentas de la versión 8 se conservan: al entrar con Google con el mismo correo, la persona recupera sus cursos, entregas y calificaciones.
+
+## Límites del plan gratuito de Cloudflare
+
+Workers: 100 000 solicitudes al día y 3 MB por Worker comprimido (Enlace ocupa cerca de 1.1 MB, incluidos pdf.js y KaTeX). D1: 5 GB, 5 millones de filas leídas y 100 000 escritas al día, 50 consultas por solicitud. R2: 10 GB sin costo por descarga. Para una academia con varios cientos de alumnos es holgado; las rutas se diseñaron para quedar muy por debajo de las 50 consultas.
+
+## Estado conocido
+
+- La versión 9 está publicada y funcionando en tu cuenta. Las versiones 10, 11 y 12 pasaron todas las pruebas automáticas y se recorrieron en Chromium real (incluido el QR leído desde la pantalla y el registro desde un navegador de tamaño teléfono), pero no se han probado contra tu Cloudflare, tu Google ni en un iPad o iPhone reales: conviene probarlas primero en el entorno de pruebas o con un curso de prueba.
+- Bibliotecas incluidas, sin modificar: pdf.js 5.6.205 (Apache 2.0) y KaTeX 0.16.45 (MIT), en `src/public/vendor/` junto con sus licencias.
+- No hay integración con Turnitin.
+- Siguientes pasos previstos: entregas por equipo (una entrega y una calificación para todo el equipo), asistencia por código QR con la validación de AulaPass, vista previa de Word, Excel y PowerPoint, co-docentes por curso y acceso con cuentas de Microsoft si el correo institucional lo requiere.
