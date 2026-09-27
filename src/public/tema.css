@@ -1,7 +1,7 @@
 /* Tema visual de Enlace (versión 12.3).
  * Se carga al final: unifica tipografía, colores, espacios y componentes sobre las hojas anteriores
  * sin cambiar el comportamiento. Los colores de cada curso salen de data-theme (1 a 6), que asigna
- * courseTheme() a partir del id del curso, y cada uno lleva un patrón de física (cuadrícula, ondas u órbitas).
+ * courseTheme() a partir del id del curso, y cada uno lleva un patrón geométrico (cuadrícula, ondas u órbitas).
  */
 
 @font-face {

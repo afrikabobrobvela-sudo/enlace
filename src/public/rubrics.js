@@ -1,4 +1,4 @@
-/* Rúbricas: banco del docente y de la Academia, editor, evaluación con rúbrica y resultado para el alumno. */
+/* Rúbricas: banco del docente y banco compartido con colegas, editor, evaluación con rúbrica y resultado para el alumno. */
 
 let rubricBank = null; // [{ id, revision, author, mine, data: { title, shared, ownerName, levels, criteria } }]
 let rubricDraft = null; // edición en curso en el diálogo
@@ -28,11 +28,11 @@ async function renderRubricBank(box) {
     box.innerHTML = `<p class="error">${esc(error.message)}</p>`;
     return;
   }
-  box.innerHTML = `<p class="muted">Tus rúbricas sirven en todos tus cursos. Las que compartes forman el banco de la Academia: tus colegas pueden usarlas y copiarlas, pero solo tú las editas.</p>
+  box.innerHTML = `<p class="muted">Tus rúbricas sirven en todos tus cursos. Las que compartes forman el banco compartido: tus colegas docentes pueden usarlas y copiarlas, pero solo tú las editas.</p>
     <div class="action-row"><button type="button" class="primary" data-rubric="new">Nueva rúbrica</button></div>
     ${rubricBank.length
       ? `<div class="table-wrap"><table><thead><tr><th>Rúbrica</th><th>Criterios</th><th>Autor</th><th>Acciones</th></tr></thead><tbody>${rubricBank
-          .map((r) => `<tr><td><strong>${esc(r.data.title)}</strong>${r.data.shared ? ' <span class="category-pill">Academia</span>' : ''}</td>
+          .map((r) => `<tr><td><strong>${esc(r.data.title)}</strong>${r.data.shared ? ' <span class="category-pill">Compartida</span>' : ''}</td>
             <td>${r.data.criteria.length}</td><td>${r.mine ? 'Tú' : esc(r.data.ownerName)}</td>
             <td><div class="row-actions">${r.mine ? `<button type="button" class="text-btn" data-rubric="edit" data-id="${r.id}">Editar</button>` : ''}
               <button type="button" class="text-btn" data-rubric="copy" data-id="${r.id}">Copiar</button>
@@ -73,7 +73,7 @@ function drawRubricEditor() {
   if (!box) return;
   const d = rubricDraft;
   box.innerHTML = `${field('Título', 'rubricTitle', d.title, 'text', 'required maxlength="120" placeholder="Por ejemplo: reporte de laboratorio"')}
-    <label class="check-row"><input type="checkbox" name="rubricShared" ${d.shared ? 'checked' : ''}> Compartir con la Academia</label>
+    <label class="check-row"><input type="checkbox" name="rubricShared" ${d.shared ? 'checked' : ''}> Compartir con mis colegas docentes</label>
     <div class="table-wrap rubric-editor"><table><thead><tr><th>Criterio</th>${d.levels
       .map((l, j) => `<th><input data-level-name="${j}" value="${esc(l.name)}" aria-label="Nombre del nivel ${j + 1}" maxlength="60" required>
         <span class="rubric-points"><input data-level-points="${j}" type="number" min="0" max="100" step="0.5" value="${esc(l.points)}" aria-label="Puntos del nivel ${j + 1}" class="grade-input"> pts</span></th>`)
@@ -119,7 +119,7 @@ async function fillRubricPicker(select, currentId) {
   const assigned = currentId && !rubricBank.some((r) => r.id === currentId) ? records('rubric').find((r) => r.id === currentId) : null;
   select.innerHTML = `<option value="">Sin rúbrica</option>${assigned ? option(assigned) : ''}
     ${mine.length ? `<optgroup label="Mis rúbricas">${mine.map(option).join('')}</optgroup>` : ''}
-    ${shared.length ? `<optgroup label="Banco de la Academia">${shared.map(option).join('')}</optgroup>` : ''}`;
+    ${shared.length ? `<optgroup label="Banco compartido">${shared.map(option).join('')}</optgroup>` : ''}`;
 }
 
 // ---- Evaluar con rúbrica -----------------------------------------------------------------------

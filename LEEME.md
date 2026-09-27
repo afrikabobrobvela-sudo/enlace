@@ -1,13 +1,13 @@
 # Enlace · versión 12.3
 
-Plataforma académica independiente para la Academia de Física (BUAP), con interfaz inspirada en Brightspace.
+Plataforma académica independiente para docentes y alumnos de cualquier academia (nació en la Academia de Física de la BUAP), con interfaz inspirada en Brightspace.
 No es el código de D2L Brightspace ni una plataforma oficial de la BUAP.
 
 Esta versión se despliega en **tu propia cuenta de Cloudflare** (Workers + D1 + R2, plan gratuito) y ya no depende de ChatGPT Sites.
 
 ## Novedades de la versión 12.3 (diseño)
 
-Nueva apariencia en toda la plataforma: tipografía Inter (incluida en Enlace, sin servicios externos), logotipo, encabezado y menú fijos al desplazarse, pantalla de acceso con la identidad de la Academia de Física, y cada curso con su propio color e ilustración (cuadrícula, ondas u órbitas) que se repite en su página de inicio. Botones, tablas, ventanas y campos tienen un estilo uniforme, y se corrigió la casilla *Visible para alumnos*, que se desalineaba en las ventanas. El diseño vive en `src/public/tema.css`, cargado al final: no cambia el comportamiento. No hay migraciones nuevas.
+Nueva apariencia en toda la plataforma: tipografía Inter (incluida en Enlace, sin servicios externos), logotipo, encabezado y menú fijos al desplazarse, pantalla de acceso nueva, y cada curso con su propio color e ilustración (cuadrícula, ondas u órbitas) que se repite en su página de inicio. Botones, tablas, ventanas y campos tienen un estilo uniforme, y se corrigió la casilla *Visible para alumnos*, que se desalineaba en las ventanas. El diseño vive en `src/public/tema.css`, cargado al final: no cambia el comportamiento. No hay migraciones nuevas.
 
 ## Novedades de la versión 12.2 (contenido)
 
@@ -43,7 +43,7 @@ Migraciones nuevas: **0006** (sesiones) y **0007** (papelera). Ambas solo agrega
 
 **Calificación final.** Nueva columna en la tabla (solo la ve el docente) con las reglas que definas: decimales (entero, uno o dos), redondeo desde .5 hacia arriba o truncado, mínima aprobatoria, asentar 5 (o 0) a quien no aprueba, y si las actividades vencidas sin calificar cuentan como 0. El promedio parcial nunca cuenta lo que falta por calificar. *Exportar calificaciones* incluye la final y cada categoría, listas para capturar en el sistema institucional.
 
-**Rúbricas.** Creas rúbricas en una cuadrícula (criterios × niveles, con puntos y descripción opcional por nivel) y las asignas en el editor de cada actividad. Al calificar, eliges un nivel por criterio con un toque, puedes comentar cada criterio, y Enlace propone la calificación (puntos obtenidos entre el máximo, en escala de 10), que puedes ajustar. El alumno ve el desglose cuando publicas. Tus rúbricas sirven en todos tus cursos; las que marcas como compartidas forman el **banco de la Academia**, que tus colegas pueden usar y copiar, pero solo tú editas. Las evaluaciones ya hechas conservan su detalle aunque la rúbrica cambie o se elimine.
+**Rúbricas.** Creas rúbricas en una cuadrícula (criterios × niveles, con puntos y descripción opcional por nivel) y las asignas en el editor de cada actividad. Al calificar, eliges un nivel por criterio con un toque, puedes comentar cada criterio, y Enlace propone la calificación (puntos obtenidos entre el máximo, en escala de 10), que puedes ajustar. El alumno ve el desglose cuando publicas. Tus rúbricas sirven en todos tus cursos; las que marcas como compartidas forman el **banco compartido** con tus colegas, que tus colegas pueden usar y copiar, pero solo tú editas. Las evaluaciones ya hechas conservan su detalle aunque la rúbrica cambie o se elimine.
 
 **Entregas por equipo.** En el editor de la actividad, *Tipo de entrega → Por equipo* y eliges una categoría de equipos de *Grupos*. Lo que entrega cualquier integrante queda a nombre de todo su equipo (todos ven la entrega y sus archivos; otros equipos no). Al calificar, *Aplicar a todo el equipo* asigna la misma calificación, comentarios y rúbrica a cada integrante; si lo desmarcas, ajustas a una sola persona.
 

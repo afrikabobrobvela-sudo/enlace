@@ -43,6 +43,9 @@ html = rich('![Diagrama de fuerzas](archivo:abc-123)', ['abc-123']);
 has(html, '<img class="rich-image" src="/api/file/abc-123?preview=1" alt="Diagrama de fuerzas" loading="lazy">', 'Imagen adjunta');
 has(rich('![x](archivo:otro)', ['abc-123']), '[imagen no disponible]', 'Una imagen ajena no se muestra');
 lacks(rich('![x](https://evil.test/rastreo.png)'), '<img', 'No se cargan imágenes externas');
+html = rich('Ver https://e.test![a](archivo:abc-123) y [x](https://e.test/$y$)', ['abc-123']);
+has(html, '<a href="https://e.test" target="_blank" rel="noopener noreferrer">https://e.test</a><img class="rich-image"', 'Un enlace pegado a una imagen no la absorbe');
+lacks(html, 'href="https://e.test/$', 'Una fórmula no queda dentro de una URL');
 has(rich('[![foto](archivo:abc-123)](https://phet.colorado.edu)', ['abc-123']), '<a href="https://phet.colorado.edu" target="_blank" rel="noopener noreferrer"><img class="rich-image"', 'Imagen con enlace');
 
 // ---- Seguridad ----

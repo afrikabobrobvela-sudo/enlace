@@ -52,11 +52,11 @@ function renderLogin(methods = { google: true, email: false }) {
     <div class="login-brand">
       <div>
         <svg class="brand-mark" viewBox="0 0 40 40" aria-hidden="true"><rect width="40" height="40" rx="10" fill="#ffffff" fill-opacity=".14"/><ellipse cx="20" cy="20" rx="14" ry="5.5" fill="none" stroke="#7fe3f0" stroke-width="2" transform="rotate(-30 20 20)"/><ellipse cx="20" cy="20" rx="14" ry="5.5" fill="none" stroke="#ffffff" stroke-width="2" transform="rotate(30 20 20)"/><circle cx="20" cy="20" r="3.4" fill="#7fe3f0"/></svg>
-        <h2>Academia de Física</h2>
-        <p>El aula virtual de tus cursos: materiales, actividades, calificaciones y asistencia en un solo lugar.</p>
+        <h2>Tu aula virtual</h2>
+        <p>Para docentes y alumnos de cualquier academia: materiales, actividades, calificaciones y asistencia en un solo lugar.</p>
       </div>
       <ul>
-        <li>Materiales y fórmulas de cada unidad</li>
+        <li>Materiales, fórmulas e imágenes en cada unidad</li>
         <li>Entregas desde tu celular</li>
         <li>Calificaciones y asistencia al día</li>
       </ul>

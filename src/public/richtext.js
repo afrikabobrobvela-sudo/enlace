@@ -24,10 +24,11 @@ function richInline(text, { fileIds, slots }) {
       ? keep(`<img class="rich-image" src="/api/file/${id}?preview=1" alt="${alt}" loading="lazy">`)
       : keep(`<span class="muted">[imagen no disponible]</span>`),
   );
-  out = out.replace(/\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)/g, (_, label, url) =>
+  // Una URL nunca incluye marcadores internos (\u0000 fórmulas, \u0001 enlaces e imágenes ya convertidos).
+  out = out.replace(/\[([^\]\n]+)\]\((https?:\/\/[^\s)\u0000\u0001]+)\)/g, (_, label, url) =>
     keep(`<a href="${url}" target="_blank" rel="noopener noreferrer">${label}</a>`),
   );
-  out = out.replace(/\bhttps?:\/\/[^\s<]+[^\s<.,;:!?)\]]/g, (url) => keep(`<a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>`));
+  out = out.replace(/\bhttps?:\/\/[^\s<\u0000\u0001]*[^\s<.,;:!?)\]\u0000\u0001]/g, (url) => keep(`<a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>`));
   out = out.replace(/\*\*(?=\S)([^*]+?)\*\*/g, '<strong>$1</strong>');
   out = out.replace(/(^|[^*\w])\*(?=\S)([^*\n]+?)\*(?!\w)/g, '$1<em>$2</em>');
   // Un enlace puede contener una imagen: se restauran los marcadores hasta que no quede ninguno.
