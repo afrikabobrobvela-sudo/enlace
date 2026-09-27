@@ -129,7 +129,10 @@ const routes = {
     return json({ ok: true }, 200, { 'Set-Cookie': clearSessionCookie() });
   },
 
+  // Los alumnos no cambian su nombre (evita hacerse pasar por otra persona): en los foros aparecen
+  // con el nombre de la lista del curso, que registra y corrige su docente.
   'POST /api/profile': async ({ db, user, request }) => {
+    if (user.role === 'student') fail('Tu nombre lo registra tu docente en la lista del curso. Si hay un error, pídele que lo corrija.', 403);
     const body = await readJson(request);
     await run(db, 'UPDATE aula_users SET name=? WHERE id=?', text(body.name, 150), user.id);
     return json({ ok: true });
@@ -552,7 +555,9 @@ const routes = {
       if (previous) fail('Las publicaciones no se editan desde este formulario.');
       const forum = await contentRecord(db, input.forum, body.course, 'forum');
       if (!a.teach && forum.data.visible === false) fail('Foro no disponible.', 403);
-      data = { forum: forum.id, title: text(input.title, 200), body: text(input.body, 15000), name: user.name };
+      // Un alumno publica con su nombre de la lista del curso, no con el de su cuenta.
+      const enrolled = a.teach ? null : await one(db, "SELECT name FROM aula_members WHERE course=? AND user_id=? AND role='student'", body.course, user.id);
+      data = { forum: forum.id, title: text(input.title, 200), body: text(input.body, 15000), name: enrolled?.name || user.name };
     }
     const saved = await saveContentRecord(db, previous, data, user.id, body.course, kind);
     return json(saved, previous ? 200 : 201);

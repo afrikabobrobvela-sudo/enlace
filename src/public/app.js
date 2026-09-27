@@ -716,7 +716,7 @@ document.addEventListener('click', async (e) => {
       case 'profile':
         if (!me)
           return;
-        modal('Mi perfil', field('Nombre', 'name', me.name, 'text', 'required') + `<p>${esc(me.email)}</p><p>Enlace no guarda contraseñas: entras con este correo a través de Google o de un enlace de acceso.</p><p>¿Perdiste un teléfono o entraste en una computadora ajena? <button type="button" class="text-btn" data-action="logout-all">Cerrar sesión en todos mis dispositivos</button></p>`, async (f) => {
+        modal('Mi perfil', (me.role === 'student' ? `<p><strong>${esc(me.name)}</strong></p>` : field('Nombre', 'name', me.name, 'text', 'required')) + `<p>${esc(me.email)}</p><p>Enlace no guarda contraseñas: entras con este correo a través de Google o de un enlace de acceso.</p><p>¿Perdiste un teléfono o entraste en una computadora ajena? <button type="button" class="text-btn" data-action="logout-all">Cerrar sesión en todos mis dispositivos</button></p>`, me.role === 'student' ? null : async (f) => {
           await request('/api/profile', { name: f.get('name') });
           me = await request('/api/me');
         });

@@ -128,6 +128,14 @@ await restore('task', tarea.id, 404);
 const back = (await view('ana')).records.find((r) => r.kind === 'submission' && r.data.task === tarea.id);
 assert.deepEqual([back.data.grade, back.data.feedback], [9, 'Bien'], 'La calificación vuelve intacta');
 
+// ---- Nombres: un alumno no cambia el suyo y publica con el de la lista del curso ----
+await call('ana', '/api/profile', { name: 'Dr. Vela' }, 403);
+await call('docente', '/api/member', { course: c, name: 'Ana Pérez López', email: 'ana@example.test' });
+const post = await record('post', { forum: forum.id, title: 'Hola', body: 'texto' }, 'ana');
+assert.equal(post.data.name, 'Ana Pérez López');
+await call('docente', '/api/profile', { name: 'Dr. Docente' });
+assert.equal((await call('docente', '/api/me')).name, 'Dr. Docente');
+
 // ---- Tipos que no van a la papelera y cursos ajenos ----
 await remove('group', 'x', 'docente', 400);
 await call('docente', '/api/teachers', { email: 'colega@example.test', name: 'Colega', role: 'teacher' });
