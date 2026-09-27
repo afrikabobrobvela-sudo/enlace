@@ -1,9 +1,21 @@
-# Enlace · versión 12.1
+# Enlace · versión 12.2
 
 Plataforma académica independiente para la Academia de Física (BUAP), con interfaz inspirada en Brightspace.
 No es el código de D2L Brightspace ni una plataforma oficial de la BUAP.
 
 Esta versión se despliega en **tu propia cuenta de Cloudflare** (Workers + D1 + R2, plan gratuito) y ya no depende de ChatGPT Sites.
+
+## Novedades de la versión 12.2 (contenido)
+
+**Texto con formato.** Unidades, materiales, noticias, foros, instrucciones de actividades y evaluaciones tienen una barra de formato: **negrita**, *cursiva*, títulos, listas con viñetas y numeradas, enlaces, fórmulas e imágenes, con *Vista previa* antes de guardar. Se guarda como texto sencillo (`**negrita**`, `- lista`, `[texto](https://…)`), así que todo lo que ya tenías se sigue viendo igual. Las fórmulas LaTeX funcionan como antes.
+
+**Archivos en unidades e imágenes en el texto.** Las unidades ya aceptan archivos (programa, presentaciones), igual que los materiales. En materiales y unidades ahora puedes **quitar** un archivo ya subido y arrastrar archivos al editor. El botón *Imagen* sube una foto y la muestra dentro del texto.
+
+**Visible u oculto con un toque.** Cada unidad, material y actividad muestra un interruptor *Visible para alumnos / Oculto para alumnos*; no hace falta abrir el editor. Si un material está visible pero su unidad está oculta, Enlace lo avisa.
+
+**Fotos más ligeras.** Antes de subir, el navegador reduce las fotos (JPG, PNG, WEBP de más de 300 KB) a 2000 px en su lado mayor: una foto de celular de 8 MB queda en menos de 1 MB y se lee igual. Conserva el formato y el nombre; si no ahorra al menos 30 %, sube el original. También quita la ubicación GPS de las fotos. Aplica a entregas de alumnos y a material del docente.
+
+No hay migraciones nuevas en esta versión.
 
 ## Novedades de la versión 12.1 (correcciones para uso con varios docentes)
 
@@ -129,7 +141,7 @@ src/server/gradebook.js    Actividades, entregas, calificaciones (y borradores),
 src/server/attendance.js   Asistencia: sesiones, registros, reglas y registro con QR
 src/server/grading.js      Categorías, reglas de la calificación final y banco de rúbricas
 src/server/api.js          Rutas de la API, equipos en lote y vista previa de archivos
-src/public/                Interfaz (HTML, CSS, JS). Versión 10: attendance.js, preview.js, teams.js, math.js. Versión 12.1: trash.js.
+src/public/                Interfaz (HTML, CSS, JS). Versión 10: attendance.js, preview.js, teams.js, math.js. Versión 12.1: trash.js. Versión 12.2: richtext.js, compress.js, contenido.css.
                            Versión 11: qr.js, checkin.js, zip.js, risk.js. Versión 12: grading.js, rubrics.js
 src/public/vendor/         pdf.js y KaTeX con sus licencias
 src/generated/             Interfaz incrustada; la genera `npm run build` (no se edita)
@@ -219,10 +231,12 @@ La cookie de sesión usa el prefijo `__Host-`, que exige conexión segura. Chrom
 
 ## Pruebas
 
-`npm test` compila la interfaz y ejecuta quince suites con una base SQLite temporal (con llaves foráneas activas, como D1). No tocan tu base real.
+`npm test` compila la interfaz y ejecuta diecisiete suites con una base SQLite temporal (con llaves foráneas activas, como D1). No tocan tu base real.
 
 - `test-api.mjs`: todas las verificaciones de la versión 8 más sesiones firmadas, cabeceras falsificadas, ponderaciones, restricciones de la base, docentes, inscripción masiva y el límite de 50 consultas.
 - `test-papelera.mjs`: eliminar y restaurar contenido, actividades (con sus entregas y calificaciones), evaluaciones y publicaciones de foro; permisos de moderación; nombres de alumnos en foros; cuotas de archivos.
+- `test-contenido.mjs`: archivos en unidades (con permisos según la visibilidad) y mostrar u ocultar con un toque.
+- `test-formato-ui.mjs`: texto con formato, fórmulas intactas y protección contra HTML, enlaces `javascript:` e imágenes externas.
 - `test-auth.mjs`: flujo completo de Google y del enlace por correo con respuestas simuladas (estado, nonce, audiencia, correo verificado, dominios, redirecciones abiertas, uso único, revocación en el servidor, cierre de sesión por dispositivo y en todos los dispositivos).
 - `test-migration.mjs`: genera datos con el servidor de la versión 8 real (`scripts/fixtures/server-v8.js`), aplica la migración 0002 y comprueba con la versión 9 que todo llegó idéntico.
 - `test-fase1.mjs`: asistencia (permisos, calendario, registros, borrado en cascada), borradores de calificación, equipos en lote y vista previa (tipo real del archivo, descargas parciales para video, permisos).

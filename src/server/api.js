@@ -42,6 +42,7 @@ const MAX_BULK_STUDENTS = 500;
 /** Tipos que siguen guardándose como JSON libre en aula_records. */
 const CONTENT_KINDS = ['module', 'material', 'notice', 'forum', 'post', 'group', 'quiz'];
 const TEACHER_CONTENT_KINDS = ['module', 'material', 'notice', 'forum', 'quiz', 'group'];
+const VISIBILITY_KINDS = ['module', 'material', 'notice', 'forum', 'quiz'];
 /** Lo que va a la papelera (los equipos se eliminan directamente: no guardan trabajo de los alumnos). */
 const TRASH_KINDS = ['module', 'material', 'notice', 'forum', 'post', 'quiz', 'task'];
 const trashTitle = (kind, data) => (kind === 'post' ? `${data.title || 'Publicación'} · ${data.name || ''}` : data.title || '');
@@ -223,7 +224,7 @@ const routes = {
 
     let files = await all(db, 'SELECT id,course,owner,scope,name,size,mime,created FROM aula_files WHERE course=?', courseId);
     if (!a.teach) {
-      const shared = new Set(records.filter((r) => ['material', 'task'].includes(r.kind)).flatMap((r) => r.data.fileIds || []));
+      const shared = new Set(records.filter((r) => ['module', 'material', 'task'].includes(r.kind)).flatMap((r) => r.data.fileIds || []));
       files = files.filter((f) => f.owner === user.id || (f.scope === 'material' && shared.has(f.id)));
     }
     return json({
@@ -513,6 +514,7 @@ const routes = {
     if (TEACHER_CONTENT_KINDS.includes(kind)) {
       requireTeacher(a);
       data = { title: text(input.title, 200), body: String(input.body || '').slice(0, 30000), visible: input.visible !== false };
+      if (kind === 'module') data.fileIds = await validateFiles(db, input.fileIds, body.course, user, 'material');
       if (kind === 'material') {
         data.module = input.module || null;
         if (data.module) await contentRecord(db, data.module, body.course, 'module');
@@ -565,6 +567,28 @@ const routes = {
     }
     const saved = await saveContentRecord(db, previous, data, user.id, body.course, kind);
     return json(saved, previous ? 200 : 201);
+  },
+
+  // Mostrar u ocultar a los alumnos con un solo toque, sin abrir el editor.
+  'POST /api/record/visibility': async ({ db, user, request }) => {
+    const body = await readJson(request);
+    requireTeacher(await access(db, user, body.course));
+    if (typeof body.visible !== 'boolean') fail('Indica si el elemento debe ser visible.');
+    if (body.kind === 'task') {
+      const task = await loadTask(db, body.id, body.course);
+      await run(db, 'UPDATE aula_tasks SET visible=?, revision=revision+1, updated=? WHERE id=?', body.visible ? 1 : 0, nowIso(), task.id);
+      return json({ visible: body.visible });
+    }
+    if (!VISIBILITY_KINDS.includes(body.kind)) fail('Este elemento no tiene visibilidad.');
+    const record = await contentRecord(db, body.id, body.course, body.kind);
+    await run(
+      db,
+      "UPDATE aula_records SET data=json_set(data,'$.visible',json(?)), revision=revision+1, updated=? WHERE id=?",
+      body.visible ? 'true' : 'false',
+      nowIso(),
+      record.id,
+    );
+    return json({ visible: body.visible });
   },
 
   // ---- Papelera ----
@@ -850,8 +874,8 @@ async function downloadFile({ db, env, user, url, request }, id) {
   if (!file) fail('Archivo no encontrado.', 404);
   const a = await access(db, user, file.course);
   if (!a.teach && file.owner !== user.id) {
-    // Un alumno solo descarga material del docente enlazado desde contenido visible
-    // (y cuya unidad también es visible) o desde una actividad visible.
+    // Un alumno solo descarga material del docente enlazado desde una unidad visible, un material visible
+    // (cuya unidad también es visible) o una actividad visible.
     // Un archivo de entrega también lo ve quien tenga esa entrega a su nombre (entregas por equipo).
     const teammate =
       file.scope === 'submission' &&
@@ -869,9 +893,9 @@ async function downloadFile({ db, env, user, url, request }, id) {
       (await one(
         db,
         `SELECT 1 AS ok FROM aula_records r, json_each(r.data,'$.fileIds') j
-         WHERE r.course=?1 AND r.kind='material' AND j.value=?2 AND json_type(r.data,'$.visible') IS NOT 'false'
+         WHERE r.course=?1 AND r.kind IN ('material','module') AND j.value=?2 AND json_type(r.data,'$.visible') IS NOT 'false'
            AND r.deleted_at IS NULL
-           AND (coalesce(json_extract(r.data,'$.module'),'')=''
+           AND (r.kind='module' OR coalesce(json_extract(r.data,'$.module'),'')=''
                 OR EXISTS (SELECT 1 FROM aula_records p WHERE p.id=json_extract(r.data,'$.module') AND p.course=?1
                            AND p.deleted_at IS NULL AND json_type(p.data,'$.visible') IS NOT 'false'))
          UNION ALL

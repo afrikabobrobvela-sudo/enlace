@@ -18,6 +18,11 @@ const localDate = v => {
 const iso = v => v ? new Date(v).toISOString() : '';
 const field = (label, name, value = '', type = 'text', extra = '') => `<label>${label}<input name="${name}" type="${type}" value="${esc(value)}" ${extra}></label>`;
 const textarea = (label, name, value = '', required = true) => `<label>${label}<textarea name="${name}" ${required ? 'required' : ''}>${esc(value)}</textarea></label>`;
+/** Interruptor para mostrar u ocultar un elemento a los alumnos con un toque. */
+const visibilityToggle = (kind, r) => {
+  const on = r.data.visible !== false;
+  return `<button type="button" class="visibility-toggle ${on ? '' : 'is-hidden'}" data-action="toggle-visible" data-kind="${kind}" data-id="${esc(r.id)}" aria-pressed="${on}" title="Toca para ${on ? 'ocultarlo a' : 'mostrarlo a'} los alumnos">${on ? 'Visible para alumnos' : 'Oculto para alumnos'}</button>`;
+};
 const visible = v => `<label class="check-label"><input name="visible" type="checkbox" ${v !== false ? 'checked' : ''}> Visible para alumnos</label>`;
 const button = (label, action, id = '', style = 'primary') => `<button class="${style}" data-action="${action}" ${id ? `data-id="${esc(id)}"` : ''}>${label}</button>`;
 function toast(t) {
@@ -63,6 +68,7 @@ function empty(title, text, action = '', label = '') {
   return `<section class="empty-start"><h1>${title}</h1><p>${text}</p>${action ? button(label, action) : ''}</section>`;
 }
 function render() {
+  richAttachments = null;
   nav();
   if (!current)
     return homeView === 'teachers' && me?.role === 'admin' ? renderTeachers() : renderHome();
@@ -93,7 +99,7 @@ function renderHome() {
 }
 function renderHub() {
   const c = current.course;
-  $('#main').innerHTML = `<section class="hub-banner"><h1>${esc(c.name)}</h1></section><div class="hub-grid"><div class="hub-side"><section class="panel"><h2>Información del curso</h2><p class="muted">${esc(c.group_name)}</p><p class="body-text">${esc(c.intro)}</p></section><section class="panel"><h2>Actividades</h2>${records('task').slice(-4).map(t => `<div class="task-row"><div><b>${esc(t.data.title)}</b><p class="deadline">${fmt(t.data.due)}</p>${button('Abrir →', 'task', t.id, 'text-btn')}</div></div>`).join('') || '<p class="muted">No hay actividades publicadas.</p>'}</section></div><div><section class="panel"><div class="panel-head"><h2>Noticias</h2>${teaches() ? button('Crear publicación', 'new-notice', '', 'text-btn') : ''}</div>${noticeCards()}</section><section class="panel"><div class="panel-head"><h2>Contenido del curso</h2>${teaches() ? button('Nueva unidad', 'new-module', '', 'text-btn') : ''}</div><div class="module-cards">${records('module').map(m => `<button class="module-card" data-action="module" data-id="${m.id}"><div class="module-cover">${esc(m.data.title)}</div><span class="module-label">${m.data.visible ? 'Abrir unidad' : 'Oculta'}</span></button>`).join('')}</div>${!records('module').length ? '<p class="muted">Agrega unidades para organizar los materiales.</p>' : ''}</section></div></div>`;
+  $('#main').innerHTML = `<section class="hub-banner"><h1>${esc(c.name)}</h1></section><div class="hub-grid"><div class="hub-side"><section class="panel"><h2>Información del curso</h2><p class="muted">${esc(c.group_name)}</p>${richText(c.intro)}</section><section class="panel"><h2>Actividades</h2>${records('task').slice(-4).map(t => `<div class="task-row"><div><b>${esc(t.data.title)}</b><p class="deadline">${fmt(t.data.due)}</p>${button('Abrir →', 'task', t.id, 'text-btn')}</div></div>`).join('') || '<p class="muted">No hay actividades publicadas.</p>'}</section></div><div><section class="panel"><div class="panel-head"><h2>Noticias</h2>${teaches() ? button('Crear publicación', 'new-notice', '', 'text-btn') : ''}</div>${noticeCards()}</section><section class="panel"><div class="panel-head"><h2>Contenido del curso</h2>${teaches() ? button('Nueva unidad', 'new-module', '', 'text-btn') : ''}</div><div class="module-cards">${records('module').map(m => `<button class="module-card" data-action="module" data-id="${m.id}"><div class="module-cover">${esc(m.data.title)}</div><span class="module-label">${m.data.visible ? 'Abrir unidad' : 'Oculta'}</span></button>`).join('')}</div>${!records('module').length ? '<p class="muted">Agrega unidades para organizar los materiales.</p>' : ''}</section></div></div>`;
 }
 function fileLinks(ids = []) {
   return `<div class="file-list">${ids.map(id => {
@@ -115,25 +121,25 @@ function renderTask() {
   if (!t)
     return renderTasks();
   const subs = records('submission').filter(s => s.data.task === t.id), own = subs.find(s => s.data.member === current.members.find(m => m.user_id === me.id)?.id) || subs.find(s => s.author === me.id);
-  $('#main').innerHTML = `<div class="crumbs"><button data-section="tasks">Actividades</button><span>›</span><span>${teaches() ? 'Envíos en carpeta' : 'Entrega'}</span></div><h1>${esc(t.data.title)}</h1><p class="deadline">Vence: ${fmt(t.data.due)}</p>${!teaches() && t.data.groupCategory ? teamBannerHtml(t) : ''}<p class="body-text">${esc(t.data.body)}</p><section class="task-materials"><div class="panel-head"><h2>Material del docente</h2>${teaches() ? button('＋ Subir archivos o presentaciones', 'task-files', t.id) : ''}</div>${fileLinks(t.data.fileIds)}${!t.data.fileIds?.length ? '<p class="muted">No hay archivos adjuntos a esta actividad.</p>' : ''}</section>${teaches() ? `<div class="toolbar">${button('Editar actividad', 'edit-task', t.id, 'secondary')}${button('Descargar entregas (ZIP)', 'zip-task', t.id, 'secondary')}</div><div class="table-wrap"><table><thead><tr><th>Alumno</th><th>Estado</th><th>Calificación</th><th>Acción</th></tr></thead><tbody>${current.members.filter(m => m.role === 'student').map(m => {
+  $('#main').innerHTML = `<div class="crumbs"><button data-section="tasks">Actividades</button><span>›</span><span>${teaches() ? 'Envíos en carpeta' : 'Entrega'}</span></div><h1>${esc(t.data.title)}</h1><p class="deadline">Vence: ${fmt(t.data.due)}</p>${!teaches() && t.data.groupCategory ? teamBannerHtml(t) : ''}${richText(t.data.body, t.data.fileIds)}<section class="task-materials"><div class="panel-head"><h2>Material del docente</h2>${teaches() ? button('＋ Subir archivos o presentaciones', 'task-files', t.id) : ''}</div>${fileLinks(t.data.fileIds)}${!t.data.fileIds?.length ? '<p class="muted">No hay archivos adjuntos a esta actividad.</p>' : ''}</section>${teaches() ? `<div class="toolbar">${button('Editar actividad', 'edit-task', t.id, 'secondary')}${button('Descargar entregas (ZIP)', 'zip-task', t.id, 'secondary')}</div><div class="table-wrap"><table><thead><tr><th>Alumno</th><th>Estado</th><th>Calificación</th><th>Acción</th></tr></thead><tbody>${current.members.filter(m => m.role === 'student').map(m => {
     const s = subs.find(s => s.data.member === m.id);
     return `<tr><td>${esc(m.name)}</td><td>${s ? s.data.manual ? 'Captura manual' : s.data.late ? 'Entrega tardía' : 'Entregado' : 'Sin entrega'}</td><td>${s?.data.grade ?? '—'}</td><td><button class="table-link" data-action="review" data-id="${t.id}" data-member="${m.id}">Evaluar →</button></td></tr>`;
-  }).join('') || '<tr><td colspan="4">Inscribe alumnos para revisar sus entregas.</td></tr>'}</tbody></table></div>` : `${own ? `<section class="panel"><h2>Tu entrega</h2><p class="deadline">${fmt(own.data.submitted)}</p><p class="body-text">${esc(own.data.body)}</p>${fileLinks(own.data.fileIds)}<p>Calificación: <b>${own.data.grade ?? 'Pendiente'}</b></p><p class="body-text">${esc(own.data.feedback)}</p>${rubricResultHtml(own.data.rubricScores)}</section>` : ''}<div class="toolbar">${button(own ? 'Actualizar entrega' : 'Realizar entrega', 'submit', t.id)}</div>`}`;
+  }).join('') || '<tr><td colspan="4">Inscribe alumnos para revisar sus entregas.</td></tr>'}</tbody></table></div>` : `${own ? `<section class="panel"><h2>Tu entrega</h2><p class="deadline">${fmt(own.data.submitted)}</p>${richText(own.data.body)}${fileLinks(own.data.fileIds)}<p>Calificación: <b>${own.data.grade ?? 'Pendiente'}</b></p>${richText(own.data.feedback)}${rubricResultHtml(own.data.rubricScores)}</section>` : ''}<div class="toolbar">${button(own ? 'Actualizar entrega' : 'Realizar entrega', 'submit', t.id)}</div>`}`;
 }
 function noticeCards() {
-  return records('notice').map(n => `<article class="notice"><h3>${esc(n.data.title)}</h3><p class="deadline">${fmt(n.created)}</p><p class="body-text">${esc(n.data.body)}</p>${teaches() ? button('Editar', 'edit-notice', n.id, 'text-btn') : ''}</article>`).join('') || '<p class="muted">No hay noticias publicadas.</p>';
+  return records('notice').map(n => `<article class="notice"><h3>${esc(n.data.title)}</h3><p class="deadline">${fmt(n.created)}</p>${richText(n.data.body)}${teaches() ? button('Editar', 'edit-notice', n.id, 'text-btn') : ''}</article>`).join('') || '<p class="muted">No hay noticias publicadas.</p>';
 }
 function renderNotices() {
   $('#main').innerHTML = `<div class="heading"><h1>Noticias</h1>${teaches() ? button('Crear publicación', 'new-notice') : ''}</div><section class="panel">${noticeCards()}</section>`;
 }
 function renderForums() {
-  $('#main').innerHTML = `<h1>Foros</h1><div class="home-tabs"><button class="active">Lista de foros</button></div><div class="toolbar">${teaches() ? button('Nuevo foro', 'new-forum') : ''}</div>${records('forum').map(f => `<section class="forum-block"><h2>${esc(f.data.title)}${f.data.visible ? '' : ' · Oculto'}</h2><p class="body-text">${esc(f.data.body)}</p><div class="table-wrap"><table><thead><tr><th>Tema</th><th>Publicaciones</th>${teaches() ? '<th>Editar</th>' : ''}</tr></thead><tbody><tr><td>${button(esc(f.data.title), 'forum', f.id, 'table-link')}</td><td>${records('post').filter(p => p.data.forum === f.id).length}</td>${teaches() ? `<td>${button('Editar', 'edit-forum', f.id, 'text-btn')}</td>` : ''}</tr></tbody></table></div></section>`).join('') || '<p class="empty">No hay foros.</p>'}`;
+  $('#main').innerHTML = `<h1>Foros</h1><div class="home-tabs"><button class="active">Lista de foros</button></div><div class="toolbar">${teaches() ? button('Nuevo foro', 'new-forum') : ''}</div>${records('forum').map(f => `<section class="forum-block"><h2>${esc(f.data.title)}${f.data.visible ? '' : ' · Oculto'}</h2>${richText(f.data.body)}<div class="table-wrap"><table><thead><tr><th>Tema</th><th>Publicaciones</th>${teaches() ? '<th>Editar</th>' : ''}</tr></thead><tbody><tr><td>${button(esc(f.data.title), 'forum', f.id, 'table-link')}</td><td>${records('post').filter(p => p.data.forum === f.id).length}</td>${teaches() ? `<td>${button('Editar', 'edit-forum', f.id, 'text-btn')}</td>` : ''}</tr></tbody></table></div></section>`).join('') || '<p class="empty">No hay foros.</p>'}`;
 }
 function renderForum() {
   const f = find(detail);
   if (!f)
     return renderForums();
-  $('#main').innerHTML = `<button class="back" data-section="forums">❮ Lista de foros</button><h1>${esc(f.data.title)}</h1><p class="body-text">${esc(f.data.body)}</p><div class="toolbar">${button('Publicar mensaje', 'new-post', f.id)}</div>${records('post').filter(p => p.data.forum === f.id).map(p => `<article class="forum-post"><h2>${esc(p.data.title)}</h2><p class="muted">${esc(p.data.name)} · ${fmt(p.created)}</p><p class="body-text">${esc(p.data.body)}</p>${teaches() || p.author === me.id ? trashButton('post', p.id) : ''}</article>`).join('') || '<p class="empty">Todavía no hay publicaciones.</p>'}`;
+  $('#main').innerHTML = `<button class="back" data-section="forums">❮ Lista de foros</button><h1>${esc(f.data.title)}</h1>${richText(f.data.body)}<div class="toolbar">${button('Publicar mensaje', 'new-post', f.id)}</div>${records('post').filter(p => p.data.forum === f.id).map(p => `<article class="forum-post"><h2>${esc(p.data.title)}</h2><p class="muted">${esc(p.data.name)} · ${fmt(p.created)}</p>${richText(p.data.body)}${teaches() || p.author === me.id ? trashButton('post', p.id) : ''}</article>`).join('') || '<p class="empty">Todavía no hay publicaciones.</p>'}`;
 }
 function renderQuizzes() {
   $('#main').innerHTML = `<h1>Evaluaciones</h1><div class="home-tabs"><button class="active">${teaches() ? 'Administrar evaluaciones' : 'Mis evaluaciones'}</button></div><div class="toolbar">${teaches() ? button('Nueva evaluación', 'new-quiz') : ''}</div><div class="table-wrap"><table><thead><tr><th>Evaluación</th><th>Preguntas</th><th>Estado</th></tr></thead><tbody>${records('quiz').map(q => `<tr><td>${button(esc(q.data.title), 'quiz', q.id, 'table-link')}</td><td>${q.data.questions.length}</td><td>${q.data.visible ? 'Publicada' : 'Oculta'}</td></tr>`).join('') || '<tr><td colspan="3">No hay evaluaciones.</td></tr>'}</tbody></table></div>`;
@@ -143,7 +149,7 @@ function renderQuiz() {
   if (!q)
     return renderQuizzes();
   const attempts = records('attempt').filter(a => a.data.quiz === q.id), own = attempts.find(a => a.author === me.id);
-  $('#main').innerHTML = `<button class="back" data-section="quizzes">❮ Evaluaciones</button><h1>${esc(q.data.title)}</h1><p class="body-text">${esc(q.data.body)}</p>${teaches() ? `<div class="toolbar">${button('Editar evaluación', 'edit-quiz', q.id, 'secondary')}</div><p class="real-status">Se permite un intento por alumno. Las respuestas se califican en el servidor. Los resultados se consultan aquí, separados del promedio de actividades.</p>${q.data.questions.map((x, i) => `<section class="quiz-question"><h3>${i + 1}. ${esc(x.text)}</h3><ol type="A">${x.options.map((o, j) => `<li>${esc(o)} ${j === x.correct ? '✓' : ''}</li>`).join('')}</ol></section>`).join('')}<h2>Resultados</h2><div class="table-wrap"><table><thead><tr><th>Alumno</th><th>Calificación</th><th>Fecha</th></tr></thead><tbody>${attempts.map(a => `<tr><td>${esc(a.data.name)}</td><td>${a.data.score.toFixed(2)} / 10</td><td>${fmt(a.created)}</td></tr>`).join('') || '<tr><td colspan="3">No hay intentos registrados.</td></tr>'}</tbody></table></div>` : own ? `<div class="quiz-result">Resultado: <b>${own.data.score.toFixed(2)} / 10</b><p>${own.data.correct} de ${own.data.total} respuestas correctas.</p><p>Enviado el ${fmt(own.created)}</p></div>` : `<p class="real-status">Un intento. Revisa todas tus respuestas antes de enviar.</p><form id="quizAttempt">${q.data.questions.map((x, i) => `<fieldset class="quiz-question"><legend>${i + 1}. ${esc(x.text)}</legend>${x.options.map((o, j) => `<label><input type="radio" required name="q_${i}" value="${j}"> ${esc(o)}</label>`).join('')}</fieldset>`).join('')}<p class="form-error error" hidden></p><button class="primary">Enviar evaluación</button></form>`}`;
+  $('#main').innerHTML = `<button class="back" data-section="quizzes">❮ Evaluaciones</button><h1>${esc(q.data.title)}</h1>${richText(q.data.body)}${teaches() ? `<div class="toolbar">${button('Editar evaluación', 'edit-quiz', q.id, 'secondary')}</div><p class="real-status">Se permite un intento por alumno. Las respuestas se califican en el servidor. Los resultados se consultan aquí, separados del promedio de actividades.</p>${q.data.questions.map((x, i) => `<section class="quiz-question"><h3>${i + 1}. ${esc(x.text)}</h3><ol type="A">${x.options.map((o, j) => `<li>${esc(o)} ${j === x.correct ? '✓' : ''}</li>`).join('')}</ol></section>`).join('')}<h2>Resultados</h2><div class="table-wrap"><table><thead><tr><th>Alumno</th><th>Calificación</th><th>Fecha</th></tr></thead><tbody>${attempts.map(a => `<tr><td>${esc(a.data.name)}</td><td>${a.data.score.toFixed(2)} / 10</td><td>${fmt(a.created)}</td></tr>`).join('') || '<tr><td colspan="3">No hay intentos registrados.</td></tr>'}</tbody></table></div>` : own ? `<div class="quiz-result">Resultado: <b>${own.data.score.toFixed(2)} / 10</b><p>${own.data.correct} de ${own.data.total} respuestas correctas.</p><p>Enviado el ${fmt(own.created)}</p></div>` : `<p class="real-status">Un intento. Revisa todas tus respuestas antes de enviar.</p><form id="quizAttempt">${q.data.questions.map((x, i) => `<fieldset class="quiz-question"><legend>${i + 1}. ${esc(x.text)}</legend>${x.options.map((o, j) => `<label><input type="radio" required name="q_${i}" value="${j}"> ${esc(o)}</label>`).join('')}</fieldset>`).join('')}<p class="form-error error" hidden></p><button class="primary">Enviar evaluación</button></form>`}`;
   if ($('#quizAttempt'))
     bindForm('#quizAttempt', f => request('/api/attempt', {
       course: current.course.id,
@@ -341,6 +347,7 @@ function bindForm(selector, handler) {
   };
 }
 function modal(title, html, handler, saveLabel = 'Guardar') {
+  richAttachments = null;
   $('#formSave').classList.remove('danger-button');
   $('#modalTitle').textContent = title;
   $('#fields').innerHTML = `<div class="real-form">${html}</div>`;
@@ -376,60 +383,45 @@ function simpleRecord(kind, old) {
     notice: 'publicación',
     forum: 'foro'
   };
-  modal(`${old ? 'Editar' : 'Crear'} ${names[kind]}`, field('Título', 'title', old?.data.title || '', 'text', 'required maxlength="200"') + textarea('Contenido', 'body', old?.data.body || '', false) + visible(old?.data.visible) + (old ? `<p class="modal-danger">${trashButton(kind, old.id, 'Eliminar ' + names[kind])}</p>` : ''), f => save(kind, {
-    title: f.get('title'),
-    body: f.get('body'),
-    visible: f.get('visible') === 'on'
-  }, old));
-}
-async function upload(files, scope, existing = []) {
-  const ids = [...existing];
-  if (files.filter(f => f.size).length + ids.length > 5)
-    throw new Error('Máximo cinco archivos por elemento.');
-  for (const f of files) {
-    if (!f.size)
-      continue;
-    if (f.size > 20 * 1024 * 1024)
-      throw new Error('Cada archivo debe pesar como máximo 20 MB.');
-    const r = await fetch(`/api/upload?course=${encodeURIComponent(current.course.id)}&scope=${scope}`, {
-      method: 'POST',
-      credentials: 'same-origin',
-      headers: {
-        'Content-Type': f.type || 'application/octet-stream',
-        'X-Aula-Request': '1',
-        'X-File-Name': encodeURIComponent(f.name)
-      },
-      body: f
-    });
-    const b = await r.json();
-    if (!r.ok)
-      throw new Error(b.error);
-    ids.push(b.id);
-  }
-  return ids;
+  // Las unidades llevan archivos (programa, presentaciones, imágenes dentro del texto); noticias y foros, solo texto.
+  const withFiles = kind === 'module';
+  let files = null;
+  modal(`${old ? 'Editar' : 'Crear'} ${names[kind]}`, field('Título', 'title', old?.data.title || '', 'text', 'required maxlength="200"') + richTextarea(kind === 'module' ? 'Descripción de la unidad' : 'Contenido', 'body', old?.data.body || '', { images: withFiles }) + (withFiles ? attachmentPanel(true, 'la unidad') : '') + visible(old?.data.visible) + (old ? `<p class="modal-danger">${trashButton(kind, old.id, 'Eliminar ' + names[kind])}</p>` : ''), async (f) => {
+    const data = {
+      title: f.get('title'),
+      body: f.get('body'),
+      visible: f.get('visible') === 'on'
+    };
+    if (files)
+      data.fileIds = await files.upload();
+    await save(kind, data, old);
+    dirty = false;
+  });
+  if (withFiles)
+    richAttachments = files = attachmentManager($('#fields'), old?.data.fileIds || [], 'material');
 }
 function materialModal(old) {
   const d = old?.data || {};
-  let uploaded = null;
-  modal(old ? 'Editar material' : 'Agregar material', field('Título', 'title', d.title || '', 'text', 'required') + `<label>Unidad<select name="module"><option value="">Sin unidad</option>${records('module').map(m => `<option value="${m.id}" ${(d.module || moduleId) === m.id ? 'selected' : ''}>${esc(m.data.title)}</option>`).join('')}</select></label>` + textarea('Descripción', 'body', d.body || '', false) + field('Enlace (opcional)', 'url', d.url || '', 'url') + `<label>Adjuntar archivos<input type="file" name="files" multiple></label><p class="pending-message">Máximo cinco archivos de 20 MB cada uno. Se conservan los archivos existentes.</p>${fileLinks(d.fileIds)}` + visible(d.visible) + (old ? `<p class="modal-danger">${trashButton('material', old.id, 'Eliminar material')}</p>` : ''), async (f) => {
-    if (!uploaded)
-      uploaded = await upload(f.getAll('files'), 'material', d.fileIds || []);
+  let files = null;
+  modal(old ? 'Editar material' : 'Agregar material', field('Título', 'title', d.title || '', 'text', 'required') + `<label>Unidad<select name="module"><option value="">Sin unidad</option>${records('module').map(m => `<option value="${m.id}" ${(d.module || moduleId) === m.id ? 'selected' : ''}>${esc(m.data.title)}</option>`).join('')}</select></label>` + richTextarea('Descripción', 'body', d.body || '', { images: true }) + field('Enlace (opcional)', 'url', d.url || '', 'url') + attachmentPanel(true, 'este material') + visible(d.visible) + (old ? `<p class="modal-danger">${trashButton('material', old.id, 'Eliminar material')}</p>` : ''), async (f) => {
     await save('material', {
       title: f.get('title'),
       body: f.get('body'),
       url: f.get('url'),
       module: f.get('module') || null,
       visible: f.get('visible') === 'on',
-      fileIds: uploaded
+      fileIds: await files.upload()
     }, old);
+    dirty = false;
   });
+  richAttachments = files = attachmentManager($('#fields'), d.fileIds || [], 'material');
 }
 function quizFields(q, i) {
   return `<fieldset class="quiz-edit-question" data-question><legend>Pregunta ${i + 1}</legend>${textarea('Enunciado', 'question_' + i, q?.text || '')}${[0, 1, 2].map(j => field('Opción ' + String.fromCharCode(65 + j), `option_${i}_${j}`, q?.options[j] || '', 'text', 'required')).join('')}<label>Respuesta correcta<select name="correct_${i}">${[0, 1, 2].map(j => `<option value="${j}" ${q?.correct === j ? 'selected' : ''}>${String.fromCharCode(65 + j)}</option>`).join('')}</select></label></fieldset>`;
 }
 function quizModal(old) {
   let count = old?.data.questions.length || 1;
-  modal(old ? 'Editar evaluación' : 'Nueva evaluación', field('Título', 'title', old?.data.title || '', 'text', 'required') + textarea('Instrucciones', 'body', old?.data.body || '', false) + visible(old?.data.visible ?? false) + `<div id="questions">${Array.from({ length: count }, (_, i) => quizFields(old?.data.questions[i], i)).join('')}</div><button type="button" class="secondary" id="addQuestion">＋ Agregar pregunta</button><p class="pending-message">Un intento por alumno. Una evaluación con respuestas recibidas no permite modificar las preguntas.</p>` + (old ? `<p class="modal-danger">${trashButton('quiz', old.id, 'Eliminar evaluación')}</p>` : ''), f => save('quiz', {
+  modal(old ? 'Editar evaluación' : 'Nueva evaluación', field('Título', 'title', old?.data.title || '', 'text', 'required') + richTextarea('Instrucciones', 'body', old?.data.body || '') + visible(old?.data.visible ?? false) + `<div id="questions">${Array.from({ length: count }, (_, i) => quizFields(old?.data.questions[i], i)).join('')}</div><button type="button" class="secondary" id="addQuestion">＋ Agregar pregunta</button><p class="pending-message">Un intento por alumno. Una evaluación con respuestas recibidas no permite modificar las preguntas.</p>` + (old ? `<p class="modal-danger">${trashButton('quiz', old.id, 'Eliminar evaluación')}</p>` : ''), f => save('quiz', {
     title: f.get('title'),
     body: f.get('body'),
     visible: f.get('visible') === 'on',
@@ -681,6 +673,16 @@ document.addEventListener('click', async (e) => {
         const { published } = await request('/api/grades/publish', { course: current.course.id, task: id });
         await reload();
         toast(published === 1 ? 'Se publicó 1 calificación.' : `Se publicaron ${published} calificaciones.`);
+        break;
+      }
+      case 'toggle-visible': {
+        const target = find(id);
+        if (!target)
+          return;
+        const show = target.data.visible === false;
+        await request('/api/record/visibility', { course: current.course.id, kind: b.dataset.kind, id, visible: show });
+        await reload();
+        toast(show ? 'Ahora lo ven tus alumnos.' : 'Oculto: solo lo ven los docentes.');
         break;
       }
       case 'trash': {

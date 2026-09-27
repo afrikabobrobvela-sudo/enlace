@@ -40,6 +40,8 @@ const context = vm.createContext({
   confirm: () => true,
 });
 const load = (file, transform = (s) => s) => vm.runInContext(transform(readFileSync('src/public/' + file, 'utf8')), context);
+load('richtext.js');
+load('trash.js');
 load('workspace.js');
 load('preview.js');
 load('attendance.js');
