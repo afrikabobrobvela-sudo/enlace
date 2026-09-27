@@ -13,7 +13,7 @@
     "deploy": "node scripts/build.mjs && wrangler deploy",
     "deploy:pruebas": "node scripts/build.mjs && wrangler deploy --env pruebas",
     "db:migrate:local": "wrangler d1 migrations apply enlace-db --local",
-    "db:migrate": "wrangler d1 migrations apply enlace-db --remote",
+    "db:migrate": "node scripts/respaldo.mjs && wrangler d1 migrations apply enlace-db --remote",
     "db:migrate:pruebas": "wrangler d1 migrations apply enlace-pruebas-db --remote --env pruebas",
     "db:generate": "drizzle-kit generate",
     "respaldo": "node scripts/respaldo.mjs",

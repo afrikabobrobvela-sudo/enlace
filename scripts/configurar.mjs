@@ -129,9 +129,11 @@ ok('Sesión iniciada');
 
 step('Base de datos');
 let databaseId = tomlValue(readToml(), 'database_id');
+let createdDatabase = false; // una base recién creada está vacía: no hace falta respaldarla
 if (!databaseId || databaseId.startsWith('PEGA_AQUI')) {
   databaseId = findDatabase();
   if (!databaseId) {
+    createdDatabase = true;
     // Algunas versiones de wrangler agregan la base a wrangler.toml por su cuenta; se restaura el archivo.
     const before = readToml();
     const created = wrangler(['d1', 'create', DB_NAME], { capture: true });
@@ -168,9 +170,19 @@ patchToml({ databaseId, owner });
 ok(`${owner} (guardado en wrangler.toml)`);
 
 step('Tablas de la base de datos');
-console.log('   Si pregunta si deseas continuar, responde que sí (y).');
-if (wrangler(['d1', 'migrations', 'apply', DB_NAME, '--remote']).status !== 0) stop('No se pudieron crear las tablas.');
-ok('Tablas al día');
+const pending = wrangler(['d1', 'migrations', 'list', DB_NAME, '--remote'], { capture: true });
+if (pending.status === 0 && /No migrations to apply/i.test(pending.output)) {
+  ok('Tablas al día (no hay migraciones pendientes)');
+} else {
+  // Antes de tocar la base de producción se descarga una copia completa. Sin respaldo no se migra.
+  if (!createdDatabase) {
+    console.log('   Hay cambios pendientes en la base. Primero se descarga un respaldo completo.');
+    if (!runNode('scripts/respaldo.mjs')) stop('No se pudo descargar el respaldo, así que no se modificó la base.');
+  }
+  console.log('   Si pregunta si deseas continuar, responde que sí (y).');
+  if (wrangler(['d1', 'migrations', 'apply', DB_NAME, '--remote']).status !== 0) stop('No se pudieron crear las tablas.');
+  ok('Tablas al día');
+}
 
 step('Publicación');
 if (!runNode('scripts/build.mjs')) stop('Falló la compilación de la interfaz.');
