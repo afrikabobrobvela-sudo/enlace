@@ -1,7 +1,7 @@
 // API de Enlace: cursos, contenido, inscripciones, actividades, entregas, calificaciones y archivos.
 // Las rutas y las respuestas son compatibles con la interfaz de la versión 8.
 
-import { access, requireAdmin, requireTeacher } from './access.js';
+import { access, ownsCourse, requireAdmin, requireTeacher } from './access.js';
 import { attendanceRoutes } from './attendance.js';
 import { gradingRoutes } from './grading.js';
 import { clearSessionCookie, identity, lastLogins, revokeAllStatements } from './auth.js';
@@ -136,25 +136,27 @@ const routes = {
   // 50 consultas por solicitud y la versión 8 hacía tres por curso.
   'GET /api/courses': async ({ db, user }) => {
     const notDeleted = 'NOT EXISTS (SELECT 1 FROM aula_deleted_courses d WHERE d.course=c.id)';
+    // ?2: la propiedad de un curso solo cuenta si la persona sigue siendo docente (ver ownsCourse).
     const rows =
       user.role === 'admin'
         ? await all(db, `SELECT c.*, 1 AS can_teach FROM aula_courses c WHERE ${notDeleted} ORDER BY c.created DESC`)
         : await all(
             db,
             `SELECT c.*,
-               CASE WHEN c.owner=?1 OR EXISTS (SELECT 1 FROM aula_members t WHERE t.course=c.id AND t.user_id=?1 AND t.role='teacher')
+               CASE WHEN (?2 AND c.owner=?1) OR EXISTS (SELECT 1 FROM aula_members t WHERE t.course=c.id AND t.user_id=?1 AND t.role='teacher')
                  THEN 1 ELSE 0 END AS can_teach
              FROM aula_courses c
-             WHERE (c.owner=?1 OR EXISTS (SELECT 1 FROM aula_members m WHERE m.course=c.id AND m.user_id=?1 AND m.role!='removed'))
+             WHERE ((?2 AND c.owner=?1) OR EXISTS (SELECT 1 FROM aula_members m WHERE m.course=c.id AND m.user_id=?1 AND m.role!='removed'))
                AND ${notDeleted}
              ORDER BY c.created DESC`,
             user.id,
+            user.role === 'teacher' ? 1 : 0,
           );
     return json(
       rows.map(({ can_teach: canTeach, ...c }) => ({
         ...c,
         canTeach: canTeach === 1,
-        canDelete: user.role === 'admin' || c.owner === user.id,
+        canDelete: user.role === 'admin' || ownsCourse(user, c),
       })),
     );
   },
@@ -217,7 +219,7 @@ const routes = {
     return json({
       course: a.course,
       canTeach: a.teach,
-      canDelete: user.role === 'admin' || a.course.owner === user.id,
+      canDelete: user.role === 'admin' || ownsCourse(user, a.course),
       records,
       members,
       files,
@@ -242,7 +244,7 @@ const routes = {
   'DELETE /api/course': async ({ db, user, request }) => {
     const body = await readJson(request);
     const a = await access(db, user, body.course);
-    if (user.role !== 'admin' && a.course.owner !== user.id) fail('Solo el propietario o el administrador puede eliminar el curso.', 403);
+    if (user.role !== 'admin' && !ownsCourse(user, a.course)) fail('Solo el propietario o el administrador puede eliminar el curso.', 403);
     if (body.confirm !== a.course.name) fail('Escribe el nombre exacto del curso para confirmar.');
     await run(
       db,
@@ -707,7 +709,8 @@ const routes = {
     return json({ ok: true });
   },
 
-  // Retirar a un docente no borra nada: conserva sus cursos, pero ya no puede crear nuevos.
+  // Retirar a un docente no borra nada: sus cursos se conservan (la administración los sigue viendo),
+  // pero pierde el acceso a ellos y ya no puede crear nuevos. Si se le vuelve a dar de alta, lo recupera.
   'DELETE /api/teachers': async ({ db, env, user, request }) => {
     requireAdmin(user);
     const body = await readJson(request);

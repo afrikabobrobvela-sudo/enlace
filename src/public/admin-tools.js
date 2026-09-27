@@ -93,14 +93,14 @@ function removeTeacherModal(dataset) {
   modal(
     'Retirar docente',
     `<p>¿Retirar a <strong>${esc(dataset.name)}</strong> (${esc(dataset.email)}) de la lista de docentes?</p>
-     <p>Ya no podrá crear cursos nuevos. ${
+     <p>Se cerrarán sus sesiones abiertas y ya no podrá crear cursos. ${
        courses
-         ? `Conservará el acceso a ${courses === 1 ? 'el curso que ya creó' : `los ${courses} cursos que ya creó`}, con todas sus entregas y calificaciones.`
+         ? `Perderá el acceso a ${courses === 1 ? 'el curso que creó' : `los ${courses} cursos que creó`}. No se borra nada: la administración sigue viéndolos con todas sus entregas y calificaciones, y si vuelves a darle de alta lo recupera.`
          : 'No tiene cursos propios.'
      }</p>`,
     async () => {
       await request('/api/teachers', { email: dataset.email }, 'DELETE');
-      return 'Docente retirado. Sus cursos se conservan.';
+      return 'Docente retirado. Sus cursos se conservan para la administración.';
     },
     'Retirar docente',
   );

@@ -229,12 +229,26 @@ try {
   await call('coord', '/api/teachers', { email: 'owner@example.test' }, 400, 'DELETE');
   await call('coord', '/api/teachers', { email: 'coord@example.test' }, 400, 'DELETE');
   await call('coord', '/api/teachers', { email: 'nadie@example.test' }, 404, 'DELETE');
+  const kept = (await call('teacher', '/api/courses', { name: 'Física II', group: 'D' }, 201)).id;
+  await call('teacher', '/api/member', { course: kept, name: 'Alumno', email: 'student@example.test' });
   await call('coord', '/api/teachers', { email: 'teacher@example.test' }, 200, 'DELETE');
   // El retiro cierra sus sesiones abiertas; al volver a entrar ya no es docente.
   await call('teacher', '/api/me', undefined, 401);
   sessions.delete('teacher');
   assert.equal((await call('teacher', '/api/me')).role, 'student', 'El retiro aplica de inmediato');
   await call('teacher', '/api/courses', { name: 'Nuevo', group: 'C' }, 403);
+  // Pierde el acceso a los cursos que creó; el curso y sus datos siguen intactos para la administración.
+  assert(!(await call('teacher', '/api/courses')).some((x) => x.id === kept), 'El curso ya no aparece en su lista');
+  await call('teacher', '/api/course?id=' + kept, undefined, 403);
+  await call('teacher', '/api/course', { course: kept, name: 'Cambio', group: 'D' }, 403);
+  await call('teacher', '/api/course', { course: kept, confirm: 'Física II' }, 403, 'DELETE');
+  assert.equal((await call('owner', '/api/course?id=' + kept)).members.length, 1);
+  assert((await call('student', '/api/courses')).some((x) => x.id === kept), 'Sus alumnos conservan el curso');
+  // Si se le vuelve a dar de alta, lo recupera.
+  await call('owner', '/api/teachers', { email: 'teacher@example.test', name: 'Docente', role: 'teacher' });
+  assert.equal((await call('teacher', '/api/course?id=' + kept)).canTeach, true);
+  await call('owner', '/api/teachers', { email: 'teacher@example.test' }, 200, 'DELETE');
+  sessions.delete('teacher');
   teachers = await call('owner', '/api/teachers');
   assert(!teachers.some((t) => t.email === 'teacher@example.test'));
 
@@ -262,8 +276,8 @@ try {
   // ---- Límite de consultas de D1 (plan gratuito: 50 por solicitud) ----
   for (let i = 0; i < 30; i++) await call('owner', '/api/courses', { name: 'Curso ' + i, group: 'G' }, 201);
   store.counter.queries = 0;
-  assert.equal((await call('owner', '/api/courses')).length, 31);
-assert(store.counter.queries <= 3, `GET /api/courses usó ${store.counter.queries} consultas con 31 cursos`);
+  assert.equal((await call('owner', '/api/courses')).length, 32); // 30 nuevos, el inicial y el del docente retirado
+assert(store.counter.queries <= 3, `GET /api/courses usó ${store.counter.queries} consultas con 32 cursos`);
   store.counter.queries = 0;
   await call('student', '/api/course?id=' + c);
 assert(store.counter.queries <= 10, `GET /api/course usó ${store.counter.queries} consultas`);

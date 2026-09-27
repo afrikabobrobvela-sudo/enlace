@@ -15,7 +15,7 @@ export async function access(db, user, courseId) {
   if (!row || row.is_deleted) fail('Curso no encontrado.', 404);
   const { is_deleted: _deleted, member_role: memberRole, ...course } = row;
   const isAdmin = user.role === 'admin';
-  const isOwner = course.owner === user.id;
+  const isOwner = ownsCourse(user, course);
   if (!isAdmin && !isOwner && (!memberRole || memberRole === 'removed')) fail('No tienes acceso a este curso.', 403);
   return { course, teach: isAdmin || isOwner || memberRole === 'teacher' };
 }
@@ -26,4 +26,12 @@ export function requireTeacher(access) {
 
 export function requireAdmin(user) {
   if (user.role !== 'admin') fail('Solo la administración puede realizar esta acción.', 403);
+}
+
+/**
+ * Quien creó el curso lo administra solo mientras siga en la lista de docentes:
+ * al retirarlo pierde el acceso a sus cursos (se conservan intactos para la administración).
+ */
+export function ownsCourse(user, course) {
+  return course.owner === user.id && (user.role === 'teacher' || user.role === 'admin');
 }
