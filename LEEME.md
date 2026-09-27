@@ -1,9 +1,13 @@
-# Enlace · versión 12.2
+# Enlace · versión 12.3
 
 Plataforma académica independiente para la Academia de Física (BUAP), con interfaz inspirada en Brightspace.
 No es el código de D2L Brightspace ni una plataforma oficial de la BUAP.
 
 Esta versión se despliega en **tu propia cuenta de Cloudflare** (Workers + D1 + R2, plan gratuito) y ya no depende de ChatGPT Sites.
+
+## Novedades de la versión 12.3 (diseño)
+
+Nueva apariencia en toda la plataforma: tipografía Inter (incluida en Enlace, sin servicios externos), logotipo, encabezado y menú fijos al desplazarse, pantalla de acceso con la identidad de la Academia de Física, y cada curso con su propio color e ilustración (cuadrícula, ondas u órbitas) que se repite en su página de inicio. Botones, tablas, ventanas y campos tienen un estilo uniforme, y se corrigió la casilla *Visible para alumnos*, que se desalineaba en las ventanas. El diseño vive en `src/public/tema.css`, cargado al final: no cambia el comportamiento. No hay migraciones nuevas.
 
 ## Novedades de la versión 12.2 (contenido)
 
@@ -141,9 +145,9 @@ src/server/gradebook.js    Actividades, entregas, calificaciones (y borradores),
 src/server/attendance.js   Asistencia: sesiones, registros, reglas y registro con QR
 src/server/grading.js      Categorías, reglas de la calificación final y banco de rúbricas
 src/server/api.js          Rutas de la API, equipos en lote y vista previa de archivos
-src/public/                Interfaz (HTML, CSS, JS). Versión 10: attendance.js, preview.js, teams.js, math.js. Versión 12.1: trash.js. Versión 12.2: richtext.js, compress.js, contenido.css.
+src/public/                Interfaz (HTML, CSS, JS). Versión 10: attendance.js, preview.js, teams.js, math.js. Versión 12.1: trash.js. Versión 12.2: richtext.js, compress.js, contenido.css. Versión 12.3: tema.css.
                            Versión 11: qr.js, checkin.js, zip.js, risk.js. Versión 12: grading.js, rubrics.js
-src/public/vendor/         pdf.js y KaTeX con sus licencias
+src/public/vendor/         pdf.js, KaTeX y la fuente Inter, con sus licencias
 src/generated/             Interfaz incrustada; la genera `npm run build` (no se edita)
 drizzle/                   Migraciones SQL (0000 a 0007) y metadatos
 db/schema.ts               Descripción del esquema con Drizzle
@@ -267,6 +271,6 @@ Workers: 100 000 solicitudes al día y 3 MB por Worker comprimido (Enlace ocupa 
 ## Estado conocido
 
 - En producción está publicada la versión 11 (septiembre de 2026). La versión 12.1 pasó las pruebas automáticas y se recorrió en `wrangler dev` con D1 local y Chromium (papelera, moderación de foros, perfil de alumno, cierre de sesión). Las versiones 10, 11 y 12 pasaron todas las pruebas automáticas y se recorrieron en Chromium real (incluido el QR leído desde la pantalla y el registro desde un navegador de tamaño teléfono), pero no se han probado contra tu Cloudflare, tu Google ni en un iPad o iPhone reales: conviene probarlas primero en el entorno de pruebas o con un curso de prueba.
-- Bibliotecas incluidas, sin modificar: pdf.js 5.6.205 (Apache 2.0) y KaTeX 0.16.45 (MIT), en `src/public/vendor/` junto con sus licencias.
+- Bibliotecas incluidas, sin modificar: pdf.js 5.6.205 (Apache 2.0), KaTeX 0.16.45 (MIT) y la fuente Inter 5.3.0 (SIL OFL 1.1), en `src/public/vendor/` junto con sus licencias.
 - No hay integración con Turnitin.
 - Siguientes pasos previstos: entregas por equipo (una entrega y una calificación para todo el equipo), asistencia por código QR con la validación de AulaPass, vista previa de Word, Excel y PowerPoint, co-docentes por curso, periodos y archivo de cursos, historial de cambios de calificaciones, limpieza de archivos sin uso en R2 y acceso con cuentas de Microsoft si el correo institucional lo requiere.

@@ -48,6 +48,19 @@ function renderLogin(methods = { google: true, email: false }) {
       ? '<p class="login-alert">No hay un método de acceso configurado en este servidor. Avisa a la coordinación.</p>'
       : '';
   $('#main').innerHTML = `
+    <div class="login-layout">
+    <div class="login-brand">
+      <div>
+        <svg class="brand-mark" viewBox="0 0 40 40" aria-hidden="true"><rect width="40" height="40" rx="10" fill="#ffffff" fill-opacity=".14"/><ellipse cx="20" cy="20" rx="14" ry="5.5" fill="none" stroke="#7fe3f0" stroke-width="2" transform="rotate(-30 20 20)"/><ellipse cx="20" cy="20" rx="14" ry="5.5" fill="none" stroke="#ffffff" stroke-width="2" transform="rotate(30 20 20)"/><circle cx="20" cy="20" r="3.4" fill="#7fe3f0"/></svg>
+        <h2>Academia de Física</h2>
+        <p>El aula virtual de tus cursos: materiales, actividades, calificaciones y asistencia en un solo lugar.</p>
+      </div>
+      <ul>
+        <li>Materiales y fórmulas de cada unidad</li>
+        <li>Entregas desde tu celular</li>
+        <li>Calificaciones y asistencia al día</li>
+      </ul>
+    </div>
     <section class="login-panel" aria-labelledby="loginTitle">
       <h1 id="loginTitle">Entra a tu aula</h1>
       <p class="login-lead">Usa el mismo correo con el que tu docente te inscribió. Si eres docente, usa el correo que registró la coordinación.</p>
@@ -56,7 +69,8 @@ function renderLogin(methods = { google: true, email: false }) {
       ${google}
       ${email}
       <p class="login-note">Enlace no guarda contraseñas. Al terminar, regresarás a la página donde estabas.</p>
-    </section>`;
+    </section>
+    </div>`;
 
   const form = $('#loginEmail');
   if (form && form.addEventListener) {
