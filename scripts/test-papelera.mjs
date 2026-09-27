@@ -1,4 +1,4 @@
-// Pruebas de la papelera: eliminar y restaurar contenido, actividades, evaluaciones y publicaciones de foro.
+// Pruebas de la papelera (eliminar y restaurar), nombres de alumnos en foros y cuotas de archivos.
 import assert from 'node:assert/strict';
 import { api } from '../src/server/api.js';
 import { completeLogin, sessionCookieForTests } from '../src/server/auth.js';
@@ -136,6 +136,27 @@ assert.equal(post.data.name, 'Ana Pérez López');
 await call('docente', '/api/profile', { name: 'Dr. Docente' });
 assert.equal((await call('docente', '/api/me')).name, 'Dr. Docente');
 
+// ---- Cuota de archivos por alumno ----
+const uploadAs = async (user, bytes, scope = 'submission') =>
+  (
+    await api(
+      new Request(`https://t.local/api/upload?course=${c}&scope=${scope}`, {
+        method: 'POST',
+        headers: { cookie: cookies[user], Origin: 'https://t.local', 'X-Aula-Request': '1', 'x-file-name': 'a.pdf', 'content-length': String(bytes) },
+        body: new Uint8Array(bytes),
+      }),
+      env,
+    )
+  ).status;
+store.raw().prepare("INSERT INTO aula_files (id,course,owner,scope,name,size,mime,created) SELECT 'lleno',?,id,'submission','x',?,'x','' FROM aula_users WHERE email='luis@example.test'").run(c, 300 * 1024 * 1024 - 10);
+assert.equal(await uploadAs('luis', 100), 413, 'Sobre la cuota del alumno');
+assert.equal(await uploadAs('ana', 100), 201, 'Otro alumno no se ve afectado');
+assert.equal(await uploadAs('docente', 100, 'material'), 201);
+store.raw().prepare("UPDATE aula_files SET size=? WHERE id='lleno'").run(9 * 1024 * 1024 * 1024);
+assert.equal(await uploadAs('docente', 100, 'material'), 507, 'Plataforma casi llena');
+store.raw().prepare("DELETE FROM aula_files WHERE id='lleno'").run();
+checks += 4;
+
 // ---- Tipos que no van a la papelera y cursos ajenos ----
 await remove('group', 'x', 'docente', 400);
 await call('docente', '/api/teachers', { email: 'colega@example.test', name: 'Colega', role: 'teacher' });
@@ -143,4 +164,4 @@ await remove('material', material.id, 'colega', 403);
 await call('colega', '/api/trash/restore', { course: c, kind: 'task', id: tarea.id }, 403);
 
 assert.deepEqual(store.raw().prepare('PRAGMA foreign_key_check').all(), [], 'Sin llaves foráneas rotas');
-console.log(`PASS: ${checks} verificaciones de la papelera — moderación de foros, contenido, evaluaciones y actividades se eliminan sin perder datos y se restauran.`);
+console.log(`PASS: ${checks} verificaciones de papelera, nombres y cuotas — moderación de foros, contenido y actividades se eliminan sin perder datos y se restauran; alumnos sin cambio de nombre; cuotas de archivos.`);

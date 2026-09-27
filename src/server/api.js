@@ -34,6 +34,10 @@ import {
 } from './http.js';
 
 const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
+// Cuotas de almacenamiento (R2 gratuito: 10 GB en total).
+const STUDENT_QUOTA_BYTES = 300 * 1024 * 1024; // por alumno y por curso
+const TOTAL_QUOTA_BYTES = 9 * 1024 * 1024 * 1024; // toda la plataforma: deja margen antes del límite gratuito
+const MB = 1024 * 1024;
 const MAX_BULK_STUDENTS = 500;
 /** Tipos que siguen guardándose como JSON libre en aula_records. */
 const CONTENT_KINDS = ['module', 'material', 'notice', 'forum', 'post', 'group', 'quiz'];
@@ -704,7 +708,22 @@ const routes = {
       fail('Nombre de archivo no válido.');
     }
     name = text(name, 180).replace(/[\x00-\x1f/\\]/g, '_');
-    if (Number(request.headers.get('content-length')) > MAX_UPLOAD_BYTES) fail('El límite por archivo es de 20 MB.', 413);
+    const declared = Number(request.headers.get('content-length')) || 0;
+    if (declared > MAX_UPLOAD_BYTES) fail('El límite por archivo es de 20 MB.', 413);
+    // Una sola consulta: lo que ya subió esta persona en el curso y el total de la plataforma.
+    const used = await one(
+      db,
+      'SELECT (SELECT coalesce(sum(size),0) FROM aula_files WHERE course=? AND owner=?) AS mine, (SELECT coalesce(sum(size),0) FROM aula_files) AS total',
+      course,
+      user.id,
+    );
+    if (used.total + declared > TOTAL_QUOTA_BYTES) {
+      console.error('aula-api almacenamiento casi lleno', used.total);
+      fail('El almacenamiento de Enlace está casi lleno. Avisa a la administración.', 507);
+    }
+    if (!a.teach && used.mine + declared > STUDENT_QUOTA_BYTES) {
+      fail(`Llegaste al límite de ${STUDENT_QUOTA_BYTES / MB} MB de archivos en este curso. Pide ayuda a tu docente.`, 413);
+    }
     const reader = request.body?.getReader();
     if (!reader) fail('Archivo vacío.');
     const parts = [];
@@ -720,6 +739,9 @@ const routes = {
       parts.push(value);
     }
     if (!size) fail('Archivo vacío.');
+    if (!a.teach && used.mine + size > STUDENT_QUOTA_BYTES) {
+      fail(`Llegaste al límite de ${STUDENT_QUOTA_BYTES / MB} MB de archivos en este curso. Pide ayuda a tu docente.`, 413);
+    }
     const id = crypto.randomUUID();
     const mime = request.headers.get('content-type') || 'application/octet-stream';
     await env.BUCKET.put(id, new Blob(parts), { httpMetadata: { contentType: mime } });
