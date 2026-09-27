@@ -4,7 +4,7 @@
 import { access, requireAdmin, requireTeacher } from './access.js';
 import { attendanceRoutes } from './attendance.js';
 import { gradingRoutes } from './grading.js';
-import { identity, lastLogins } from './auth.js';
+import { clearSessionCookie, identity, lastLogins, revokeAllStatements } from './auth.js';
 import {
   assertAvailable,
   courseGradebook,
@@ -119,6 +119,12 @@ function assertRecordAvailable(r) {
 
 const routes = {
   'GET /api/me': async ({ user }) => json(publicUser(user)),
+
+  // Cierra la sesión en todos los dispositivos de la persona (por ejemplo, si perdió su teléfono).
+  'POST /api/logout-all': async ({ db, user }) => {
+    await db.batch(revokeAllStatements(db, user.id));
+    return json({ ok: true }, 200, { 'Set-Cookie': clearSessionCookie() });
+  },
 
   'POST /api/profile': async ({ db, user, request }) => {
     const body = await readJson(request);
@@ -710,7 +716,13 @@ const routes = {
     if (address === user.email) fail('No puedes retirar tu propia cuenta.');
     const result = await run(db, 'DELETE FROM aula_teachers WHERE email=?', address);
     if (!result.meta.changes) fail('Ese correo no está en la lista de docentes.', 404);
-    await run(db, "UPDATE aula_users SET role='student' WHERE email=?", address);
+    // Pierde el acceso de docente de inmediato (también a los cursos que creó) y se cierran sus sesiones abiertas.
+    await db.batch([
+      db.prepare("UPDATE aula_users SET role='student', session_version=session_version+1 WHERE email=?").bind(address),
+      db
+        .prepare('UPDATE aula_logins SET revoked_at=? WHERE revoked_at IS NULL AND user_id IN (SELECT id FROM aula_users WHERE email=?)')
+        .bind(nowIso(), address),
+    ]);
     return json({ ok: true });
   },
 };

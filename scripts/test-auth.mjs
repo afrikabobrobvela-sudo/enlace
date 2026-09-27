@@ -105,12 +105,35 @@ store.raw().prepare("UPDATE aula_users SET session_version=2 WHERE email='luis@e
 assert.equal((await me(student)).status, 401);
 checks++;
 
-// Cerrar sesión: exige mismo origen y borra la cookie.
+// Cerrar sesión: exige mismo origen, borra la cookie y la revoca en el servidor
+// (una copia de la cookie ya no sirve), sin cerrar la sesión de otros dispositivos.
+const adminPhone = cookiesFrom(await googleLogin({ sub: 'g-1', email: 'Coordinacion@Example.test', name: 'Coordinación' }));
+assert.equal((await me(adminPhone)).status, 200);
 assert.equal((await fetchWorker('/auth/logout', { method: 'POST', headers: { Origin: 'https://evil.test', 'X-Aula-Request': '1' } })).status, 403);
 const logout = await fetchWorker('/auth/logout', { method: 'POST', headers: { Origin: ORIGIN, 'X-Aula-Request': '1', cookie: cookieHeader(adminSession) } });
 assert.equal(logout.status, 200);
 assert.match(logout.headers.getSetCookie()[0], /^__Host-enlace_session=; Max-Age=0/);
-checks += 2;
+assert.equal((await me(adminSession)).status, 401, 'La cookie copiada deja de servir tras cerrar sesión');
+assert.equal((await me(adminPhone)).status, 200, 'El otro dispositivo sigue con su sesión');
+checks += 4;
+
+// Cerrar sesión en todos los dispositivos.
+const adminTablet = cookiesFrom(await googleLogin({ sub: 'g-1', email: 'coordinacion@example.test' }));
+const all = await fetchWorker('/api/logout-all', { method: 'POST', headers: { Origin: ORIGIN, 'X-Aula-Request': '1', cookie: cookieHeader(adminPhone) } });
+assert.equal(all.status, 200);
+assert.match(all.headers.getSetCookie()[0], /^__Host-enlace_session=; Max-Age=0/);
+assert.equal((await me(adminPhone)).status, 401);
+assert.equal((await me(adminTablet)).status, 401);
+assert.equal((await me(cookiesFrom(await googleLogin({ sub: 'g-1', email: 'coordinacion@example.test' })))).status, 200, 'Puede volver a entrar');
+checks += 4;
+
+// Una cookie firmada con un id de sesión inventado no sirve.
+const forgedToken = await (await import('../src/server/http.js')).signToken(
+  { uid: profile.id, sid: 'inventada', ver: 2, exp: Date.now() / 1000 + 600 },
+  baseEnv.SESSION_SECRET,
+);
+assert.equal((await me(['__Host-enlace_session=' + forgedToken])).status, 401);
+checks++;
 
 // Sin SESSION_SECRET el servidor lo dice con claridad en lugar de fallar en silencio.
 const noSecret = await fetchWorker('/api/me', { headers: { cookie: cookieHeader(adminSession) } }, { ...baseEnv, SESSION_SECRET: '' });

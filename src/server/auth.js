@@ -50,7 +50,17 @@ export async function identity(request, env) {
   const db = env.DB;
   if (!db) fail('El servicio de datos no está disponible.', 503);
   const session = await verifyToken(readCookie(request, SESSION_COOKIE), env.SESSION_SECRET);
-  const user = session && (await one(db, 'SELECT * FROM aula_users WHERE id=?', session.uid));
+  // Una sola consulta: la sesión debe existir en aula_logins, no estar revocada ni vencida.
+  const user =
+    session?.sid &&
+    (await one(
+      db,
+      `SELECT u.* FROM aula_logins l JOIN aula_users u ON u.id=l.user_id
+       WHERE l.id=? AND l.user_id=? AND l.revoked_at IS NULL AND l.expires>?`,
+      session.sid,
+      session.uid,
+      nowIso(),
+    ));
   if (!user || user.session_version !== session.ver) {
     fail('Inicia sesión para continuar.', 401, { login: providers(env) });
   }
@@ -75,7 +85,8 @@ export async function auth(request, env) {
         return await emailVerify(request, env);
       case 'POST /auth/logout':
         requireSameOrigin(request);
-        return json({ ok: true }, 200, { 'Set-Cookie': cookie(SESSION_COOKIE, '', 0) });
+        await revokeCurrent(request, env);
+        return json({ ok: true }, 200, { 'Set-Cookie': clearSessionCookie() });
       default:
         return json({ error: 'Ruta no encontrada.' }, 404);
     }
@@ -294,11 +305,39 @@ export async function completeLogin(env, { provider, subject, email, name }) {
 }
 
 async function sessionCookie(user, env) {
-  const token = await signToken(
-    { uid: user.id, ver: user.session_version ?? 1, exp: Math.floor(Date.now() / 1000) + SESSION_DAYS * 86400 },
-    env.SESSION_SECRET,
-  );
+  const db = env.DB;
+  const sid = randomToken(18);
+  const now = new Date();
+  const exp = Math.floor(now.getTime() / 1000) + SESSION_DAYS * 86400;
+  await db.batch([
+    // De paso se borran las sesiones vencidas de esa persona, para que la tabla no crezca sin límite.
+    db.prepare('DELETE FROM aula_logins WHERE user_id=? AND expires<?').bind(user.id, now.toISOString()),
+    db
+      .prepare('INSERT INTO aula_logins (id,user_id,created,expires) VALUES (?,?,?,?)')
+      .bind(sid, user.id, now.toISOString(), new Date(exp * 1000).toISOString()),
+  ]);
+  const token = await signToken({ uid: user.id, sid, ver: user.session_version ?? 1, exp }, env.SESSION_SECRET);
   return cookie(SESSION_COOKIE, token, SESSION_DAYS * 86400);
+}
+
+export const clearSessionCookie = () => cookie(SESSION_COOKIE, '', 0);
+
+/** Revoca la sesión de esta cookie (si es válida). Cerrar sesión en un dispositivo no afecta a los demás. */
+async function revokeCurrent(request, env) {
+  const session = await verifyToken(readCookie(request, SESSION_COOKIE), env.SESSION_SECRET);
+  if (!session?.sid || !env.DB) return;
+  await env.DB.prepare('UPDATE aula_logins SET revoked_at=? WHERE id=? AND revoked_at IS NULL').bind(nowIso(), session.sid).run();
+}
+
+/**
+ * Invalida todas las sesiones de una persona: las cookies emitidas antes dejan de servir en todos sus dispositivos.
+ * Devuelve las sentencias para incluirlas en el mismo lote que el cambio que la motiva.
+ */
+export function revokeAllStatements(db, userId) {
+  return [
+    db.prepare('UPDATE aula_users SET session_version=session_version+1 WHERE id=?').bind(userId),
+    db.prepare('UPDATE aula_logins SET revoked_at=? WHERE user_id=? AND revoked_at IS NULL').bind(nowIso(), userId),
+  ];
 }
 
 /** Solo para pruebas automatizadas: genera la misma cookie que produce un inicio de sesión real. */

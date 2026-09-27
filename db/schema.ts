@@ -48,6 +48,24 @@ export const identities = sqliteTable(
   (t) => [primaryKey({ columns: [t.provider, t.subject] }), index('aula_identities_user').on(t.userId)],
 );
 
+/**
+ * Cada inicio de sesión (un navegador o dispositivo). La cookie lleva su id: cerrar sesión la revoca
+ * en el servidor, así que una cookie copiada deja de servir aunque no haya vencido.
+ */
+export const logins = sqliteTable(
+  'aula_logins',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id),
+    created: text('created').notNull(),
+    expires: text('expires').notNull(),
+    revokedAt: text('revoked_at'),
+  },
+  (t) => [index('aula_logins_user').on(t.userId)],
+);
+
 /** Enlaces de acceso por correo (solo se guarda el hash del token). */
 export const loginTokens = sqliteTable(
   'aula_login_tokens',

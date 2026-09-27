@@ -686,10 +686,16 @@ document.addEventListener('click', async (e) => {
         await request('/auth/logout', {});
         location.href = '/';
         break;
+      case 'logout-all':
+        if (!confirm('Se cerrará tu sesión en todos tus dispositivos, incluido este. ¿Continuar?'))
+          return;
+        await request('/api/logout-all', {});
+        location.href = '/';
+        break;
       case 'profile':
         if (!me)
           return;
-        modal('Mi perfil', field('Nombre', 'name', me.name, 'text', 'required') + `<p>${esc(me.email)}</p><p>Enlace no guarda contraseñas: entras con este correo a través de Google o de un enlace de acceso.</p>`, async (f) => {
+        modal('Mi perfil', field('Nombre', 'name', me.name, 'text', 'required') + `<p>${esc(me.email)}</p><p>Enlace no guarda contraseñas: entras con este correo a través de Google o de un enlace de acceso.</p><p>¿Perdiste un teléfono o entraste en una computadora ajena? <button type="button" class="text-btn" data-action="logout-all">Cerrar sesión en todos mis dispositivos</button></p>`, async (f) => {
           await request('/api/profile', { name: f.get('name') });
           me = await request('/api/me');
         });

@@ -43,6 +43,13 @@
       "when": 1790683200000,
       "tag": "0005_categorias_rubricas_equipos",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1790546862687,
+      "tag": "0006_sesiones",
+      "breakpoints": true
     }
   ]
 }

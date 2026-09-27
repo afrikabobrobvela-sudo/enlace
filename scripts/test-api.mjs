@@ -230,7 +230,10 @@ try {
   await call('coord', '/api/teachers', { email: 'coord@example.test' }, 400, 'DELETE');
   await call('coord', '/api/teachers', { email: 'nadie@example.test' }, 404, 'DELETE');
   await call('coord', '/api/teachers', { email: 'teacher@example.test' }, 200, 'DELETE');
-  assert.equal((await call('teacher', '/api/me')).role, 'student', 'El retiro aplica de inmediato, sin volver a iniciar sesión');
+  // El retiro cierra sus sesiones abiertas; al volver a entrar ya no es docente.
+  await call('teacher', '/api/me', undefined, 401);
+  sessions.delete('teacher');
+  assert.equal((await call('teacher', '/api/me')).role, 'student', 'El retiro aplica de inmediato');
   await call('teacher', '/api/courses', { name: 'Nuevo', group: 'C' }, 403);
   teachers = await call('owner', '/api/teachers');
   assert(!teachers.some((t) => t.email === 'teacher@example.test'));
