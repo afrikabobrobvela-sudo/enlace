@@ -1,9 +1,25 @@
-# Enlace · versión 12
+# Enlace · versión 12.1
 
 Plataforma académica independiente para la Academia de Física (BUAP), con interfaz inspirada en Brightspace.
 No es el código de D2L Brightspace ni una plataforma oficial de la BUAP.
 
 Esta versión se despliega en **tu propia cuenta de Cloudflare** (Workers + D1 + R2, plan gratuito) y ya no depende de ChatGPT Sites.
+
+## Novedades de la versión 12.1 (correcciones para uso con varios docentes)
+
+**Papelera.** Ahora se pueden eliminar unidades, materiales, noticias, foros, evaluaciones y actividades (botón *Eliminar* en cada editor), y **moderar los foros**: el docente elimina cualquier publicación y cada alumno puede retirar la suya. Nada se borra de verdad: *Administración del curso → Papelera* muestra lo eliminado, quién y cuándo, y *Restaurar* lo devuelve con sus entregas, calificaciones e intentos. Una unidad con materiales no se elimina hasta vaciarla.
+
+**Sesiones revocables.** *Salir* invalida la sesión en el servidor: una copia de la cookie ya no sirve. En *Mi perfil* hay *Cerrar sesión en todos mis dispositivos* (por ejemplo, si alguien pierde su teléfono). **Al publicar esta versión, todas las personas vuelven a entrar con Google una vez.**
+
+**Retirar a un docente le quita el acceso a sus cursos** y cierra sus sesiones. Sus cursos no se borran: la administración los sigue viendo, sus alumnos conservan el acceso, y si se le vuelve a dar de alta los recupera.
+
+**Nombres en los foros.** Los alumnos ya no pueden cambiar su nombre (antes cualquiera podía ponerse, por ejemplo, el nombre de un docente). En los foros aparecen con el nombre de la lista del curso; para corregirlo, vuelve a inscribir su correo con el nombre correcto.
+
+**Cuotas de archivos.** Cada alumno puede subir hasta 300 MB por curso, y Enlace deja de aceptar archivos cuando el total llega a 9 GB (el nivel gratuito de R2 es de 10 GB), con un aviso claro.
+
+**Respaldo antes de migrar.** `npm run configurar` y `npm run db:migrate` descargan un respaldo completo de la base antes de aplicar migraciones; si el respaldo falla, no tocan la base.
+
+Migraciones nuevas: **0006** (sesiones) y **0007** (papelera). Ambas solo agregan una tabla o columnas; no modifican datos existentes.
 
 ## Novedades de la versión 12 (fase 2B)
 
@@ -51,9 +67,9 @@ La pantalla muestra en vivo cuántos se han registrado y quiénes acaban de hace
 
 ## Actualizar tu Enlace ya publicado
 
-1. Descomprime la versión 10 en una carpeta **nueva** (no encima de la anterior).
+1. Descarga la versión nueva en una carpeta **nueva** (no encima de la anterior), o `git pull` si trabajas desde GitHub.
 2. Haz un respaldo desde esa carpeta: `npm run respaldo` (ver *Respaldos*).
-3. Doble clic en `configurar.cmd` (Windows) o `configurar.command` (Mac), o `npm run configurar`. Encuentra tu base `enlace-db` y tu almacenamiento, te pide tu correo de administración y tu dirección `.workers.dev`, aplica las migraciones pendientes (0003: asistencia y borradores; 0004: registro con QR; 0005: categorías, rúbricas y equipos) y publica. No cambia tus claves: nadie pierde su sesión.
+3. Doble clic en `configurar.cmd` (Windows) o `configurar.command` (Mac), o `npm run configurar`. Encuentra tu base `enlace-db` y tu almacenamiento, te pide tu correo de administración y tu dirección `.workers.dev`, descarga un respaldo, aplica las migraciones pendientes (0003: asistencia y borradores; 0004: registro con QR; 0005: categorías, rúbricas y equipos; 0006: sesiones; 0007: papelera) y publica. No cambia tus claves. Al pasar a la versión 12.1 cada persona vuelve a entrar con Google una vez (las sesiones ahora se registran en el servidor).
 
 Si prefieres hacerlo a mano: copia tu `database_id` y tu correo del `wrangler.toml` anterior al nuevo (y `ALLOWED_EMAIL_DOMAINS` si lo usabas) y ejecuta `npm install`, `npm run db:migrate` y `npm run deploy`, **en ese orden**: si publicas antes de migrar, Asistencia y Calificaciones fallarán hasta que apliques la migración.
 
@@ -113,11 +129,11 @@ src/server/gradebook.js    Actividades, entregas, calificaciones (y borradores),
 src/server/attendance.js   Asistencia: sesiones, registros, reglas y registro con QR
 src/server/grading.js      Categorías, reglas de la calificación final y banco de rúbricas
 src/server/api.js          Rutas de la API, equipos en lote y vista previa de archivos
-src/public/                Interfaz (HTML, CSS, JS). Versión 10: attendance.js, preview.js, teams.js, math.js.
+src/public/                Interfaz (HTML, CSS, JS). Versión 10: attendance.js, preview.js, teams.js, math.js. Versión 12.1: trash.js.
                            Versión 11: qr.js, checkin.js, zip.js, risk.js. Versión 12: grading.js, rubrics.js
 src/public/vendor/         pdf.js y KaTeX con sus licencias
 src/generated/             Interfaz incrustada; la genera `npm run build` (no se edita)
-drizzle/                   Migraciones SQL (0000 a 0005) y metadatos
+drizzle/                   Migraciones SQL (0000 a 0007) y metadatos
 db/schema.ts               Descripción del esquema con Drizzle
 scripts/                   Compilación, configuración, respaldos y pruebas
 .github/workflows/         Pruebas automáticas en GitHub
@@ -203,10 +219,11 @@ La cookie de sesión usa el prefijo `__Host-`, que exige conexión segura. Chrom
 
 ## Pruebas
 
-`npm test` compila la interfaz y ejecuta catorce suites con una base SQLite temporal (con llaves foráneas activas, como D1). No tocan tu base real.
+`npm test` compila la interfaz y ejecuta quince suites con una base SQLite temporal (con llaves foráneas activas, como D1). No tocan tu base real.
 
 - `test-api.mjs`: todas las verificaciones de la versión 8 más sesiones firmadas, cabeceras falsificadas, ponderaciones, restricciones de la base, docentes, inscripción masiva y el límite de 50 consultas.
-- `test-auth.mjs`: flujo completo de Google y del enlace por correo con respuestas simuladas (estado, nonce, audiencia, correo verificado, dominios, redirecciones abiertas, uso único, revocación, cierre de sesión).
+- `test-papelera.mjs`: eliminar y restaurar contenido, actividades (con sus entregas y calificaciones), evaluaciones y publicaciones de foro; permisos de moderación; nombres de alumnos en foros; cuotas de archivos.
+- `test-auth.mjs`: flujo completo de Google y del enlace por correo con respuestas simuladas (estado, nonce, audiencia, correo verificado, dominios, redirecciones abiertas, uso único, revocación en el servidor, cierre de sesión por dispositivo y en todos los dispositivos).
 - `test-migration.mjs`: genera datos con el servidor de la versión 8 real (`scripts/fixtures/server-v8.js`), aplica la migración 0002 y comprueba con la versión 9 que todo llegó idéntico.
 - `test-fase1.mjs`: asistencia (permisos, calendario, registros, borrado en cascada), borradores de calificación, equipos en lote y vista previa (tipo real del archivo, descargas parciales para video, permisos).
 - `test-fase2.mjs`: registro con QR (firma que caduca, códigos alterados o del futuro, PIN con intentos limitados, un teléfono por alumno, permisos robados, retardos, cierre y reapertura).
@@ -235,7 +252,7 @@ Workers: 100 000 solicitudes al día y 3 MB por Worker comprimido (Enlace ocupa 
 
 ## Estado conocido
 
-- La versión 9 está publicada y funcionando en tu cuenta. Las versiones 10, 11 y 12 pasaron todas las pruebas automáticas y se recorrieron en Chromium real (incluido el QR leído desde la pantalla y el registro desde un navegador de tamaño teléfono), pero no se han probado contra tu Cloudflare, tu Google ni en un iPad o iPhone reales: conviene probarlas primero en el entorno de pruebas o con un curso de prueba.
+- En producción está publicada la versión 11 (septiembre de 2026). La versión 12.1 pasó las pruebas automáticas y se recorrió en `wrangler dev` con D1 local y Chromium (papelera, moderación de foros, perfil de alumno, cierre de sesión). Las versiones 10, 11 y 12 pasaron todas las pruebas automáticas y se recorrieron en Chromium real (incluido el QR leído desde la pantalla y el registro desde un navegador de tamaño teléfono), pero no se han probado contra tu Cloudflare, tu Google ni en un iPad o iPhone reales: conviene probarlas primero en el entorno de pruebas o con un curso de prueba.
 - Bibliotecas incluidas, sin modificar: pdf.js 5.6.205 (Apache 2.0) y KaTeX 0.16.45 (MIT), en `src/public/vendor/` junto con sus licencias.
 - No hay integración con Turnitin.
-- Siguientes pasos previstos: entregas por equipo (una entrega y una calificación para todo el equipo), asistencia por código QR con la validación de AulaPass, vista previa de Word, Excel y PowerPoint, co-docentes por curso y acceso con cuentas de Microsoft si el correo institucional lo requiere.
+- Siguientes pasos previstos: entregas por equipo (una entrega y una calificación para todo el equipo), asistencia por código QR con la validación de AulaPass, vista previa de Word, Excel y PowerPoint, co-docentes por curso, periodos y archivo de cursos, historial de cambios de calificaciones, limpieza de archivos sin uso en R2 y acceso con cuentas de Microsoft si el correo institucional lo requiere.
