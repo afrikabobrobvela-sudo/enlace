@@ -33,9 +33,16 @@ const textarea = (label, name, value = '', required = true) => `<label>${label}<
 /** Interruptor para mostrar u ocultar un elemento a los alumnos con un toque. */
 const visibilityToggle = (kind, r) => {
   const on = r.data.visible !== false;
+  const later = scheduledFor(r);
+  if (later) return `<button type="button" class="visibility-toggle is-scheduled" data-action="toggle-visible" data-kind="${kind}" data-id="${esc(r.id)}" aria-pressed="true" title="Toca para ocultarlo; se publicará en la fecha indicada si lo vuelves a mostrar">Programado · ${esc(fmt(later))}</button>`;
   return `<button type="button" class="visibility-toggle ${on ? '' : 'is-hidden'}" data-action="toggle-visible" data-kind="${kind}" data-id="${esc(r.id)}" aria-pressed="${on}" title="Toca para ${on ? 'ocultarlo a' : 'mostrarlo a'} los alumnos">${on ? 'Visible para alumnos' : 'Oculto para alumnos'}</button>`;
 };
-const visible = v => `<label class="check-label"><input name="visible" type="checkbox" ${v !== false ? 'checked' : ''}> Visible para alumnos</label>`;
+// Con `publishAt` (aunque sea vacío) agrega la publicación programada: visible, pero solo a partir de esa fecha.
+const visible = (v, publishAt) => `<label class="check-label"><input name="visible" type="checkbox" ${v !== false ? 'checked' : ''}> Visible para alumnos</label>${
+  publishAt === undefined ? '' : `<label>Publicar a partir de (opcional)<input name="publishAt" type="datetime-local" value="${esc(localDate(publishAt))}"><small class="muted">Vacío = en cuanto esté visible. Con fecha, los alumnos lo ven (y reciben el aviso) desde ese momento.</small></label>`
+}`;
+/** ¿Está programado para más adelante? (visible, pero su fecha de publicación aún no llega). */
+const scheduledFor = (r) => (r?.data.visible !== false && r?.data.publishAt && Date.parse(r.data.publishAt) > Date.now() ? r.data.publishAt : '');
 const button = (label, action, id = '', style = 'primary') => `<button class="${style}" data-action="${action}" ${id ? `data-id="${esc(id)}"` : ''}>${label}</button>`;
 function toast(t) {
   $('#toast').textContent = t;
@@ -118,7 +125,7 @@ function renderHome() {
 }
 function renderHub() {
   const c = current.course;
-  $('#main').innerHTML = `<section class="hub-banner" data-theme="${courseTheme(c.id)}"><p class="hub-eyebrow">Grupo ${esc(c.group_name)}</p><h1>${esc(c.name)}</h1></section><div class="hub-grid"><div class="hub-side"><section class="panel hub-info ${c.intro ? '' : 'is-empty'}"><h2>Información del curso</h2><p class="muted">${esc(c.group_name)}</p>${richText(c.intro)}</section><section class="panel"><h2>Actividades</h2>${records('task').slice(-4).map(t => `<div class="task-row"><div><b>${esc(t.data.title)}</b><p class="deadline">${fmt(t.data.due)}</p>${button('Abrir →', 'task', t.id, 'text-btn')}</div></div>`).join('') || '<p class="muted">No hay actividades publicadas.</p>'}</section></div><div><section class="panel"><div class="panel-head"><h2>Noticias</h2>${teaches() ? button('Crear publicación', 'new-notice', '', 'text-btn') : ''}</div>${noticeCards()}</section><section class="panel"><div class="panel-head"><h2>Contenido del curso</h2>${teaches() ? button('Nueva unidad', 'new-module', '', 'text-btn') : ''}</div><div class="module-cards">${records('module').map(m => `<button class="module-card" data-action="module" data-id="${m.id}"><div class="module-cover">${esc(m.data.title)}</div><span class="module-label">${m.data.visible ? 'Abrir unidad' : 'Oculta'}</span></button>`).join('')}</div>${!records('module').length ? '<p class="muted">Agrega unidades para organizar los materiales.</p>' : ''}</section></div></div>`;
+  $('#main').innerHTML = `<section class="hub-banner" data-theme="${courseTheme(c.id)}"><p class="hub-eyebrow">Grupo ${esc(c.group_name)}</p><h1>${esc(c.name)}</h1></section><div class="hub-grid"><div class="hub-side"><section class="panel hub-info ${c.intro ? '' : 'is-empty'}"><h2>Información del curso</h2><p class="muted">${esc(c.group_name)}</p>${richText(c.intro)}</section><section class="panel"><h2>Actividades</h2>${records('task').slice(-4).map(t => `<div class="task-row"><div><b>${esc(t.data.title)}</b><p class="deadline">${fmt(t.data.due)}</p>${button('Abrir →', 'task', t.id, 'text-btn')}</div></div>`).join('') || '<p class="muted">No hay actividades publicadas.</p>'}</section></div><div>${continueCardHtml()}<section class="panel"><div class="panel-head"><h2>Noticias</h2>${teaches() ? button('Crear publicación', 'new-notice', '', 'text-btn') : ''}</div>${noticeCards()}</section><section class="panel"><div class="panel-head"><h2>Contenido del curso</h2>${teaches() ? button('Nueva unidad', 'new-module', '', 'text-btn') : ''}</div><div class="module-cards">${records('module').map(m => `<button class="module-card" data-action="module" data-id="${m.id}"><div class="module-cover">${esc(m.data.title)}</div><span class="module-label">${m.data.visible === false ? 'Oculta' : teaches() ? (scheduledFor(m) ? 'Programada' : 'Abrir unidad') : myMember() && materialsOf(m.id).length ? `${unitProgress(m.id, myMember().id).done} de ${materialsOf(m.id).length} completados` : 'Abrir unidad'}</span></button>`).join('')}</div>${!records('module').length ? '<p class="muted">Agrega unidades para organizar los materiales.</p>' : ''}</section></div></div>`;
 }
 function fileLinks(ids = []) {
   return `<div class="file-list">${ids.map(id => {
@@ -147,13 +154,15 @@ function renderTask() {
   }).join('') || '<tr><td colspan="4">Inscribe alumnos para revisar sus entregas.</td></tr>'}</tbody></table></div>` : `${own ? `<section class="panel"><h2>Tu entrega</h2><p class="deadline">${fmt(own.data.submitted)}${own.data.submitted ? ` <button type="button" class="text-btn" data-receipt="${esc(own.id)}">Comprobante</button>` : ''}</p>${richText(own.data.body)}${fileLinks(own.data.fileIds)}<p>Calificación: <b>${own.data.grade ?? 'Pendiente'}</b></p>${richText(own.data.feedback)}${rubricResultHtml(own.data.rubricScores)}</section>` : ''}<div class="toolbar">${button(own ? 'Actualizar entrega' : 'Realizar entrega', 'submit', t.id)}</div>`}`;
 }
 function noticeCards() {
-  return records('notice').map(n => `<article class="notice"><h3>${esc(n.data.title)}</h3><p class="deadline">${fmt(n.created)}</p>${richText(n.data.body)}${teaches() ? button('Editar', 'edit-notice', n.id, 'text-btn') : ''}</article>`).join('') || '<p class="muted">No hay noticias publicadas.</p>';
+  // Una noticia programada lleva la fecha en que se publica (así la ven los alumnos) y, para el docente, la marca.
+  const shownAt = n => (n.data.publishAt && n.data.publishAt > n.created ? n.data.publishAt : n.created);
+  return records('notice').map(n => `<article class="notice"><h3>${esc(n.data.title)}${teaches() && n.data.visible === false ? ' <span class="role-pill">Oculta</span>' : teaches() && scheduledFor(n) ? ' <span class="role-pill scheduled-pill">Programada</span>' : ''}</h3><p class="deadline">${fmt(shownAt(n))}</p>${richText(n.data.body)}${teaches() ? button('Editar', 'edit-notice', n.id, 'text-btn') : ''}</article>`).join('') || '<p class="muted">No hay noticias publicadas.</p>';
 }
 function renderNotices() {
   $('#main').innerHTML = `<div class="heading"><h1>Noticias</h1>${teaches() ? button('Crear publicación', 'new-notice') : ''}</div><section class="panel">${noticeCards()}</section>`;
 }
 function renderForums() {
-  $('#main').innerHTML = `<h1>Foros</h1><div class="home-tabs"><button class="active">Lista de foros</button></div><div class="toolbar">${teaches() ? button('Nuevo foro', 'new-forum') : ''}</div>${records('forum').map(f => `<section class="forum-block"><h2>${esc(f.data.title)}${f.data.visible ? '' : ' · Oculto'}</h2>${richText(f.data.body)}<div class="table-wrap"><table><thead><tr><th>Tema</th><th>Publicaciones</th>${teaches() ? '<th>Editar</th>' : ''}</tr></thead><tbody><tr><td>${button(esc(f.data.title), 'forum', f.id, 'table-link')}</td><td>${records('post').filter(p => p.data.forum === f.id).length}</td>${teaches() ? `<td>${button('Editar', 'edit-forum', f.id, 'text-btn')}</td>` : ''}</tr></tbody></table></div></section>`).join('') || '<p class="empty">No hay foros.</p>'}`;
+  $('#main').innerHTML = `<h1>Foros</h1><div class="home-tabs"><button class="active">Lista de foros</button></div><div class="toolbar">${teaches() ? button('Nuevo foro', 'new-forum') : ''}</div>${records('forum').map(f => `<section class="forum-block"><h2>${esc(f.data.title)}${f.data.visible === false ? ' · Oculto' : scheduledFor(f) ? ' · Programado para ' + esc(fmt(scheduledFor(f))) : ''}</h2>${richText(f.data.body)}<div class="table-wrap"><table><thead><tr><th>Tema</th><th>Publicaciones</th>${teaches() ? '<th>Editar</th>' : ''}</tr></thead><tbody><tr><td>${button(esc(f.data.title), 'forum', f.id, 'table-link')}</td><td>${records('post').filter(p => p.data.forum === f.id).length}</td>${teaches() ? `<td>${button('Editar', 'edit-forum', f.id, 'text-btn')}</td>` : ''}</tr></tbody></table></div></section>`).join('') || '<p class="empty">No hay foros.</p>'}`;
 }
 function renderForum() {
   const f = find(detail);
@@ -162,7 +171,7 @@ function renderForum() {
   $('#main').innerHTML = `<button class="back" data-section="forums">❮ Lista de foros</button><h1>${esc(f.data.title)}</h1>${richText(f.data.body)}<div class="toolbar">${button('Publicar mensaje', 'new-post', f.id)}</div>${records('post').filter(p => p.data.forum === f.id).map(p => `<article class="forum-post"><h2>${esc(p.data.title)}</h2><p class="muted">${esc(p.data.name)} · ${fmt(p.created)}</p>${richText(p.data.body)}${teaches() || p.author === viewerKey() ? trashButton('post', p.id) : ''}</article>`).join('') || '<p class="empty">Todavía no hay publicaciones.</p>'}`;
 }
 function renderQuizzes() {
-  $('#main').innerHTML = `<h1>Evaluaciones</h1><div class="home-tabs"><button class="active">${teaches() ? 'Administrar evaluaciones' : 'Mis evaluaciones'}</button></div><div class="toolbar">${teaches() ? button('Nueva evaluación', 'new-quiz') : ''}</div><div class="table-wrap"><table><thead><tr><th>Evaluación</th><th>Preguntas</th><th>Estado</th></tr></thead><tbody>${records('quiz').map(q => `<tr><td>${button(esc(q.data.title), 'quiz', q.id, 'table-link')}</td><td>${q.data.questions.length}</td><td>${teaches() ? (q.data.visible ? 'Publicada' : 'Oculta') : esc(quizStudentStatus(q))}</td></tr>`).join('') || '<tr><td colspan="3">No hay evaluaciones.</td></tr>'}</tbody></table></div>`;
+  $('#main').innerHTML = `<h1>Evaluaciones</h1><div class="home-tabs"><button class="active">${teaches() ? 'Administrar evaluaciones' : 'Mis evaluaciones'}</button></div><div class="toolbar">${teaches() ? button('Nueva evaluación', 'new-quiz') : ''}</div><div class="table-wrap"><table><thead><tr><th>Evaluación</th><th>Preguntas</th><th>Estado</th></tr></thead><tbody>${records('quiz').map(q => `<tr><td>${button(esc(q.data.title), 'quiz', q.id, 'table-link')}</td><td>${q.data.questions.length}</td><td>${teaches() ? (q.data.visible ? (scheduledFor(q) ? 'Programada · ' + esc(fmt(scheduledFor(q))) : 'Publicada') : 'Oculta') : esc(quizStudentStatus(q))}</td></tr>`).join('') || '<tr><td colspan="3">No hay evaluaciones.</td></tr>'}</tbody></table></div>`;
 }
 function gradeOf(member, task) {
   return records('submission').find(s => s.data.member === member && s.data.task === task);
@@ -178,7 +187,7 @@ function renderGrades() {
     $('#main').innerHTML = myGradesHtml();
     return;
   }
-  $('#main').innerHTML = `<div class="home-tabs"><button data-grade-tab="entry" class="${gradeTab === 'entry' ? 'active' : ''}">${teaches() ? 'Ingresar calificaciones' : 'Mis calificaciones'}</button>${teaches() ? `<button data-grade-tab="manage" class="${gradeTab === 'manage' ? 'active' : ''}">Administrar calificaciones</button>` : ''}</div>${gradeTab === 'manage' && teaches() ? gradingManageHtml(`<h2 class="grading-subtitle">Pesos por actividad</h2><p class="real-status">Los pesos de todas las actividades deben sumar 100 %. Si agregas una nueva actividad, se usará el promedio simple hasta que vuelvas a guardar los pesos.</p><form id="weights" class="real-form"><div class="table-wrap"><table><thead><tr><th>Actividad</th><th>Peso (%)</th></tr></thead><tbody>${ts.map((t, i) => `<tr><td>${esc(t.data.title)}</td><td><input type="number" name="w_${t.id}" required min="0" max="100" step="0.01" class="grade-input" value="${w?.data.weights[t.id] ?? (i === ts.length - 1 ? 100 - Math.floor(10000 / ts.length) / 100 * (ts.length - 1) : Math.floor(10000 / ts.length) / 100).toFixed(2)}" aria-label="Peso de ${esc(t.data.title)}"></td></tr>`).join('')}</tbody></table></div><p class="form-error error" hidden></p>${ts.length ? '<div class="form-actions"><button class="primary">Guardar ponderaciones</button></div>' : '<p>Primero crea actividades.</p>'}</form>`) : `<div class="toolbar">${teaches() ? button('Exportar calificaciones', 'export-grades', '', 'secondary') : ''}<input data-search type="search" placeholder="Buscar alumno…" aria-label="Buscar alumno"></div><p class="grade-note">${cats.length ? 'Promedio parcial por categorías' : `Promedio parcial ${w && ts.every(t => Number.isFinite(w.data.weights[t.id])) ? 'ponderado' : 'simple'}`}, de 0 a 10.${teaches() ? ` La calificación final aplica las reglas del curso (mínima aprobatoria ${grading.final.passing}).` : ''} Se excluyen las actividades sin calificar y se normalizan los pesos restantes. Los resultados de evaluaciones automáticas se consultan en Evaluaciones.</p><div class="table-wrap gradebook"><table><thead><tr><th class="sticky-name">Estudiante</th><th>Promedio parcial</th>${teaches() ? '<th>Calificación final</th>' : ''}${cats.map(c => `<th class="category-col">${esc(c.name)}<div class="muted">${c.weight} %</div></th>`).join('')}${ts.map(t => {
+  $('#main').innerHTML = `<div class="home-tabs"><button data-grade-tab="entry" class="${gradeTab === 'entry' ? 'active' : ''}">${teaches() ? 'Ingresar calificaciones' : 'Mis calificaciones'}</button>${teaches() ? `<button data-grade-tab="manage" class="${gradeTab === 'manage' ? 'active' : ''}">Administrar calificaciones</button>` : ''}</div>${gradeTab === 'manage' && teaches() ? gradingManageHtml(`<h2 class="grading-subtitle">Pesos por actividad</h2><p class="real-status">Los pesos de todas las actividades deben sumar 100 %. Si agregas una nueva actividad, se usará el promedio simple hasta que vuelvas a guardar los pesos.</p><form id="weights" class="real-form"><div class="table-wrap"><table><thead><tr><th>Actividad</th><th>Peso (%)</th></tr></thead><tbody>${ts.map((t, i) => `<tr><td>${esc(t.data.title)}</td><td><input type="number" name="w_${t.id}" required min="0" max="100" step="0.01" class="grade-input" value="${w?.data.weights[t.id] ?? (i === ts.length - 1 ? 100 - Math.floor(10000 / ts.length) / 100 * (ts.length - 1) : Math.floor(10000 / ts.length) / 100).toFixed(2)}" aria-label="Peso de ${esc(t.data.title)}"></td></tr>`).join('')}</tbody></table></div><p class="form-error error" hidden></p>${ts.length ? '<div class="form-actions"><button class="primary">Guardar ponderaciones</button></div>' : '<p>Primero crea actividades.</p>'}</form>`) : `<div class="toolbar">${teaches() ? button('Exportar calificaciones', 'export-grades', '', 'secondary') : ''}<input data-search type="search" placeholder="Buscar alumno…" aria-label="Buscar alumno"></div><p class="grade-note">${cats.length ? 'Promedio parcial por categorías' : `Promedio parcial ${w && ts.every(t => Number.isFinite(w.data.weights[t.id])) ? 'ponderado' : 'simple'}`}, de 0 a 10.${teaches() ? ` La calificación final aplica las reglas del curso (mínima aprobatoria ${grading.final.passing}).` : ''} Se excluyen las actividades sin calificar y se normalizan los pesos restantes.${countedQuizzes().length ? ` Incluye ${countedQuizzes().length === 1 ? 'una evaluación' : countedQuizzes().length + ' evaluaciones'} en línea dentro de su categoría.` : ' Las evaluaciones en línea cuentan solo si se les asigna una categoría (al editarlas).'}</p><div class="table-wrap gradebook"><table><thead><tr><th class="sticky-name">Estudiante</th><th>Promedio parcial</th>${teaches() ? '<th>Calificación final</th>' : ''}${cats.map(c => `<th class="category-col">${esc(c.name)}<div class="muted">${c.weight} %</div></th>`).join('')}${ts.map(t => {
     const drafts = teaches() ? records('submission').filter(r => r.data.task === t.id && r.data.published === false).length : 0;
     return `<th>${esc(t.data.title)}${drafts ? `<br><button class="table-link" data-action="publish-task" data-id="${t.id}">Publicar ${drafts} ${drafts === 1 ? 'borrador' : 'borradores'}</button>` : ''}</th>`;
   }).join('')}</tr></thead><tbody>${members.map(m => {
@@ -399,11 +408,12 @@ function simpleRecord(kind, old) {
   // Las unidades llevan archivos (programa, presentaciones, imágenes dentro del texto); noticias y foros, solo texto.
   const withFiles = kind === 'module';
   let files = null;
-  modal(`${old ? 'Editar' : 'Crear'} ${names[kind]}`, field('Título', 'title', old?.data.title || '', 'text', 'required maxlength="200"') + richTextarea(kind === 'module' ? 'Descripción de la unidad' : 'Contenido', 'body', old?.data.body || '', { images: withFiles }) + (withFiles ? attachmentPanel(true, 'la unidad') : '') + visible(old?.data.visible) + (old ? `<p class="modal-danger">${trashButton(kind, old.id, 'Eliminar ' + names[kind])}</p>` : ''), async (f) => {
+  modal(`${old ? 'Editar' : 'Crear'} ${names[kind]}`, field('Título', 'title', old?.data.title || '', 'text', 'required maxlength="200"') + richTextarea(kind === 'module' ? 'Descripción de la unidad' : 'Contenido', 'body', old?.data.body || '', { images: withFiles }) + (withFiles ? attachmentPanel(true, 'la unidad') : '') + visible(old?.data.visible, old?.data.publishAt || '') + (old ? `<p class="modal-danger">${trashButton(kind, old.id, 'Eliminar ' + names[kind])}</p>` : ''), async (f) => {
     const data = {
       title: f.get('title'),
       body: f.get('body'),
-      visible: f.get('visible') === 'on'
+      visible: f.get('visible') === 'on',
+      publishAt: iso(f.get('publishAt'))
     };
     if (files)
       data.fileIds = await files.upload();
@@ -416,13 +426,14 @@ function simpleRecord(kind, old) {
 function materialModal(old) {
   const d = old?.data || {};
   let files = null;
-  modal(old ? 'Editar material' : 'Agregar material', field('Título', 'title', d.title || '', 'text', 'required') + `<label>Unidad<select name="module"><option value="">Sin unidad</option>${records('module').map(m => `<option value="${m.id}" ${(d.module || moduleId) === m.id ? 'selected' : ''}>${esc(m.data.title)}</option>`).join('')}</select></label>` + richTextarea('Descripción', 'body', d.body || '', { images: true }) + field('Enlace (opcional)', 'url', d.url || '', 'url') + attachmentPanel(true, 'este material') + visible(d.visible) + (old ? `<p class="modal-danger">${trashButton('material', old.id, 'Eliminar material')}</p>` : ''), async (f) => {
+  modal(old ? 'Editar material' : 'Agregar material', field('Título', 'title', d.title || '', 'text', 'required') + `<label>Unidad<select name="module"><option value="">Sin unidad</option>${records('module').map(m => `<option value="${m.id}" ${(d.module || moduleId) === m.id ? 'selected' : ''}>${esc(m.data.title)}</option>`).join('')}</select></label>` + richTextarea('Descripción', 'body', d.body || '', { images: true }) + field('Enlace (opcional)', 'url', d.url || '', 'url') + attachmentPanel(true, 'este material') + visible(d.visible, d.publishAt || '') + (old ? `<p class="modal-danger">${trashButton('material', old.id, 'Eliminar material')}</p>` : ''), async (f) => {
     await save('material', {
       title: f.get('title'),
       body: f.get('body'),
       url: f.get('url'),
       module: f.get('module') || null,
       visible: f.get('visible') === 'on',
+      publishAt: iso(f.get('publishAt')),
       fileIds: await files.upload()
     }, old);
     dirty = false;
@@ -611,11 +622,18 @@ document.addEventListener('click', async (e) => {
       case 'edit-module':
         simpleRecord('module', r);
         break;
-      case 'module':
+      case 'module': {
         moduleId = id || null;
         section = 'content';
         render();
+        // «Continuar donde te quedaste»: abre el material pendiente y lo muestra.
+        const focus = b.dataset.focusMaterial && document.querySelector(`[data-material="${CSS.escape(b.dataset.focusMaterial)}"]`);
+        if (focus) {
+          focus.querySelector('details').open = true;
+          focus.scrollIntoView({ block: 'center' });
+        }
         break;
+      }
       case 'new-material':
         materialModal();
         break;

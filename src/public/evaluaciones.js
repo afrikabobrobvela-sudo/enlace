@@ -110,6 +110,25 @@ function renderQuizQuestions() {
   $('#quizQuestions').innerHTML = quizDraft.map(quizQuestionHtml).join('');
 }
 
+/** ¿Cuenta en la calificación? Solo con categorías: la evaluación entra a una categoría con su valor en puntos. */
+function quizGradeHtml(grade) {
+  const settings = gradingSettings();
+  const cats = settings.scheme === 'categories' ? settings.categories.filter((c) => c.source !== 'attendance') : [];
+  if (!cats.length) {
+    return `<fieldset class="quiz-settings"><legend>Calificación</legend><p class="muted">Para que esta evaluación cuente en el promedio, organiza la calificación del curso por categorías (Calificaciones → Administrar calificaciones). Mientras tanto, sus resultados se ven aquí y en «Mis calificaciones» sin sumarse.</p></fieldset>`;
+  }
+  const policy = grade?.policy || 'best';
+  return `<fieldset class="quiz-settings"><legend>Calificación</legend><div class="quiz-grid">
+    <label>Cuenta en la calificación<select name="gradeCategory"><option value="">No cuenta (solo práctica)</option>${cats
+      .map((c) => `<option value="${esc(c.id)}" ${grade?.category === c.id ? 'selected' : ''}>${esc(c.name)} (${c.weight} %)</option>`)
+      .join('')}</select></label>
+    <label>Valor dentro de la categoría (puntos)<input name="gradePoints" type="number" min="0.1" max="1000" step="0.1" value="${esc(grade?.points ?? 10)}"></label>
+    <label>Con varios intentos, cuenta<select name="gradePolicy">${Object.entries(QUIZ_POLICIES)
+      .map(([k, v]) => `<option value="${k}" ${policy === k ? 'selected' : ''}>${v}</option>`)
+      .join('')}</select></label></div>
+    <p class="muted">Vale lo mismo que una actividad con esos puntos en su categoría. Si un alumno no la contesta, no cuenta (no se toma como cero).</p></fieldset>`;
+}
+
 function quizModal(old) {
   const settings = quizSettings(old);
   quizDraft = old ? structuredClone(old.data.questions).map((q) => (q.type === 'numeric' ? q : { ...q, type: 'choice' })) : [blankQuestion()];
@@ -122,9 +141,10 @@ function quizModal(old) {
         <label>Tiempo límite (minutos, 0 = sin límite)<input name="timeLimit" type="number" min="0" max="300" value="${settings.timeLimit}"></label>
       </div><label class="check-label"><input type="checkbox" name="shuffle" ${settings.shuffle ? 'checked' : ''}> Presentar las preguntas en orden aleatorio a cada alumno</label></fieldset>` +
       examSettingsHtml(settings.exam) +
-      visible(old?.data.visible ?? false) +
+      quizGradeHtml(old?.data.grade) +
+      visible(old?.data.visible ?? false, old?.data.publishAt || '') +
       `<div id="quizQuestions"></div><button type="button" class="secondary" data-quiz="add-question">＋ Agregar pregunta</button>
-       <p class="pending-message">Con varios intentos cuenta el mejor. Una evaluación con respuestas recibidas no permite modificar las preguntas.</p>` +
+       <p class="pending-message">Una evaluación con respuestas recibidas no permite modificar las preguntas.</p>` +
       (old ? `<p class="modal-danger">${trashButton('quiz', old.id, 'Eliminar evaluación')}</p>` : ''),
     (f) =>
       save(
@@ -133,6 +153,8 @@ function quizModal(old) {
           title: f.get('title'),
           body: f.get('body'),
           visible: f.get('visible') === 'on',
+          publishAt: iso(f.get('publishAt')),
+          grade: f.get('gradeCategory') ? { category: f.get('gradeCategory'), points: Number(f.get('gradePoints')), policy: f.get('gradePolicy') } : null,
           settings: { attempts: Number(f.get('attempts')), timeLimit: Number(f.get('timeLimit')), shuffle: f.get('shuffle') === 'on', exam: readExamSettings(f) },
           questions: readQuizQuestions(),
         },

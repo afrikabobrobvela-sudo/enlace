@@ -2,6 +2,7 @@
 // Los avisos no se guardan uno por alumno: se calculan de lo publicado después de su última revisión,
 // así no se gastan escrituras de D1 (100 000 al día en el plan gratuito).
 import { access } from './access.js';
+import { publishedSql } from './published.js';
 import { base64url, fail, json, nowIso, one, all, readJson, run } from './http.js';
 
 const DAY = 86_400_000;
@@ -92,25 +93,27 @@ export const dashboardRoutes = {
     // D1 admite como máximo 5 términos en un SELECT compuesto (UNION): se hacen dos consultas de 3 y se juntan aquí.
     const ctes = `WITH mine AS (${STUDENT_COURSES}), teach AS (${TEACHER_COURSES})`;
     const [content, activity] = await Promise.all([
+      // Con publicación programada, la fecha del aviso es la de publicación (aparece como nuevo en ese momento).
       all(
         db,
-        `${ctes}
-         SELECT 'notice' AS type, r.id, r.course, c.name AS course_name, json_extract(r.data,'$.title') AS title, r.updated AS at
-           FROM mine JOIN aula_records r ON r.course=mine.course AND r.kind='notice' AND r.deleted_at IS NULL
-             AND json_type(r.data,'$.visible') IS NOT 'false' JOIN aula_courses c ON c.id=r.course WHERE r.updated>?2
+        `${ctes}, shown AS (
+           SELECT r.*, max(r.updated, coalesce(json_extract(r.data,'$.publishAt'),'')) AS at
+           FROM mine JOIN aula_records r ON r.course=mine.course AND r.deleted_at IS NULL AND r.kind IN ('notice','material','quiz')
+           WHERE ${publishedSql('r', '?3')})
+         SELECT 'notice' AS type, r.id, r.course, c.name AS course_name, json_extract(r.data,'$.title') AS title, r.at
+           FROM shown r JOIN aula_courses c ON c.id=r.course WHERE r.kind='notice' AND r.at>?2
          UNION ALL
-         SELECT 'material', r.id, r.course, c.name, json_extract(r.data,'$.title'), r.updated
-           FROM mine JOIN aula_records r ON r.course=mine.course AND r.kind='material' AND r.deleted_at IS NULL
-             AND json_type(r.data,'$.visible') IS NOT 'false' JOIN aula_courses c ON c.id=r.course
-           WHERE r.updated>?2 AND (coalesce(json_extract(r.data,'$.module'),'')='' OR EXISTS (SELECT 1 FROM aula_records p
-             WHERE p.id=json_extract(r.data,'$.module') AND p.deleted_at IS NULL AND json_type(p.data,'$.visible') IS NOT 'false'))
+         SELECT 'material', r.id, r.course, c.name, json_extract(r.data,'$.title'), r.at
+           FROM shown r JOIN aula_courses c ON c.id=r.course
+           WHERE r.kind='material' AND r.at>?2 AND (coalesce(json_extract(r.data,'$.module'),'')='' OR EXISTS (SELECT 1 FROM aula_records p
+             WHERE p.id=json_extract(r.data,'$.module') AND p.deleted_at IS NULL AND ${publishedSql('p', '?3')}))
          UNION ALL
-         SELECT 'quiz', r.id, r.course, c.name, json_extract(r.data,'$.title'), r.updated
-           FROM mine JOIN aula_records r ON r.course=mine.course AND r.kind='quiz' AND r.deleted_at IS NULL
-             AND json_type(r.data,'$.visible') IS NOT 'false' JOIN aula_courses c ON c.id=r.course WHERE r.updated>?2
+         SELECT 'quiz', r.id, r.course, c.name, json_extract(r.data,'$.title'), r.at
+           FROM shown r JOIN aula_courses c ON c.id=r.course WHERE r.kind='quiz' AND r.at>?2
          ORDER BY at DESC LIMIT ${limit}`,
         user.id,
         since,
+        nowIso(),
       ),
       all(
         db,

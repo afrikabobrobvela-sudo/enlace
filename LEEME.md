@@ -1,9 +1,32 @@
-# Enlace · versión 12.13
+# Enlace · versión 12.14
 
 Plataforma académica independiente para docentes y alumnos de cualquier academia (nació en la Academia de Física de la BUAP), con interfaz inspirada en Brightspace.
 No es el código de D2L Brightspace ni una plataforma oficial de la BUAP.
 
 Esta versión se despliega en **tu propia cuenta de Cloudflare** (Workers + D1 + R2, plan gratuito) y ya no depende de ChatGPT Sites.
+
+## Novedades de la versión 12.14 (evaluaciones en la calificación, seguimiento y publicación programada)
+
+Requiere la migración **0019**: solo agrega una tabla y no modifica datos. `npm run configurar` descarga un respaldo y la aplica.
+
+- **Las evaluaciones en línea pueden contar en la calificación.** Al editar una evaluación, en *Calificación*:
+  - Elige la categoría del curso en la que cuenta (por ejemplo, «Exámenes»).
+  - Indica su valor en puntos dentro de esa categoría, igual que una actividad.
+  - Con varios intentos, elige qué cuenta: el mejor, el último o el promedio.
+  - Si un alumno no la contesta, no se toma como cero.
+  - Requiere que el curso califique por categorías. Con pesos por actividad, la evaluación sigue siendo de práctica y el editor lo explica.
+  - Se ve en el libro de calificaciones, en «Mis calificaciones» del alumno («cuenta en Exámenes · el mejor intento»), en Progreso y en la exportación.
+- **Seguimiento del contenido.**
+  - El alumno marca cada material como **completado**; abrirlo queda anotado solo («Ya lo abriste»).
+  - Cada unidad muestra su avance («3 de 5 completados»).
+  - El inicio del curso tiene **«Continuar donde te quedaste»**, que abre directamente el siguiente material pendiente.
+  - Quien enseña ve en cada material «Completado por 10 de 18 · abierto por 15», y en *Progreso* una columna nueva, «Contenido completado», que también sale en la exportación.
+- **Publicación programada.**
+  - Unidades, materiales, noticias, foros y evaluaciones tienen «Publicar a partir de (opcional)».
+  - Hasta esa fecha los alumnos no lo ven por ninguna vía: ni en el curso, ni en descargas, ni en avisos; tampoco pueden publicar en ese foro ni contestar esa evaluación.
+  - Al llegar la fecha aparece solo y el aviso les llega como nuevo en ese momento.
+  - El docente lo ve marcado «Programado · fecha».
+- El curso de ejemplo muestra las tres cosas: una noticia programada, el cuestionario de la Unidad 2 contando en Exámenes y el avance de cada alumno.
 
 ## Novedades de la versión 12.13 (calendario y avisos)
 
@@ -240,7 +263,7 @@ La pantalla muestra en vivo cuántos se han registrado y quiénes acaban de hace
 
 1. Descarga la versión nueva en una carpeta **nueva** (no encima de la anterior), o `git pull` si trabajas desde GitHub.
 2. Haz un respaldo desde esa carpeta: `npm run respaldo`, y de los archivos desde Enlace (ver *Respaldos*).
-3. Doble clic en `configurar.cmd` (Windows) o `configurar.command` (Mac), o `npm run configurar`. Encuentra tu base `enlace-db` y tu almacenamiento, usa el correo de administración y la dirección `.workers.dev` de la vez anterior (desde la versión 12.11 los recuerda; la primera vez te los pregunta y revisa que el correo ya haya entrado a Enlace), descarga un respaldo, aplica las migraciones pendientes (0003: asistencia y borradores; 0004: registro con QR; 0005: categorías, rúbricas y equipos; 0006: sesiones; 0007: papelera; 0008: registro de docentes; 0009: aviso de privacidad; 0010: periodos y archivo; 0011: prórrogas; 0012: intentos de evaluaciones; 0013: avisos; 0014: historial de calificaciones; 0015: asistencia con código; 0016: modo examen; 0017: usuarios y registro de acciones; 0018: avisos leídos) y publica. No cambia tus claves. Al pasar a la versión 12.1 cada persona vuelve a entrar con Google una vez (las sesiones ahora se registran en el servidor).
+3. Doble clic en `configurar.cmd` (Windows) o `configurar.command` (Mac), o `npm run configurar`. Encuentra tu base `enlace-db` y tu almacenamiento, usa el correo de administración y la dirección `.workers.dev` de la vez anterior (desde la versión 12.11 los recuerda; la primera vez te los pregunta y revisa que el correo ya haya entrado a Enlace), descarga un respaldo, aplica las migraciones pendientes (0003: asistencia y borradores; 0004: registro con QR; 0005: categorías, rúbricas y equipos; 0006: sesiones; 0007: papelera; 0008: registro de docentes; 0009: aviso de privacidad; 0010: periodos y archivo; 0011: prórrogas; 0012: intentos de evaluaciones; 0013: avisos; 0014: historial de calificaciones; 0015: asistencia con código; 0016: modo examen; 0017: usuarios y registro de acciones; 0018: avisos leídos; 0019: seguimiento del contenido) y publica. No cambia tus claves. Al pasar a la versión 12.1 cada persona vuelve a entrar con Google una vez (las sesiones ahora se registran en el servidor).
 
 **No publiques con `npx wrangler deploy` directamente**: el `wrangler.toml` del ZIP trae valores de ejemplo y quedarías sin la cuenta de administración (`npm run deploy` y `npm run db:migrate` ya lo impiden). Si prefieres hacerlo a mano: copia tu `database_id` y tu correo del `wrangler.toml` anterior al nuevo (y `ALLOWED_EMAIL_DOMAINS` si lo usabas) y ejecuta `npm install`, `npm run db:migrate` y `npm run deploy`, **en ese orden**: si publicas antes de migrar, Asistencia y Calificaciones fallarán hasta que apliques la migración.
 
@@ -449,6 +472,7 @@ La cookie de sesión usa el prefijo `__Host-`, que exige conexión segura. Chrom
 - `test-configurar.mjs`: no se publica ni se migra con los valores de ejemplo; `configurar` verifica el correo contra la base y recuerda los datos entre versiones (con un wrangler simulado).
 - `test-respaldo-archivos.mjs`: respaldo de archivos solo para administración, incremental, con índice; restauración solo de lo que falta y con el tamaño exacto.
 - `test-restaurar.mjs`: la exportación de D1 se reordena y comprueba con el esquema real; `npm run restaurar` solo escribe en bases vacías.
+- `test-programacion.mjs`: publicación programada por todas las vías (curso, descargas, foro, evaluación, avisos), evaluaciones en la calificación (validación y cálculo real: mejor, último, promedio) y seguimiento del contenido.
 - `test-calendario.mjs`: calendario con fechas por alumno (prórrogas), estado de entrega, sin lo oculto ni lo archivado, vista del docente; avisos leídos uno por uno o todos, historial y archivo .ics.
 - `test-usuarios.mjs`: la vista de un alumno es idéntica a la suya y queda registrada; directorio, suspender y reactivar sin perder datos, transferir cursos.
 - `test-qr.mjs`: generador de QR. Sus huellas corresponden a códigos que se decodificaron con OpenCV; si una cambia, hay que volver a verificarlo.

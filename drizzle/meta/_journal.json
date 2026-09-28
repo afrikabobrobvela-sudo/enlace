@@ -134,6 +134,13 @@
       "when": 1790625639035,
       "tag": "0018_avisos_leidos",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "6",
+      "when": 1790627275881,
+      "tag": "0019_seguimiento",
+      "breakpoints": true
     }
   ]
 }

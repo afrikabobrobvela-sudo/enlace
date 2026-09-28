@@ -11,6 +11,7 @@ import { reportRoutes } from './reports.js';
 import { demoRoutes } from './demo.js';
 import { backupRoutes } from './backup.js';
 import { userRoutes } from './users.js';
+import { isPublished, publishAtField, publishedSql, SCHEDULABLE_KINDS } from './published.js';
 import {
   MAX_EXAM_EVENTS,
   MAX_PASSWORD_FAILURES,
@@ -146,7 +147,7 @@ async function validateFiles(db, ids, course, user, scope) {
 }
 
 function assertRecordAvailable(r) {
-  if (r.data.visible === false) fail('La actividad no está disponible.', 403);
+  if (!isPublished(r)) fail('La actividad no está disponible.', 403);
   const now = Date.now();
   if (r.data.start && now < Date.parse(r.data.start)) fail('La actividad todavía no está disponible.', 403);
   if (r.data.end && now > Date.parse(r.data.end)) fail('El periodo de entrega ha terminado.', 403);
@@ -270,7 +271,9 @@ const routes = {
         ...CONTENT_KINDS,
       )
     ).map(unpack);
-    const visible = (r) => r?.data.visible !== false;
+    // Para el alumno: visible y con su fecha de publicación cumplida (publicación programada).
+    const now = nowIso();
+    const visible = (r) => isPublished(r, now);
     const byId = new Map(rows.map((r) => [r.id, r]));
     const content = teach
       ? rows
@@ -293,6 +296,17 @@ const routes = {
       ? memberRows
       : memberRows.map((m) => ({ id: m.id, user_id: m.user_id, name: m.name, role: m.role }));
 
+    // Seguimiento del contenido: quien enseña ve el de todos; el alumno (o la vista de un alumno), solo el suyo.
+    const progress = teach
+      ? await all(db, 'SELECT member, record, opened_at, completed_at FROM aula_progress WHERE course=?', courseId)
+      : await all(
+          db,
+          `SELECT p.member, p.record, p.opened_at, p.completed_at FROM aula_progress p JOIN aula_members m ON m.id=p.member
+           WHERE p.course=?1 AND (m.id=?3 OR (?3 IS NULL AND m.user_id=?2))`,
+          courseId,
+          viewer,
+          viewing?.id ?? null,
+        );
     let files = await all(db, 'SELECT id,course,owner,scope,name,size,mime,created FROM aula_files WHERE course=?', courseId);
     if (!teach) {
       const shared = new Set(records.filter((r) => ['module', 'material', 'task'].includes(r.kind)).flatMap((r) => r.data.fileIds || []));
@@ -310,7 +324,36 @@ const routes = {
       records,
       members,
       files,
+      progress,
     });
+  },
+
+  // El alumno abre un material o lo marca como completado (o lo desmarca). Solo materiales que puede ver.
+  'POST /api/progress': async ({ db, user, request }) => {
+    const body = await readJson(request);
+    const a = await access(db, user, body.course);
+    if (a.teach) fail('El seguimiento es de los alumnos.', 403);
+    if (!['open', 'complete', 'undo'].includes(body.action)) fail('Acción no válida.');
+    const member = await one(db, "SELECT id FROM aula_members WHERE course=? AND user_id=? AND role='student'", body.course, user.id);
+    if (!member) fail('No estás inscrito como alumno en este curso.', 403);
+    const material = await contentRecord(db, body.record, body.course, 'material');
+    const unit = material.data.module ? await one(db, "SELECT data FROM aula_records WHERE id=? AND course=? AND deleted_at IS NULL", material.data.module, body.course) : null;
+    const now = nowIso();
+    if (!isPublished(material, now) || (material.data.module && !isPublished(unit && { data: JSON.parse(unit.data) }, now))) fail('Material no disponible.', 403);
+    const completed = body.action === 'complete' ? now : null;
+    await run(
+      db,
+      `INSERT INTO aula_progress (member,record,course,opened_at,completed_at) VALUES (?1,?2,?3,?4,?5)
+       ON CONFLICT(member,record) DO UPDATE SET opened_at=coalesce(aula_progress.opened_at, excluded.opened_at),
+         completed_at=CASE ?6 WHEN 'open' THEN aula_progress.completed_at ELSE excluded.completed_at END`,
+      member.id,
+      material.id,
+      body.course,
+      now,
+      completed,
+      body.action,
+    );
+    return json({ record: material.id, opened_at: now, completed_at: body.action === 'open' ? undefined : completed });
   },
 
   'POST /api/course': async ({ db, user, request }) => {
@@ -630,6 +673,10 @@ const routes = {
     if (TEACHER_CONTENT_KINDS.includes(kind)) {
       requireTeacher(a);
       data = { title: text(input.title, 200), body: String(input.body || '').slice(0, 30000), visible: input.visible !== false };
+      if (SCHEDULABLE_KINDS.includes(kind)) {
+        const publishAt = publishAtField(input.publishAt);
+        if (publishAt) data.publishAt = publishAt;
+      }
       if (kind === 'module') data.fileIds = await validateFiles(db, input.fileIds, body.course, user, 'material');
       if (kind === 'material') {
         data.module = input.module || null;
@@ -648,6 +695,15 @@ const routes = {
       }
       if (kind === 'quiz') {
         Object.assign(data, quizFields(input));
+        // Cuenta en la calificación: dentro de una categoría (de actividades) del curso, con su valor en puntos.
+        if (input.grade?.category) {
+          const category = await one(db, "SELECT id FROM aula_grade_categories WHERE id=? AND course=? AND source='tasks'", String(input.grade.category), body.course);
+          if (!category) fail('Elige una categoría de calificación del curso.');
+          const points = Number(input.grade.points ?? 10);
+          if (!Number.isFinite(points) || points <= 0 || points > 1000) fail('El valor de la evaluación va de 0.1 a 1000 puntos.');
+          const policy = ['best', 'last', 'average'].includes(input.grade.policy) ? input.grade.policy : 'best';
+          data.grade = { category: category.id, points, policy };
+        }
         if (previous && !sameQuestions(previous.data.questions, data.questions) && (await quizHasAttempts(db, body.course, previous.id))) {
           fail('Una evaluación con intentos no permite cambiar sus preguntas. Crea una nueva.');
         }
@@ -663,7 +719,7 @@ const routes = {
       // kind === 'post'
       if (previous) fail('Las publicaciones no se editan desde este formulario.');
       const forum = await contentRecord(db, input.forum, body.course, 'forum');
-      if (!a.teach && forum.data.visible === false) fail('Foro no disponible.', 403);
+      if (!a.teach && !isPublished(forum)) fail('Foro no disponible.', 403);
       // Un alumno publica con su nombre de la lista del curso, no con el de su cuenta.
       const enrolled = a.teach ? null : await one(db, "SELECT name FROM aula_members WHERE course=? AND user_id=? AND role='student'", body.course, user.id);
       data = { forum: forum.id, title: text(input.title, 200), body: text(input.body, 15000), name: enrolled?.name || user.name };
@@ -1253,16 +1309,17 @@ async function downloadFile({ db, env, user, url, request }, id) {
       (await one(
         db,
         `SELECT 1 AS ok FROM aula_records r, json_each(r.data,'$.fileIds') j
-         WHERE r.course=?1 AND r.kind IN ('material','module') AND j.value=?2 AND json_type(r.data,'$.visible') IS NOT 'false'
+         WHERE r.course=?1 AND r.kind IN ('material','module') AND j.value=?2 AND ${publishedSql('r', '?3')}
            AND r.deleted_at IS NULL
            AND (r.kind='module' OR coalesce(json_extract(r.data,'$.module'),'')=''
                 OR EXISTS (SELECT 1 FROM aula_records p WHERE p.id=json_extract(r.data,'$.module') AND p.course=?1
-                           AND p.deleted_at IS NULL AND json_type(p.data,'$.visible') IS NOT 'false'))
+                           AND p.deleted_at IS NULL AND ${publishedSql('p', '?3')}))
          UNION ALL
          SELECT 1 FROM aula_tasks t, json_each(t.file_ids) j WHERE t.course=?1 AND t.visible=1 AND t.deleted_at IS NULL AND j.value=?2
          LIMIT 1`,
         file.course,
         id,
+        nowIso(),
       ));
     if (!permitted) fail('No tienes acceso a este archivo.', 403);
   }

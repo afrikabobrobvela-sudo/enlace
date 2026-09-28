@@ -18,7 +18,9 @@ function gradingSettings() {
  * Calificación de un alumno. Con final = true y la regla activa, las actividades vencidas sin calificar valen 0;
  * si no, se excluye lo no calificado y se normalizan los pesos restantes (como siempre en Enlace).
  */
-function computeGrade({ tasks, grades, settings, weights, attendancePercent = null, now = Date.now(), final = false, dueOf = (task) => task.data.due }) {
+function computeGrade({ tasks, grades, settings, weights, attendancePercent = null, now = Date.now(), final = false, dueOf = (task) => task.data.due, quizzes = [], quizGrades = new Map() }) {
+  // Evaluaciones que cuentan (12.14): solo con categorías; entran a su categoría con sus puntos y la calificación
+  // del intento que marque su regla. Sin intento no cuentan (no tienen fecha de entrega que las haga vencer).
   const zeroMissing = final && settings.final.missingAsZero;
   const gradeFor = (task) => {
     const grade = grades.get(task.id);
@@ -41,6 +43,12 @@ function computeGrade({ tasks, grades, settings, weights, attendancePercent = nu
           if (grade === null) continue;
           earned += grade * task.data.points;
           points += task.data.points;
+        }
+        for (const quiz of quizzes.filter((q) => q.data.grade?.category === category.id)) {
+          const grade = quizGrades.get(quiz.id);
+          if (grade === null || grade === undefined) continue;
+          earned += grade * quiz.data.grade.points;
+          points += quiz.data.grade.points;
         }
         value = points ? earned / points : null;
       }
@@ -99,9 +107,42 @@ function ensureAttendanceForGrades() {
     .finally(() => (attendanceForGradesLoading = false));
 }
 
+const QUIZ_POLICIES = { best: 'el mejor intento', last: 'el último intento', average: 'el promedio de los intentos' };
+
+/** Con quién se guardan los intentos de un alumno (los alumnos sin cuenta del curso de ejemplo usan demo:<id>). */
+function attemptKeyOf(memberId) {
+  const member = current.members.find((m) => m.id === memberId);
+  if (!member) return null;
+  return current.viewing?.id === memberId ? current.viewing.key : member.user_id || `demo:${member.id}`;
+}
+
+/** Calificación de una evaluación para un alumno según su regla (mejor, último o promedio); null sin intentos. */
+function quizScore(quiz, memberId) {
+  const key = attemptKeyOf(memberId);
+  const attempts = records('attempt')
+    .filter((a) => a.data.quiz === quiz.id && a.author === key)
+    .sort((a, b) => (a.data.attempt || 1) - (b.data.attempt || 1));
+  if (!attempts.length) return null;
+  const scores = attempts.map((a) => Number(a.data.score));
+  const policy = quiz.data.grade?.policy || 'best';
+  if (policy === 'last') return scores.at(-1);
+  if (policy === 'average') return scores.reduce((a, b) => a + b, 0) / scores.length;
+  return Math.max(...scores);
+}
+
+/** Evaluaciones que suman a la calificación (con categoría del curso). */
+const countedQuizzes = () => {
+  const settings = gradingSettings();
+  if (settings.scheme !== 'categories') return [];
+  return records('quiz').filter((q) => q.data.grade?.category && settings.categories.some((c) => c.id === q.data.grade.category));
+};
+
 function studentGrade(memberId, { final = false } = {}) {
   const tasks = records('task');
+  const quizzes = countedQuizzes();
   return computeGrade({
+    quizzes,
+    quizGrades: new Map(quizzes.map((q) => [q.id, quizScore(q, memberId)])),
     tasks,
     grades: new Map(tasks.map((t) => [t.id, gradeOf(memberId, t.id)?.data.grade ?? null])),
     settings: gradingSettings(),
@@ -154,13 +195,19 @@ function myGradesHtml() {
       }</li>`;
     })
     .join('');
+  const counts = countedQuizzes();
   const quizItems = records('quiz')
     .map((q) => {
-      const attempts = records('attempt').filter((a) => a.data.quiz === q.id);
-      const best = attempts.length ? Math.max(...attempts.map((a) => a.data.score)) : null;
-      return `<li class="my-grade-item"><button type="button" class="my-grade-row" data-action="quiz" data-id="${esc(q.id)}"><span class="my-grade-title">${esc(q.data.title)}${
-        attempts.length ? `<small>${attempts.length} ${attempts.length === 1 ? 'intento' : 'intentos'}</small>` : ''
-      }</span><span class="my-grade-value ${best === null ? 'is-pending' : tone(best)}">${best === null ? 'Sin contestar' : best.toFixed(2)}</span></button></li>`;
+      const attempts = records('attempt').filter((a) => a.data.quiz === q.id && a.author === attemptKeyOf(member.id));
+      const counted = counts.includes(q);
+      const best = counted ? quizScore(q, member.id) : attempts.length ? Math.max(...attempts.map((a) => a.data.score)) : null;
+      const note = [
+        attempts.length ? `${attempts.length} ${attempts.length === 1 ? 'intento' : 'intentos'}` : '',
+        counted ? `cuenta en ${cats.find((c) => c.id === q.data.grade.category)?.name || 'la calificación'} · ${QUIZ_POLICIES[q.data.grade.policy] || QUIZ_POLICIES.best}` : 'no cuenta en el promedio',
+      ]
+        .filter(Boolean)
+        .join(' · ');
+      return `<li class="my-grade-item"><button type="button" class="my-grade-row" data-action="quiz" data-id="${esc(q.id)}"><span class="my-grade-title">${esc(q.data.title)}<small>${esc(note)}</small></span><span class="my-grade-value ${best === null ? 'is-pending' : tone(best)}">${best === null ? 'Sin contestar' : best.toFixed(2)}</span></button></li>`;
     })
     .join('');
   const scheme = cats.length ? 'por categorías' : weighted ? 'ponderado' : 'simple';
@@ -177,7 +224,7 @@ function myGradesHtml() {
         : ''
     }
     <section class="panel"><h2>Actividades</h2>${taskItems ? `<ul class="my-grade-list">${taskItems}</ul>` : '<p class="muted">Todavía no hay actividades publicadas.</p>'}</section>
-    ${quizItems ? `<section class="panel"><h2>Evaluaciones</h2><p class="muted">Tu mejor intento en cada evaluación. No se suman solas al promedio parcial.</p><ul class="my-grade-list">${quizItems}</ul></section>` : ''}`;
+    ${quizItems ? `<section class="panel"><h2>Evaluaciones</h2><p class="muted">Las que dicen «cuenta en…» ya están sumadas en tu promedio parcial.</p><ul class="my-grade-list">${quizItems}</ul></section>` : ''}`;
 }
 
 // ---- Administrar: esquema, categorías y reglas finales ----------------------------------------

@@ -77,7 +77,7 @@ function workspaceContent() {
   if (moduleId && !ms.some(m => m.id === moduleId))
     moduleId = null;
   const m = find(moduleId), mats = records('material').filter(x => !moduleId || x.data.module === moduleId);
-  $('#main').innerHTML = `<div class="content-layout ${m ? 'has-unit' : ''}"><section class="content-tree" aria-label="Unidades del curso"><h2>Contenido del curso</h2><button class="toc-all ${!moduleId ? 'selected' : ''}" data-action="module">Tabla de contenidos <span>${records('material').length}</span></button>${ms.map(u => `<div class="tree-unit"><button data-action="module" data-id="${u.id}" class="${moduleId === u.id ? 'active' : ''}"><span>${esc(u.data.title)}</span><small>${records('material').filter(x => x.data.module === u.id).length} materiales${u.data.visible === false ? ' · Borrador' : ''}</small></button></div>`).join('')}${teaches() ? button('＋ Nueva unidad', 'new-module', '', 'secondary') : ''}</section><section class="content-detail"><div class="crumbs"><button data-action="hub">Inicio del curso</button><span>›</span>${m ? '<button data-action="module">Contenido</button><span>›</span><span>Unidad</span>' : '<span>Contenido</span>'}</div><div class="panel-head"><h1>${esc(m?.data.title || 'Tabla de contenidos')}</h1>${teaches() && m ? button('Editar unidad', 'edit-module', m.id, 'secondary') : ''}</div>${m ? `${teaches() ? visibilityToggle('module', m) : ''}${richText(m.data.body, m.data.fileIds)}${fileLinks(m.data.fileIds)}` : ''}${guidePanel()}<div class="panel-head content-toolbar"><h2>${m ? 'Materiales de la unidad' : 'Todos los materiales'} <span class="count-pill">${mats.length}</span></h2>${teaches() ? button('＋ Agregar material', 'new-material') : ''}</div>${mats.map(x => `<article class="material-entry"><details><summary><span class="document-mark" aria-hidden="true">▤</span><span><strong>${esc(x.data.title)}</strong><small>${x.data.fileIds?.length || 0} archivos${x.data.url ? ' · Enlace externo' : ''}${x.data.visible === false ? ' · Borrador' : ''}</small></span><span class="expand-mark" aria-hidden="true">⌄</span></summary><div class="material-entry-body">${richText(x.data.body, x.data.fileIds)}${x.data.url ? `<a href="${esc(x.data.url)}" target="_blank" rel="noopener noreferrer">Abrir recurso ↗</a>` : ''}${fileLinks(x.data.fileIds)}</div></details>${teaches() ? `<div class="material-actions material-edit">${visibilityToggle('material', x)}${x.data.visible !== false && find(x.data.module)?.data.visible === false ? '<span class="visibility-note">Su unidad está oculta</span>' : ''}${button('Editar', 'edit-material', x.id, 'text-btn')}</div>` : ''}</article>`).join('') || '<div class="empty-materials"><h3>Organiza aquí tus materiales</h3><p class="muted">' + (teaches() ? 'Crea una unidad y agrega documentos, presentaciones, enlaces e instrucciones. También puedes comenzar con la guía editable.' : 'Tu docente publicará aquí los materiales del curso.') + '</p></div>'}</section></div>`;
+  $('#main').innerHTML = `<div class="content-layout ${m ? 'has-unit' : ''}"><section class="content-tree" aria-label="Unidades del curso"><h2>Contenido del curso</h2><button class="toc-all ${!moduleId ? 'selected' : ''}" data-action="module">Tabla de contenidos <span>${records('material').length}</span></button>${ms.map(u => `<div class="tree-unit"><button data-action="module" data-id="${u.id}" class="${moduleId === u.id ? 'active' : ''}"><span>${esc(u.data.title)}</span><small>${!teaches() && myMember() ? `${unitProgress(u.id, myMember().id).done} de ${materialsOf(u.id).length} completados` : `${materialsOf(u.id).length} materiales`}${u.data.visible === false ? ' · Borrador' : scheduledFor(u) ? ' · Programada' : ''}</small></button></div>`).join('')}${teaches() ? button('＋ Nueva unidad', 'new-module', '', 'secondary') : ''}</section><section class="content-detail"><div class="crumbs"><button data-action="hub">Inicio del curso</button><span>›</span>${m ? '<button data-action="module">Contenido</button><span>›</span><span>Unidad</span>' : '<span>Contenido</span>'}</div><div class="panel-head"><h1>${esc(m?.data.title || 'Tabla de contenidos')}</h1>${teaches() && m ? button('Editar unidad', 'edit-module', m.id, 'secondary') : ''}</div>${m ? `${teaches() ? visibilityToggle('module', m) : myMember() ? progressBar(unitProgress(m.id, myMember().id).done, materialsOf(m.id).length, `Tu avance: ${unitProgress(m.id, myMember().id).done} de ${materialsOf(m.id).length} materiales`) : ''}${richText(m.data.body, m.data.fileIds)}${fileLinks(m.data.fileIds)}` : ''}${guidePanel()}<div class="panel-head content-toolbar"><h2>${m ? 'Materiales de la unidad' : 'Todos los materiales'} <span class="count-pill">${mats.length}</span></h2>${teaches() ? button('＋ Agregar material', 'new-material') : ''}</div>${mats.map(x => `<article class="material-entry ${!teaches() && myMember() && progressOf(myMember().id, x.id)?.completed_at ? 'is-completed' : ''}" data-material="${esc(x.id)}"><details><summary><span class="document-mark" aria-hidden="true">▤</span><span><strong>${esc(x.data.title)}</strong><small>${x.data.fileIds?.length || 0} archivos${x.data.url ? ' · Enlace externo' : ''}${x.data.visible === false ? ' · Borrador' : scheduledFor(x) ? ' · Programado' : ''}</small></span><span class="expand-mark" aria-hidden="true">⌄</span></summary><div class="material-entry-body">${richText(x.data.body, x.data.fileIds)}${x.data.url ? `<a href="${esc(x.data.url)}" target="_blank" rel="noopener noreferrer">Abrir recurso ↗</a>` : ''}${fileLinks(x.data.fileIds)}</div></details>${teaches() ? '' : materialProgressHtml(x)}${teaches() ? `<div class="material-actions material-edit">${materialProgressHtml(x)}${visibilityToggle('material', x)}${x.data.visible !== false && find(x.data.module)?.data.visible === false ? '<span class="visibility-note">Su unidad está oculta</span>' : ''}${button('Editar', 'edit-material', x.id, 'text-btn')}</div>` : ''}</article>`).join('') || '<div class="empty-materials"><h3>Organiza aquí tus materiales</h3><p class="muted">' + (teaches() ? 'Crea una unidad y agrega documentos, presentaciones, enlaces e instrucciones. También puedes comenzar con la guía editable.' : 'Tu docente publicará aquí los materiales del curso.') + '</p></div>'}</section></div>`;
 }
 function workspaceGroups() {
   const groups = records('group'), cats = [...new Set(groups.map(g => g.data.category))];
@@ -160,4 +160,84 @@ document.addEventListener('change', e => {
     filterGroups();
   if (e.target.matches('[data-task-filter]'))
     filterTasks();
+});
+
+// ---- Seguimiento del contenido (12.14) ------------------------------------------------------------
+// El alumno marca cada material como completado; abrirlo queda anotado solo. El docente ve cuántos lo completaron.
+const progressOf = (memberId, recordId) => (current.progress || []).find((p) => p.member === memberId && p.record === recordId);
+const materialsOf = (unitId) => records('material').filter((x) => x.data.module === unitId);
+function unitProgress(unitId, memberId) {
+  const mats = materialsOf(unitId);
+  return { done: mats.filter((x) => progressOf(memberId, x.id)?.completed_at).length, total: mats.length };
+}
+/** Primer material sin completar, en el orden de las unidades (para «Continuar donde te quedaste»). */
+function nextMaterial(memberId) {
+  for (const unit of records('module')) {
+    const pending = materialsOf(unit.id).find((x) => !progressOf(memberId, x.id)?.completed_at);
+    if (pending) return { unit, material: pending };
+  }
+  return null;
+}
+const progressBar = (done, total, label) =>
+  total ? `<div class="unit-progress" role="img" aria-label="${esc(label)}"><div class="unit-progress-bar"><span style="width:${Math.round((done / total) * 100)}%"></span></div><small>${esc(label)}</small></div>` : '';
+/** Tarjeta del inicio del curso para el alumno: dónde continuar y cuánto lleva. */
+function continueCardHtml() {
+  const member = teaches() ? null : myMember();
+  if (!member || !records('material').length) return '';
+  const all = records('material').filter((x) => x.data.module && find(x.data.module));
+  const done = all.filter((x) => progressOf(member.id, x.id)?.completed_at).length;
+  const next = nextMaterial(member.id);
+  return `<section class="panel continue-card"><h2>${next ? 'Continuar donde te quedaste' : '¡Completaste todo el contenido!'}</h2>${progressBar(done, all.length, `${done} de ${all.length} materiales completados`)}${
+    next ? `<button class="primary" data-action="module" data-id="${esc(next.unit.id)}" data-focus-material="${esc(next.material.id)}">${esc(next.unit.data.title)} · ${esc(next.material.data.title)} →</button>` : ''
+  }</section>`;
+}
+/** Botón del alumno o conteo del docente en cada material. */
+function materialProgressHtml(x) {
+  if (teaches()) {
+    const students = current.members.filter((m) => m.role === 'student');
+    if (!students.length) return '';
+    const rows = (current.progress || []).filter((p) => p.record === x.id);
+    const done = rows.filter((p) => p.completed_at).length;
+    return `<span class="material-progress-count">Completado por ${done} de ${students.length} · abierto por ${rows.length}</span>`;
+  }
+  const member = myMember();
+  if (!member) return '';
+  const p = progressOf(member.id, x.id);
+  return `<div class="material-progress"><button type="button" class="progress-toggle ${p?.completed_at ? 'is-done' : ''}" data-progress-toggle="${esc(x.id)}" aria-pressed="${Boolean(p?.completed_at)}">${
+    p?.completed_at ? '✓ Completado' : 'Marcar como completado'
+  }</button>${!p?.completed_at && p?.opened_at ? '<span class="muted">Ya lo abriste</span>' : ''}</div>`;
+}
+async function sendProgress(recordId, action) {
+  const member = myMember();
+  if (!member || teaches() || previewAsStudent) return null;
+  const r = await request('/api/progress', { course: current.course.id, record: recordId, action });
+  current.progress ||= [];
+  let row = progressOf(member.id, recordId);
+  if (!row) current.progress.push((row = { member: member.id, record: recordId, opened_at: r.opened_at, completed_at: null }));
+  if (action !== 'open') row.completed_at = r.completed_at;
+  return row;
+}
+// Abrir un material (desplegarlo) queda anotado una sola vez. «toggle» no burbujea: se escucha en captura.
+document.addEventListener(
+  'toggle',
+  (e) => {
+    const entry = e.target.closest?.('[data-material]');
+    if (!entry || !e.target.open || !current || teaches() || previewAsStudent) return;
+    const member = myMember();
+    if (member && !progressOf(member.id, entry.dataset.material)) sendProgress(entry.dataset.material, 'open').catch(() => {});
+  },
+  true,
+);
+document.addEventListener('click', async (e) => {
+  const t = e.target.closest?.('[data-progress-toggle]');
+  if (!t) return;
+  try {
+    const member = myMember();
+    const done = progressOf(member?.id, t.dataset.progressToggle)?.completed_at;
+    if (previewAsStudent) return toast(PREVIEW_READONLY);
+    await sendProgress(t.dataset.progressToggle, done ? 'undo' : 'complete');
+    render();
+  } catch (error) {
+    toast(error.message);
+  }
 });

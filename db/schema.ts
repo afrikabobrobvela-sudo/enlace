@@ -32,6 +32,22 @@ export const users = sqliteTable(
 );
 
 /**
+ * Migración 0019: seguimiento del contenido. Una fila por alumno y material: cuándo lo abrió por primera vez y
+ * cuándo lo marcó como completado (NULL = no). Los materiales siguen en aula_records.
+ */
+export const progress = sqliteTable(
+  'aula_progress',
+  {
+    member: text('member').notNull(),
+    record: text('record').notNull(),
+    course: text('course').notNull(),
+    openedAt: text('opened_at'),
+    completedAt: text('completed_at'),
+  },
+  (t) => [primaryKey({ columns: [t.member, t.record] }), index('aula_progress_course').on(t.course)],
+);
+
+/**
  * Migración 0018: avisos leídos uno por uno. Un aviso está leído si es anterior a aula_users.notices_seen_at
  * ("marcar todo como leído", que además vacía esta tabla para esa persona) o si su clave está aquí.
  * La clave incluye la fecha del aviso (tipo:id:fecha): si el elemento cambia, vuelve a aparecer como nuevo.

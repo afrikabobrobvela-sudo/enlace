@@ -64,6 +64,9 @@ async function renderProgress() {
     attendance,
   });
   const atRisk = lastRiskReport.filter((r) => r.level);
+  // Contenido completado (seguimiento por unidad): materiales dentro de unidades.
+  const contentTotal = records('material').filter((x) => x.data.module).length;
+  const contentDone = (memberId) => records('material').filter((x) => x.data.module && progressOf(memberId, x.id)?.completed_at).length;
   const shown = progressOnlyRisk ? atRisk : lastRiskReport;
   const rows = shown
     .map((r) => `<tr data-search-row>
@@ -72,6 +75,7 @@ async function renderProgress() {
       <td>${r.attendance && r.attendance.percent !== null ? percentPill(r.attendance, settings.min_percent) : '—'}</td>
       <td>${r.missing.length ? `<strong>${r.missing.length}</strong><div class="muted">${r.missing.map((t) => esc(t.data.title)).join(', ')}</div>` : '0'}</td>
       <td><progress value="${r.delivered}" max="${Math.max(tasks.length, 1)}"></progress> ${r.delivered} de ${tasks.length}</td>
+      <td>${contentTotal ? `<progress value="${contentDone(r.member.id)}" max="${contentTotal}"></progress> ${contentDone(r.member.id)} de ${contentTotal}` : '—'}</td>
       <td class="${r.average === null ? '' : r.average >= RISK_PASSING ? 'grade-pass' : 'grade-low'}">${r.average === null ? '—' : r.average.toFixed(2)}</td>
     </tr>`)
     .join('');
@@ -81,12 +85,13 @@ async function renderProgress() {
     <p class="real-status">Criterios: asistencia debajo del mínimo del curso${settings ? ` (${settings.min_percent} %)` : ''}, dos o más actividades vencidas sin entregar, o promedio parcial menor a ${RISK_PASSING}. Riesgo alto: dos o más criterios a la vez.</p>
     <div class="toolbar"><input data-search type="search" placeholder="Buscar alumno…" aria-label="Buscar alumno">
       <label class="review-filter"><input type="checkbox" data-risk="only" ${progressOnlyRisk ? 'checked' : ''}> Solo alumnos en riesgo</label></div>
-    <div class="table-wrap"><table><thead><tr><th>Alumno</th><th>Riesgo</th><th>Asistencia</th><th>Vencidas sin entregar</th><th>Entregas</th><th>Promedio parcial</th></tr></thead>
-    <tbody>${rows || `<tr><td colspan="6" class="empty">${progressOnlyRisk && students.length ? 'Nadie está en riesgo. Desmarca el filtro para ver a todo el grupo.' : 'No hay alumnos inscritos.'}</td></tr>`}</tbody></table></div>`;
+    <div class="table-wrap"><table><thead><tr><th>Alumno</th><th>Riesgo</th><th>Asistencia</th><th>Vencidas sin entregar</th><th>Entregas</th><th>Contenido completado</th><th>Promedio parcial</th></tr></thead>
+    <tbody>${rows || `<tr><td colspan="7" class="empty">${progressOnlyRisk && students.length ? 'Nadie está en riesgo. Desmarca el filtro para ver a todo el grupo.' : 'No hay alumnos inscritos.'}</td></tr>`}</tbody></table></div>`;
 }
 
 function exportRisk() {
-  const header = ['Matrícula', 'Alumno', 'Riesgo', 'Asistencia (%)', 'Vencidas sin entregar', 'Actividades faltantes', 'Entregas', 'Promedio parcial'];
+  const header = ['Matrícula', 'Alumno', 'Riesgo', 'Asistencia (%)', 'Vencidas sin entregar', 'Actividades faltantes', 'Entregas', 'Materiales completados', 'Promedio parcial'];
+  const contentDone = (memberId) => records('material').filter((x) => x.data.module && progressOf(memberId, x.id)?.completed_at).length;
   const rows = lastRiskReport.map((r) => [
     r.member.matricula,
     r.member.name,
@@ -95,6 +100,7 @@ function exportRisk() {
     r.missing.length,
     r.missing.map((t) => t.data.title).join('; '),
     r.delivered,
+    contentDone(r.member.id),
     r.average === null ? '' : r.average.toFixed(2),
   ]);
   download(`riesgo-${current.course.name}.csv`, '\uFEFF' + [header, ...rows].map((row) => row.map(csvCell).join(',')).join('\r\n'), 'text/csv;charset=utf-8');

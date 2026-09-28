@@ -181,6 +181,8 @@ Resolver problemas de movimiento con el teorema trabajo-energía y la conservaci
   record('notice', { title: '¡Bienvenidos al curso!', body: 'En **Contenido** encontrarán el temario por unidad. Las tareas se entregan aquí mismo, desde el celular o la computadora (pueden tomar fotos de su cuaderno y Enlace las une en un PDF).', visible: true }, -44);
   record('notice', { title: 'Cambio de salón el jueves', body: 'Esta semana la clase del jueves será en el **laboratorio 3**. El registro de asistencia será con código QR.', visible: true }, -12);
   record('notice', { title: 'Recordatorio: Tarea 4', body: 'La Tarea 4 (trabajo y energía) vence la próxima semana. Revisen los simuladores de la Unidad 3.', visible: true }, -1);
+  // Publicación programada: los alumnos la verán (y recibirán el aviso) dentro de tres días.
+  record('notice', { title: 'Guía para el segundo parcial', body: 'Ya está disponible la guía de repaso de las Unidades 2 y 3.', visible: true, publishAt: at(3, 8) }, -1);
 
   // Foros con participación de los alumnos (las publicaciones llevan el nombre de la lista del curso).
   const dudas = record('forum', { title: 'Dudas de la Unidad 1', body: 'Pregunten aquí sus dudas de cinemática. Si conocen la respuesta, ¡ayuden a sus compañeros!', visible: true }, -40);
@@ -280,6 +282,23 @@ Resolver problemas de movimiento con el teorema trabajo-energía y la conservaci
 
   // ---- Calificación: por categorías, con asistencia como una de ellas ----
   const cat = { tareas: id(), lab: id(), examen: id(), asistencia: id() };
+  // El cuestionario de la Unidad 2 cuenta en «Exámenes» (el diagnóstico no cuenta: es de práctica).
+  for (const r of records.filter((x) => x.kind === 'quiz')) {
+    const data = JSON.parse(r.data);
+    if (data.title === 'Cuestionario de la Unidad 2') r.data = JSON.stringify({ ...data, grade: { category: cat.examen, points: 5, policy: 'best' } });
+  }
+  // Seguimiento del contenido: cada alumno completó parte de los materiales publicados, según su perfil.
+  const visibleUnits = new Set(records.filter((r) => r.kind === 'module' && JSON.parse(r.data).visible !== false).map((r) => r.id));
+  const published = records.filter((r) => r.kind === 'material' && visibleUnits.has(JSON.parse(r.data).module));
+  const progress = [];
+  members.forEach((m, i) => {
+    published.forEach((mat, k) => {
+      const skill = profile.get(m.id).skill;
+      const r = rand();
+      if (r < skill - k * 0.06) progress.push({ member: m.id, record: mat.id, course: courseId, opened_at: at(-40 + k * 4, 18 + (i % 4)), completed_at: at(-40 + k * 4, 19 + (i % 4)) });
+      else if (r < skill + 0.2) progress.push({ member: m.id, record: mat.id, course: courseId, opened_at: at(-38 + k * 4, 20), completed_at: null });
+    });
+  });
   const categories = [
     { id: cat.tareas, course: courseId, name: 'Tareas', weight: 35, source: 'tasks', position: 0, updated: created },
     { id: cat.lab, course: courseId, name: 'Laboratorio', weight: 20, source: 'tasks', position: 1, updated: created },
@@ -434,7 +453,7 @@ Resolver problemas de movimiento con el teorema trabajo-energía y la conservaci
   });
   const attendanceSettings = { course: courseId, min_percent: 80, lates_per_absence: 3, excused_counts: 'present', updated: created };
 
-  return { course, members, records, rubric, categories, settings, tasks, submissions, history, attempts, sessions, attendance, attendanceSettings };
+  return { course, members, records, rubric, categories, settings, tasks, submissions, history, attempts, sessions, attendance, attendanceSettings, progress };
 }
 
 export const demoRoutes = {
@@ -462,6 +481,7 @@ export const demoRoutes = {
       bulk(db, 'aula_sessions', d.sessions),
       bulk(db, 'aula_attendance', d.attendance),
       bulk(db, 'aula_attendance_settings', [d.attendanceSettings]),
+      bulk(db, 'aula_progress', d.progress),
     ]);
     return json({ id: d.course.id, updated: nowIso() }, 201);
   },
