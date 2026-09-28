@@ -15,6 +15,9 @@ export const users = sqliteTable(
     role: text('role').notNull().default('student'),
     // Subirlo invalida todas las sesiones abiertas de esa persona.
     sessionVersion: integer('session_version').notNull().default(1),
+    // Migración 0008: academia y unidad académica del docente (registro de docentes).
+    academyId: text('academy_id').references(() => academies.id),
+    unitId: text('unit_id').references(() => units.id),
   },
   (t) => [uniqueIndex('aula_users_email').on(t.email)],
 );
@@ -91,8 +94,69 @@ export const courses = sqliteTable(
     groupName: text('group_name').notNull(),
     intro: text('intro').notNull().default(''),
     created: text('created').notNull(),
+    // Migración 0008: academia y unidad de quien creó el curso (para clasificar y hacer reportes).
+    academyId: text('academy_id').references(() => academies.id),
+    unitId: text('unit_id').references(() => units.id),
   },
   (t) => [index('aula_courses_owner').on(t.owner)],
+);
+
+// ---- Registro de docentes: catálogo de academias y unidades, y solicitudes (migración 0008) ----
+
+/** Academias (por ejemplo, Física, Matemáticas). Se desactivan en lugar de borrarse. */
+export const academies = sqliteTable(
+  'aula_academies',
+  {
+    id: text('id').primaryKey(),
+    name: text('name').notNull(),
+    active: integer('active').notNull().default(1),
+    created: text('created').notNull(),
+  },
+  (t) => [uniqueIndex('aula_academies_name').on(t.name), check('aula_academies_active_check', sql`active IN (0, 1)`)],
+);
+
+/** Unidades académicas (preparatorias, facultades o sedes del complejo regional). */
+export const units = sqliteTable(
+  'aula_units',
+  {
+    id: text('id').primaryKey(),
+    name: text('name').notNull(),
+    active: integer('active').notNull().default(1),
+    created: text('created').notNull(),
+  },
+  (t) => [uniqueIndex('aula_units_name').on(t.name), check('aula_units_active_check', sql`active IN (0, 1)`)],
+);
+
+/** Solicitudes para ser docente: la administración las aprueba o rechaza. */
+export const teacherRequests = sqliteTable(
+  'aula_teacher_requests',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id),
+    email: text('email').notNull(),
+    name: text('name').notNull(),
+    academyId: text('academy_id')
+      .notNull()
+      .references(() => academies.id),
+    unitId: text('unit_id')
+      .notNull()
+      .references(() => units.id),
+    subjects: text('subjects').notNull().default(''),
+    message: text('message').notNull().default(''),
+    status: text('status').notNull().default('pending'),
+    reason: text('reason').notNull().default(''),
+    created: text('created').notNull(),
+    decidedBy: text('decided_by'),
+    decidedAt: text('decided_at'),
+  },
+  (t) => [
+    index('aula_teacher_requests_status').on(t.status, t.created),
+    // Una sola solicitud pendiente por persona.
+    uniqueIndex('aula_teacher_requests_pending').on(t.userId).where(sql`status = 'pending'`),
+    check('aula_teacher_requests_status_check', sql`status IN ('pending', 'approved', 'rejected')`),
+  ],
 );
 
 export const deletedCourses = sqliteTable('aula_deleted_courses', {

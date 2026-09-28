@@ -57,6 +57,13 @@
       "when": 1790547044990,
       "tag": "0007_papelera",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1790556607338,
+      "tag": "0008_registro_docentes",
+      "breakpoints": true
     }
   ]
 }

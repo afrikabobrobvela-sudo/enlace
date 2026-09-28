@@ -481,3 +481,59 @@ dialog:not(.viewer)::backdrop { background: rgba(12, 28, 42, 0.45); backdrop-fil
 .course-picker > summary:hover,
 .course-picker[open] > summary { background: #eef3f7; }
 .course-picker-panel { border-radius: var(--radius); box-shadow: var(--shadow-lg); border-color: var(--line); }
+
+/* ---- Registro de docentes (registro.js) -------------------------------------------------------- */
+
+.badge-count {
+  display: inline-grid;
+  place-items: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  margin-left: 6px;
+  border-radius: 999px;
+  background: #d9480f;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  vertical-align: middle;
+}
+.register-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  flex-wrap: wrap;
+  margin: 0 0 20px;
+  padding: 18px 22px;
+  border-radius: var(--radius);
+  border: 1px solid #bfe0ea;
+  background: linear-gradient(120deg, #eef8fb, #f7fbfd);
+  box-shadow: var(--shadow-sm);
+}
+.register-banner strong { font-size: 16px; }
+.register-banner p { margin: 4px 0 0; color: var(--ink-soft); }
+.register-banner.is-pending { border-color: #f1d8a8; background: linear-gradient(120deg, #fff8ec, #fffcf6); }
+.register-reason { color: #9a3412 !important; }
+.admin-block { margin: 0 0 22px; }
+.request-card {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  flex-wrap: wrap;
+  padding: 16px 0;
+  border-top: 1px solid var(--line);
+}
+.request-main { display: grid; gap: 4px; min-width: 0; }
+.request-main p { margin: 2px 0; }
+.request-tags { display: flex; gap: 6px; flex-wrap: wrap; margin: 4px 0; }
+.request-message { color: var(--ink-soft); font-style: italic; }
+.request-actions { display: flex; gap: 8px; align-items: flex-start; }
+.request-history { margin-top: 12px; color: var(--ink-soft); font-size: 14px; }
+.catalog-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 22px; }
+.catalog-column h3 { font-size: 15px; margin: 0; }
+.catalog-list { list-style: none; margin: 8px 0 0; padding: 0; border: 1px solid var(--line); border-radius: var(--radius-sm); }
+.catalog-list li { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 9px 12px; border-top: 1px solid var(--line); }
+.catalog-list li:first-child { border-top: 0; }
+.catalog-list li.is-inactive span:first-child { color: var(--ink-faint); }
+.toolbar input[data-search] { width: min(420px, 100%); }

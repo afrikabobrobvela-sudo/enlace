@@ -3,6 +3,7 @@
 
 import { access, ownsCourse, requireAdmin, requireTeacher } from './access.js';
 import { attendanceRoutes } from './attendance.js';
+import { directoryRoutes, registrationStatus } from './directory.js';
 import { gradingRoutes } from './grading.js';
 import { clearSessionCookie, identity, lastLogins, revokeAllStatements } from './auth.js';
 import {
@@ -54,7 +55,7 @@ export async function api(request, env) {
     if (!['GET', 'HEAD'].includes(request.method)) requireSameOrigin(request);
     const ctx = { db: env.DB, env, user, url, request };
     const route = `${request.method} ${url.pathname}`;
-    const handler = routes[route] || attendanceRoutes[route] || gradingRoutes[route];
+    const handler = routes[route] || attendanceRoutes[route] || gradingRoutes[route] || directoryRoutes[route];
     if (handler) return await handler(ctx);
     if (request.method === 'GET' && url.pathname.startsWith('/api/file/')) return await downloadFile(ctx, url.pathname.slice(10));
     fail('Ruta no encontrada.', 404);
@@ -126,7 +127,7 @@ function assertRecordAvailable(r) {
 // ---- Rutas -------------------------------------------------------------------------------------
 
 const routes = {
-  'GET /api/me': async ({ user }) => json(publicUser(user)),
+  'GET /api/me': async ({ db, env, user }) => json({ ...publicUser(user), ...(await registrationStatus(db, env, user)) }),
 
   // Cierra la sesión en todos los dispositivos de la persona (por ejemplo, si perdió su teléfono).
   'POST /api/logout-all': async ({ db, user }) => {
@@ -178,13 +179,16 @@ const routes = {
     const id = crypto.randomUUID();
     await run(
       db,
-      'INSERT INTO aula_courses (id,owner,name,group_name,intro,created) VALUES (?,?,?,?,?,?)',
+      // El curso queda clasificado con la academia y la unidad de quien lo crea.
+      'INSERT INTO aula_courses (id,owner,name,group_name,intro,created,academy_id,unit_id) VALUES (?,?,?,?,?,?,?,?)',
       id,
       user.id,
       text(body.name, 150),
       text(body.group, 100),
       optionalText(body.intro, 10000),
       nowIso(),
+      user.academy_id ?? null,
+      user.unit_id ?? null,
     );
     return json({ id }, 201);
   },
@@ -796,19 +800,21 @@ const routes = {
     const ownerEmail = String(env.AULA_OWNER_EMAIL || '').toLowerCase();
     const rows = await all(
       db,
-      `SELECT g.email, g.name, g.role, g.added_at, u.id AS user_id,
+      `SELECT g.email, g.name, g.role, g.added_at, u.id AS user_id, a.name AS academy, n.name AS unit,
          (SELECT count(*) FROM aula_courses c WHERE c.owner=u.id
             AND NOT EXISTS (SELECT 1 FROM aula_deleted_courses d WHERE d.course=c.id)) AS courses
        FROM aula_teachers g LEFT JOIN aula_users u ON u.email=g.email
+       LEFT JOIN aula_academies a ON a.id=u.academy_id LEFT JOIN aula_units n ON n.id=u.unit_id
        ORDER BY g.name COLLATE NOCASE`,
     );
     const teachers = rows.map((r) => ({ ...r, owner: r.email === ownerEmail }));
     if (ownerEmail && !teachers.some((t) => t.owner)) {
       const owner = await one(
         db,
-        `SELECT u.id, u.name, (SELECT count(*) FROM aula_courses c WHERE c.owner=u.id
+        `SELECT u.id, u.name, a.name AS academy, n.name AS unit, (SELECT count(*) FROM aula_courses c WHERE c.owner=u.id
             AND NOT EXISTS (SELECT 1 FROM aula_deleted_courses d WHERE d.course=c.id)) AS courses
-         FROM aula_users u WHERE u.email=?`,
+         FROM aula_users u LEFT JOIN aula_academies a ON a.id=u.academy_id LEFT JOIN aula_units n ON n.id=u.unit_id
+         WHERE u.email=?`,
         ownerEmail,
       );
       teachers.unshift({
@@ -818,6 +824,8 @@ const routes = {
         added_at: '',
         user_id: owner?.id || null,
         courses: owner?.courses || 0,
+        academy: owner?.academy || null,
+        unit: owner?.unit || null,
         owner: true,
       });
     }

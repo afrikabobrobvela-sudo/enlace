@@ -21,6 +21,7 @@ async function renderTeachers() {
         <td class="sticky-name">${esc(t.name)}${t.owner ? '<div class="muted">Cuenta principal</div>' : ''}</td>
         <td>${esc(t.email)}</td>
         <td>${ROLE_LABELS[t.role] || esc(t.role)}</td>
+        <td>${t.academy ? esc(t.academy) : '<span class="muted">Sin registrar</span>'}${t.unit ? `<div class="table-subtext">${esc(t.unit)}</div>` : ''}</td>
         <td>${t.courses}</td>
         <td>${lastLogin(t)}</td>
         <td class="row-actions">${
@@ -41,14 +42,18 @@ async function renderTeachers() {
       </div>
       <div class="action-row">${button('Agregar docente', 'add-teacher')}</div>
     </div>
-    <div class="toolbar"><input data-search type="search" placeholder="Buscar por nombre o correo…" aria-label="Buscar docente"></div>
+    <section class="panel admin-block" id="teacherRequests"><p class="muted">Cargando solicitudes…</p></section>
+    <div class="toolbar"><input data-search type="search" placeholder="Buscar por nombre, correo, academia o unidad…" aria-label="Buscar docente"></div>
     <div class="table-wrap">
       <table class="teachers-table">
-        <thead><tr><th>Nombre</th><th>Correo</th><th>Rol</th><th>Cursos</th><th>Último acceso</th><th><span class="sr-only">Acciones</span></th></tr></thead>
-        <tbody>${rows || '<tr><td colspan="6">Todavía no hay docentes. Agrega el primero con su correo de Google.</td></tr>'}</tbody>
+        <thead><tr><th>Nombre</th><th>Correo</th><th>Rol</th><th>Academia y unidad</th><th>Cursos</th><th>Último acceso</th><th><span class="sr-only">Acciones</span></th></tr></thead>
+        <tbody>${rows || '<tr><td colspan="7">Todavía no hay docentes. Agrega el primero con su correo de Google.</td></tr>'}</tbody>
       </table>
     </div>
-    <p class="real-status">Administración puede crear cursos, ver todos los cursos y gestionar esta lista. Docente puede crear y gestionar sus propios cursos.</p>`;
+    <p class="real-status">Administración puede crear cursos, ver todos los cursos y gestionar esta lista. Docente puede crear y gestionar sus propios cursos.</p>
+    <section class="panel admin-block" id="catalogAdmin"><p class="muted">Cargando catálogo…</p></section>`;
+  renderTeacherRequests($('#teacherRequests'));
+  renderCatalogAdmin($('#catalogAdmin'));
 }
 
 function teacherFields({ name = '', email = '', role = 'teacher' } = {}, editing = false) {

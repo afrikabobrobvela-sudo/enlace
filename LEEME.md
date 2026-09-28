@@ -1,9 +1,19 @@
-# Enlace · versión 12.3
+# Enlace · versión 12.4
 
 Plataforma académica independiente para docentes y alumnos de cualquier academia (nació en la Academia de Física de la BUAP), con interfaz inspirada en Brightspace.
 No es el código de D2L Brightspace ni una plataforma oficial de la BUAP.
 
 Esta versión se despliega en **tu propia cuenta de Cloudflare** (Workers + D1 + R2, plan gratuito) y ya no depende de ChatGPT Sites.
+
+## Novedades de la versión 12.4 (registro de docentes)
+
+**Enlace abierto a docentes de cualquier academia, con aprobación.** Quien entra con su correo institucional (`@correo.buap.mx`) ve en *Mis cursos* el botón *Solicitar acceso de docente*: llena su nombre, **academia**, **unidad académica**, materias que imparte y un comentario. En *Docentes* aparece la solicitud (con un contador en el botón) y la administración la **aprueba** —la persona puede crear cursos de inmediato, sin volver a entrar— o la **rechaza** con un motivo que la persona ve y puede corregir. Cada docente da de alta sus propios cursos, y cada curso queda clasificado con la academia y unidad de quien lo crea.
+
+**Catálogo de academias y unidades.** En *Docentes → Academias y unidades académicas* agregas las opciones (una por renglón, pegadas desde Excel), cambias nombres o desactivas las que ya no se usan. Los duplicados se detectan sin importar mayúsculas ni acentos. **Mientras el catálogo esté vacío, nadie puede enviar solicitudes**: primero carga las academias y unidades del Complejo Regional Centro.
+
+**Docentes actuales.** La primera vez que entren después de la actualización (incluida la administración), Enlace les pide su academia y unidad.
+
+Los correos que pueden solicitar acceso se configuran con `TEACHER_EMAIL_DOMAINS` en `wrangler.toml` (por omisión `correo.buap.mx`). Dar de alta docentes a mano desde *Docentes → Agregar docente* sigue funcionando con cualquier correo. Migración nueva: **0008** (solo agrega tablas y columnas).
 
 ## Novedades de la versión 12.3 (diseño)
 
@@ -85,7 +95,7 @@ La pantalla muestra en vivo cuántos se han registrado y quiénes acaban de hace
 
 1. Descarga la versión nueva en una carpeta **nueva** (no encima de la anterior), o `git pull` si trabajas desde GitHub.
 2. Haz un respaldo desde esa carpeta: `npm run respaldo` (ver *Respaldos*).
-3. Doble clic en `configurar.cmd` (Windows) o `configurar.command` (Mac), o `npm run configurar`. Encuentra tu base `enlace-db` y tu almacenamiento, te pide tu correo de administración y tu dirección `.workers.dev`, descarga un respaldo, aplica las migraciones pendientes (0003: asistencia y borradores; 0004: registro con QR; 0005: categorías, rúbricas y equipos; 0006: sesiones; 0007: papelera) y publica. No cambia tus claves. Al pasar a la versión 12.1 cada persona vuelve a entrar con Google una vez (las sesiones ahora se registran en el servidor).
+3. Doble clic en `configurar.cmd` (Windows) o `configurar.command` (Mac), o `npm run configurar`. Encuentra tu base `enlace-db` y tu almacenamiento, te pide tu correo de administración y tu dirección `.workers.dev`, descarga un respaldo, aplica las migraciones pendientes (0003: asistencia y borradores; 0004: registro con QR; 0005: categorías, rúbricas y equipos; 0006: sesiones; 0007: papelera; 0008: registro de docentes) y publica. No cambia tus claves. Al pasar a la versión 12.1 cada persona vuelve a entrar con Google una vez (las sesiones ahora se registran en el servidor).
 
 Si prefieres hacerlo a mano: copia tu `database_id` y tu correo del `wrangler.toml` anterior al nuevo (y `ALLOWED_EMAIL_DOMAINS` si lo usabas) y ejecuta `npm install`, `npm run db:migrate` y `npm run deploy`, **en ese orden**: si publicas antes de migrar, Asistencia y Calificaciones fallarán hasta que apliques la migración.
 
@@ -145,11 +155,11 @@ src/server/gradebook.js    Actividades, entregas, calificaciones (y borradores),
 src/server/attendance.js   Asistencia: sesiones, registros, reglas y registro con QR
 src/server/grading.js      Categorías, reglas de la calificación final y banco de rúbricas
 src/server/api.js          Rutas de la API, equipos en lote y vista previa de archivos
-src/public/                Interfaz (HTML, CSS, JS). Versión 10: attendance.js, preview.js, teams.js, math.js. Versión 12.1: trash.js. Versión 12.2: richtext.js, compress.js, contenido.css. Versión 12.3: tema.css.
+src/public/                Interfaz (HTML, CSS, JS). Versión 10: attendance.js, preview.js, teams.js, math.js. Versión 12.1: trash.js. Versión 12.2: richtext.js, compress.js, contenido.css. Versión 12.3: tema.css. Versión 12.4: registro.js.
                            Versión 11: qr.js, checkin.js, zip.js, risk.js. Versión 12: grading.js, rubrics.js
 src/public/vendor/         pdf.js, KaTeX y la fuente Inter, con sus licencias
 src/generated/             Interfaz incrustada; la genera `npm run build` (no se edita)
-drizzle/                   Migraciones SQL (0000 a 0007) y metadatos
+drizzle/                   Migraciones SQL (0000 a 0008) y metadatos
 db/schema.ts               Descripción del esquema con Drizzle
 scripts/                   Compilación, configuración, respaldos y pruebas
 .github/workflows/         Pruebas automáticas en GitHub
@@ -235,10 +245,11 @@ La cookie de sesión usa el prefijo `__Host-`, que exige conexión segura. Chrom
 
 ## Pruebas
 
-`npm test` compila la interfaz y ejecuta diecisiete suites con una base SQLite temporal (con llaves foráneas activas, como D1). No tocan tu base real.
+`npm test` compila la interfaz y ejecuta dieciocho suites con una base SQLite temporal (con llaves foráneas activas, como D1). No tocan tu base real.
 
 - `test-api.mjs`: todas las verificaciones de la versión 8 más sesiones firmadas, cabeceras falsificadas, ponderaciones, restricciones de la base, docentes, inscripción masiva y el límite de 50 consultas.
 - `test-papelera.mjs`: eliminar y restaurar contenido, actividades (con sus entregas y calificaciones), evaluaciones y publicaciones de foro; permisos de moderación; nombres de alumnos en foros; cuotas de archivos.
+- `test-registro.mjs`: catálogo de academias y unidades, solicitud con correo institucional, aprobación o rechazo, y clasificación de docentes y cursos.
 - `test-contenido.mjs`: archivos en unidades (con permisos según la visibilidad) y mostrar u ocultar con un toque.
 - `test-formato-ui.mjs`: texto con formato, fórmulas intactas y protección contra HTML, enlaces `javascript:` e imágenes externas.
 - `test-auth.mjs`: flujo completo de Google y del enlace por correo con respuestas simuladas (estado, nonce, audiencia, correo verificado, dominios, redirecciones abiertas, uso único, revocación en el servidor, cierre de sesión por dispositivo y en todos los dispositivos).
