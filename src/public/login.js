@@ -8,6 +8,8 @@ const LOGIN_ERRORS = {
   domain: 'Entra con tu correo institucional de la BUAP.',
   link: 'Ese enlace ya se usó o venció. Pide uno nuevo.',
   google_disabled: 'El acceso con Google todavía no está configurado en este servidor. Avisa a la coordinación.',
+  microsoft: 'Microsoft no confirmó tu identidad. Entra con tu cuenta institucional y vuelve a intentarlo.',
+  microsoft_disabled: 'El acceso con Microsoft todavía no está configurado en este servidor. Avisa a la coordinación.',
 };
 
 function currentLoginError() {
@@ -30,8 +32,12 @@ function renderLogin(methods = { google: true, email: false }) {
   document.body.classList.add('signed-out');
   const error = currentLoginError();
   const returnTo = encodeURIComponent(currentReturnPath());
+  // Microsoft primero: es la cuenta institucional (correo BUAP en Microsoft 365).
+  const microsoft = methods.microsoft
+    ? `<a class="primary login-microsoft" href="/auth/microsoft/start?return_to=${returnTo}"><svg viewBox="0 0 21 21" aria-hidden="true" width="18" height="18"><rect width="10" height="10" fill="#f25022"/><rect x="11" width="10" height="10" fill="#7fba00"/><rect y="11" width="10" height="10" fill="#00a4ef"/><rect x="11" y="11" width="10" height="10" fill="#ffb900"/></svg>Continuar con Microsoft (correo BUAP)</a>`
+    : '';
   const google = methods.google
-    ? `<a class="primary login-google" href="/auth/google/start?return_to=${returnTo}">Continuar con Google</a>`
+    ? `<a class="${methods.microsoft ? 'secondary' : 'primary'} login-google" href="/auth/google/start?return_to=${returnTo}">Continuar con Google</a>`
     : '';
   const email = methods.email
     ? `<form class="login-email" id="loginEmail" novalidate>
@@ -44,7 +50,7 @@ function renderLogin(methods = { google: true, email: false }) {
        </form>`
     : '';
   const unavailable =
-    !methods.google && !methods.email
+    !methods.google && !methods.microsoft && !methods.email
       ? '<p class="login-alert">No hay un método de acceso configurado en este servidor. Avisa a la coordinación.</p>'
       : '';
   $('#main').innerHTML = `
@@ -66,7 +72,7 @@ function renderLogin(methods = { google: true, email: false }) {
       <p class="login-lead">Usa el mismo correo con el que tu docente te inscribió. Si eres docente, usa el correo que registró la coordinación.</p>
       ${error ? `<p class="login-alert" role="alert">${esc(error)}</p>` : ''}
       ${unavailable}
-      ${google}
+      <div class="login-buttons">${microsoft}${google}</div>
       ${email}
       <p class="login-note">Enlace no guarda contraseñas. Al terminar, regresarás a la página donde estabas.</p>
     </section>

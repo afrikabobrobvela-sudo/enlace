@@ -52,7 +52,7 @@ try {
   await session('owner'); // el usuario debe existir, si no la prueba de cabeceras falsas pasaría por casualidad
   const anonymous = await api(new Request('https://test.local/api/me'), env);
   assert.equal(anonymous.status, 401);
-  assert.deepEqual((await anonymous.json()).login, { google: true, email: false }, '401 indica los métodos de acceso');
+  assert.deepEqual((await anonymous.json()).login, { google: true, microsoft: false, email: false }, '401 indica los métodos de acceso');
   checks++;
   const forged = await api(
     new Request('https://test.local/api/me', {

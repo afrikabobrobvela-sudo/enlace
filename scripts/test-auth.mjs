@@ -141,6 +141,54 @@ assert.equal(noSecret.status, 503);
 assert.match((await noSecret.json()).error, /SESSION_SECRET/);
 checks++;
 
+// ---- Microsoft (correo institucional) ----
+const TENANT = '11111111-2222-3333-4444-555555555555';
+const msEnv = { ...baseEnv, MICROSOFT_CLIENT_ID: 'ms-app', MICROSOFT_CLIENT_SECRET: 'ms-secreto', MICROSOFT_TENANT_ID: TENANT };
+async function microsoftLogin(claims, { env = msEnv, tamperState = false } = {}) {
+  const start = await fetchWorker('/auth/microsoft/start?return_to=/curso', {}, env);
+  assert.equal(start.status, 302);
+  const location = new URL(start.headers.get('location'));
+  assert.equal(location.origin + location.pathname, `https://login.microsoftonline.com/${TENANT}/oauth2/v2.0/authorize`);
+  assert.equal(location.searchParams.get('redirect_uri'), ORIGIN + '/auth/microsoft/callback');
+  const nonce = location.searchParams.get('nonce');
+  globalThis.fetch = async (url, init) => {
+    assert.equal(String(url), `https://login.microsoftonline.com/${TENANT}/oauth2/v2.0/token`);
+    assert.equal(new URLSearchParams(init.body).get('client_secret'), 'ms-secreto');
+    const payload = { iss: `https://login.microsoftonline.com/${TENANT}/v2.0`, tid: TENANT, aud: 'ms-app', exp: Date.now() / 1000 + 300, nonce, oid: 'oid-1', ...claims };
+    return new Response(JSON.stringify({ id_token: `${b64({ alg: 'RS256' })}.${b64(payload)}.firma` }), { status: 200 });
+  };
+  const callback = await fetchWorker(
+    `/auth/microsoft/callback?code=abc&state=${tamperState ? 'otro' : location.searchParams.get('state')}`,
+    { headers: { cookie: cookieHeader(cookiesFrom(start)) } },
+    env,
+  );
+  globalThis.fetch = realFetch;
+  checks++;
+  return callback;
+}
+for (const tenant of ['', 'common', 'organizations']) {
+  const off = await fetchWorker('/auth/microsoft/start', {}, { ...msEnv, MICROSOFT_TENANT_ID: tenant });
+  assert.equal(off.headers.get('location'), '/?login_error=microsoft_disabled', 'Sin inquilino fijo no se activa: ' + tenant);
+  checks++;
+}
+const msOnly = await fetchWorker('/api/me', {}, msEnv);
+assert.deepEqual((await msOnly.json()).login, { google: true, microsoft: true, email: false });
+const upn = 'luis@correo.buap.mx';
+assert.equal((await microsoftLogin({ preferred_username: upn }, { tamperState: true })).headers.get('location'), '/?login_error=expired');
+assert.equal((await microsoftLogin({ preferred_username: upn, nonce: 'otro' })).headers.get('location'), '/?login_error=microsoft');
+assert.equal((await microsoftLogin({ preferred_username: upn, aud: 'otra-app' })).headers.get('location'), '/?login_error=microsoft');
+assert.equal((await microsoftLogin({ preferred_username: upn, tid: '99999999-2222-3333-4444-555555555555', iss: 'https://login.microsoftonline.com/99999999-2222-3333-4444-555555555555/v2.0' })).headers.get('location'), '/?login_error=microsoft', 'Otro inquilino');
+assert.equal((await microsoftLogin({ preferred_username: 'alguien@gmail.com' })).headers.get('location'), '/?login_error=domain');
+const msOk = await microsoftLogin({ preferred_username: 'Luis@Correo.Buap.mx', name: 'Luis Gómez' });
+assert.equal(msOk.headers.get('location'), '/curso');
+const luisMs = await (await me(cookiesFrom(msOk))).json();
+assert.equal(luisMs.email, upn);
+// La misma persona que ya entraba con Google (mismo correo) conserva su cuenta.
+store.raw().prepare("INSERT INTO aula_users (id,email,name,role) VALUES ('u-previo','ana@correo.buap.mx','Ana','student')").run();
+const anaMs = await microsoftLogin({ preferred_username: 'ana@correo.buap.mx', oid: 'oid-ana' });
+assert.equal((await (await me(cookiesFrom(anaMs))).json()).id, 'u-previo');
+checks += 3;
+
 // ---- Enlace por correo (solo con dominio verificado en Resend) ----
 const post = (path, body, env) =>
   fetchWorker(path, { method: 'POST', headers: { Origin: ORIGIN, 'X-Aula-Request': '1', 'Content-Type': 'application/json' }, body: JSON.stringify(body) }, env);
@@ -148,7 +196,7 @@ assert.equal((await post('/auth/email/start', { email: 'x@example.test' })).stat
 checks++;
 
 const emailEnv = { ...baseEnv, RESEND_API_KEY: 're_prueba', EMAIL_FROM: 'Enlace <aula@fisica.example>' };
-assert.deepEqual((await (await fetchWorker('/api/me', {}, emailEnv)).json()).login, { google: true, email: true });
+assert.deepEqual((await (await fetchWorker('/api/me', {}, emailEnv)).json()).login, { google: true, microsoft: false, email: true });
 const sent = [];
 globalThis.fetch = async (url, init) => {
   sent.push({ url: String(url), body: JSON.parse(init.body), auth: init.headers.Authorization });

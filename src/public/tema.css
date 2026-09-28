@@ -570,3 +570,7 @@ dialog:not(.viewer)::backdrop { background: rgba(12, 28, 42, 0.45); backdrop-fil
   #previewBar { position: static; padding: 10px 16px; }
   #topnav > .view-toggle { margin-left: 0; }
 }
+
+/* ---- Acceso con Microsoft y Google ------------------------------------------------------------- */
+.login-buttons { display: grid; gap: 10px; margin: 6px 0 4px; }
+.login-buttons a { display: flex; align-items: center; justify-content: center; gap: 10px; min-height: 48px; text-decoration: none; }

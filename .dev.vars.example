@@ -9,6 +9,11 @@ SESSION_SECRET=
 GOOGLE_CLIENT_ID=
 GOOGLE_CLIENT_SECRET=
 
+# Opcional: acceso con Microsoft (correo institucional). Ver LEEME.md, "Acceso con Microsoft".
+# MICROSOFT_CLIENT_ID=
+# MICROSOFT_CLIENT_SECRET=
+# MICROSOFT_TENANT_ID=
+
 # Opcional, solo con un dominio verificado en Resend (sin dominio, Resend solo entrega a tu propio correo).
 # RESEND_API_KEY=
 # EMAIL_FROM=Enlace <aula@tu-dominio.mx>

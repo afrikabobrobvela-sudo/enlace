@@ -227,6 +227,26 @@ Para cambios posteriores basta con `npm run deploy`. Si una versión futura trae
 
 En `wrangler.toml` descomenta `ALLOWED_EMAIL_DOMAINS` (por ejemplo `alumno.buap.mx,correo.buap.mx`). Quien intente entrar con otro correo verá "Entra con tu correo institucional de la BUAP". Úsalo solo si todas las personas tienen su correo institucional como cuenta de Google.
 
+### Opcional: acceso con Microsoft (correo institucional)
+
+Si el correo de la BUAP está en Microsoft 365, el botón **Continuar con Microsoft (correo BUAP)** aparece arriba de Google. Solo acepta cuentas del directorio de la BUAP (no de otras organizaciones) y correos `@correo.buap.mx`, `@alumno.buap.mx` o `@buap.mx` (se cambia con `MICROSOFT_EMAIL_DOMAINS`). Quien antes entraba con Google con el mismo correo conserva su cuenta y sus cursos.
+
+Hay que registrar Enlace en el directorio de la BUAP. Puede requerir que el área de TI de la BUAP lo apruebe o lo haga por ti:
+
+1. En [portal.azure.com](https://portal.azure.com) → *Microsoft Entra ID* → *App registrations* → *New registration*.
+2. Nombre: `Enlace`. *Supported account types*: **Accounts in this organizational directory only**.
+3. *Redirect URI*: tipo **Web**, `https://enlace.TU-SUBDOMINIO.workers.dev/auth/microsoft/callback` (y `http://localhost:8787/auth/microsoft/callback` para pruebas locales).
+4. En *Certificates & secrets* → *New client secret*; copia el **Value** (solo se muestra una vez; anota cuándo vence para renovarlo).
+5. En *Overview* copia el **Application (client) ID** y el **Directory (tenant) ID**.
+6. Guarda los datos:
+
+```
+npx wrangler secret put MICROSOFT_CLIENT_ID
+npx wrangler secret put MICROSOFT_CLIENT_SECRET
+```
+
+y en `[vars]` de `wrangler.toml` agrega `MICROSOFT_TENANT_ID = "el Directory (tenant) ID"`. Publica con `npm run deploy`. Por seguridad, Enlace no activa Microsoft si el tenant es `common` u `organizations`.
+
 ### Opcional: acceso con enlace por correo
 
 Requiere un dominio propio verificado en [Resend](https://resend.com). Con el dominio listo:

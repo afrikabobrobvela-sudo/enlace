@@ -41,8 +41,18 @@ const GOOGLE_ISSUERS = ['https://accounts.google.com', 'accounts.google.com'];
 export function providers(env) {
   return {
     google: Boolean(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET),
+    microsoft: Boolean(env.MICROSOFT_CLIENT_ID && env.MICROSOFT_CLIENT_SECRET && microsoftTenant(env)),
     email: Boolean(env.RESEND_API_KEY && env.EMAIL_FROM),
   };
+}
+
+/**
+ * Inquilino (tenant) de Microsoft Entra de la institución. Debe ser un id o dominio concreto:
+ * con "common" u "organizations" cualquiera podría crear su propio inquilino y poner el correo que quisiera.
+ */
+function microsoftTenant(env) {
+  const tenant = String(env.MICROSOFT_TENANT_ID || '').trim();
+  return tenant && !['common', 'organizations', 'consumers'].includes(tenant.toLowerCase()) ? tenant : '';
 }
 
 /** Usuario de la sesión actual. Lanza 401 (con los métodos de acceso disponibles) si no hay sesión válida. */
@@ -77,6 +87,10 @@ export async function auth(request, env) {
         return await googleStart(request, env);
       case 'GET /auth/google/callback':
         return await googleCallback(request, env);
+      case 'GET /auth/microsoft/start':
+        return await microsoftStart(request, env);
+      case 'GET /auth/microsoft/callback':
+        return await microsoftCallback(request, env);
       case 'POST /auth/email/start':
         return await emailStart(request, env);
       case 'GET /auth/email/verify':
@@ -157,6 +171,85 @@ async function googleCallback(request, env) {
   if (!emailAllowed(env, address)) return loginError('domain', [clearOauth]);
   const user = await completeLogin(env, { provider: 'google', subject: claims.sub, email: address, name: claims.name });
   return redirect(pending.returnTo, [clearOauth, await sessionCookie(user, env)]);
+}
+
+// ---- Microsoft (correo institucional en Microsoft 365 / Entra ID) -----------------------------
+
+const microsoftBase = (env) => `https://login.microsoftonline.com/${encodeURIComponent(microsoftTenant(env))}/oauth2/v2.0`;
+
+async function microsoftStart(request, env) {
+  if (!providers(env).microsoft) return loginError('microsoft_disabled');
+  const url = new URL(request.url);
+  const state = randomToken();
+  const nonce = randomToken();
+  const returnTo = safeReturnPath(url.searchParams.get('return_to'));
+  const oauth = await signToken({ p: 'microsoft', state, nonce, returnTo, exp: Math.floor(Date.now() / 1000) + 600 }, env.SESSION_SECRET);
+  const params = new URLSearchParams({
+    client_id: env.MICROSOFT_CLIENT_ID,
+    redirect_uri: url.origin + '/auth/microsoft/callback',
+    response_type: 'code',
+    response_mode: 'query',
+    scope: 'openid email profile',
+    state,
+    nonce,
+    prompt: 'select_account',
+  });
+  return redirect(`${microsoftBase(env)}/authorize?${params}`, [cookie(OAUTH_COOKIE, oauth, 600)]);
+}
+
+async function microsoftCallback(request, env) {
+  const url = new URL(request.url);
+  const clearOauth = cookie(OAUTH_COOKIE, '', 0);
+  const pending = await verifyToken(readCookie(request, OAUTH_COOKIE), env.SESSION_SECRET);
+  if (url.searchParams.get('error')) return loginError('cancelled', [clearOauth]);
+  if (!providers(env).microsoft) return loginError('microsoft_disabled', [clearOauth]);
+  if (!pending || pending.p !== 'microsoft' || pending.state !== url.searchParams.get('state')) return loginError('expired', [clearOauth]);
+
+  const response = await fetch(`${microsoftBase(env)}/token`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      code: url.searchParams.get('code') || '',
+      client_id: env.MICROSOFT_CLIENT_ID,
+      client_secret: env.MICROSOFT_CLIENT_SECRET,
+      redirect_uri: url.origin + '/auth/microsoft/callback',
+      grant_type: 'authorization_code',
+      scope: 'openid email profile',
+    }),
+  });
+  if (!response.ok) {
+    console.error('aula-auth microsoft token', response.status);
+    return loginError('microsoft', [clearOauth]);
+  }
+  // Igual que con Google, el id_token llega directo del endpoint de Microsoft por TLS; se validan sus afirmaciones.
+  // Solo se acepta el inquilino de la institución (tid): así el correo (UPN) lo administra la propia institución.
+  const claims = decodeJwtPayload((await response.json()).id_token);
+  const tenantId = claims?.tid;
+  const address = String(claims?.preferred_username || claims?.email || '').toLowerCase();
+  const valid =
+    claims &&
+    typeof tenantId === 'string' &&
+    claims.iss === `https://login.microsoftonline.com/${tenantId}/v2.0` &&
+    (!/^[0-9a-f-]{36}$/i.test(microsoftTenant(env)) || tenantId.toLowerCase() === microsoftTenant(env).toLowerCase()) &&
+    claims.aud === env.MICROSOFT_CLIENT_ID &&
+    claims.exp > Date.now() / 1000 &&
+    claims.nonce === pending.nonce &&
+    typeof claims.oid === 'string' &&
+    /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(address);
+  if (!valid) return loginError('microsoft', [clearOauth]);
+  if (!microsoftDomainAllowed(env, address)) return loginError('domain', [clearOauth]);
+  if (!emailAllowed(env, address)) return loginError('domain', [clearOauth]);
+  const user = await completeLogin(env, { provider: 'microsoft', subject: `${tenantId}:${claims.oid}`, email: address, name: claims.name });
+  return redirect(pending.returnTo, [clearOauth, await sessionCookie(user, env)]);
+}
+
+/** Dominios que se aceptan por Microsoft (MICROSOFT_EMAIL_DOMAINS; por omisión los de la BUAP). */
+function microsoftDomainAllowed(env, address) {
+  const domains = String(env.MICROSOFT_EMAIL_DOMAINS ?? 'correo.buap.mx,alumno.buap.mx,buap.mx')
+    .split(',')
+    .map((d) => d.trim().toLowerCase())
+    .filter(Boolean);
+  return domains.includes(address.split('@')[1]);
 }
 
 function decodeJwtPayload(token) {

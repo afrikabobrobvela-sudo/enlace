@@ -35,6 +35,9 @@ assert.match(both.html, /O recibe un enlace de acceso en tu correo/);
 assert.doesNotMatch(both.html, /login-alert/, 'Sin error, no hay aviso');
 
 // Sin ningún método configurado: mensaje claro en lugar de un botón que no funciona.
+const ms = await boot({ login: { google: true, microsoft: true, email: false } });
+assert.match(ms.html, /href="\/auth\/microsoft\/start\?return_to=[^"]*">.*Continuar con Microsoft \(correo BUAP\)</s);
+assert.ok(ms.html.indexOf('login-microsoft') < ms.html.indexOf('login-google'), 'Microsoft (institucional) va primero');
 const none = await boot({ login: { google: false, email: false } });
 assert.match(none.html, /No hay un método de acceso configurado/);
 assert.doesNotMatch(none.html, /auth\/google\/start/);
