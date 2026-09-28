@@ -100,6 +100,9 @@ export const courses = sqliteTable(
     // Migración 0008: academia y unidad de quien creó el curso (para clasificar y hacer reportes).
     academyId: text('academy_id').references(() => academies.id),
     unitId: text('unit_id').references(() => units.id),
+    // Migración 0010: periodo (por ejemplo "Otoño 2026") y archivo (solo lectura).
+    period: text('period').notNull().default(''),
+    archivedAt: text('archived_at'),
   },
   (t) => [index('aula_courses_owner').on(t.owner)],
 );
@@ -213,6 +216,8 @@ export const files = sqliteTable(
     size: integer('size').notNull(),
     mime: text('mime').notNull(),
     created: text('created').notNull(),
+    // Migración 0010: objeto en R2. NULL = el id del archivo. Los cursos copiados comparten el objeto original.
+    r2Key: text('r2_key'),
   },
   (t) => [index('aula_files_course').on(t.course)],
 );

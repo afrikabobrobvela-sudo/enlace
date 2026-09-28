@@ -576,3 +576,10 @@ dialog:not(.viewer)::backdrop { background: rgba(12, 28, 42, 0.45); backdrop-fil
 .login-buttons a { display: flex; align-items: center; justify-content: center; gap: 10px; min-height: 48px; text-decoration: none; }
 .privacy-gate { max-width: 720px; margin: 24px auto; }
 .privacy-gate .check-label { align-items: flex-start; margin: 16px 0; }
+
+/* ---- Periodos y cursos archivados ------------------------------------------------------------ */
+.period-pill { background: #e8f2f8; color: var(--brand-2); margin-left: 6px; }
+.archived-pill { background: #eef0f4; color: #5f6b76; margin-left: 6px; }
+article.course.is-archived .course-cover { filter: grayscale(0.85) brightness(1.05); }
+article.course.is-archived { opacity: 0.92; }
+#previewBar.is-archived { background: #eef2f6; border-bottom-color: #cfd9e2; color: #334a5c; }

@@ -309,7 +309,7 @@ function renderMembers() {
   $('#main').innerHTML = `<h1>Listado de alumnos</h1><div class="toolbar">${teaches() ? button('Inscribir alumno', 'new-member') + button('Importar lista', 'bulk-members', '', 'secondary') : ''}<input data-search type="search" placeholder="Buscar…" aria-label="Buscar alumno"></div>${teaches() ? '<p class="real-status">La inscripción vincula el curso al correo del alumno: verá el curso cuando entre con ese mismo correo (su cuenta de Google). No se envían invitaciones.</p>' : ''}<div class="table-wrap"><table><thead><tr><th>Nombre</th>${teaches() ? '<th>Matrícula</th><th>Correo</th><th>Estado</th><th>Acción</th>' : ''}</tr></thead><tbody>${current.members.map(m => `<tr data-search-row><td>${esc(m.name)}</td>${teaches() ? `<td>${esc(m.matricula)}</td><td>${esc(m.email)}</td><td>${m.user_id ? 'Cuenta vinculada' : 'Pendiente de ingreso'}</td><td>${button('Retirar', 'remove-member', m.id, 'text-btn')}</td>` : ''}</tr>`).join('') || '<tr><td>No hay alumnos inscritos.</td></tr>'}</tbody></table></div>`;
 }
 function renderAdmin() {
-  $('#main').innerHTML = `<h1>Administración del curso</h1><section class="admin-section"><h2>Configuración</h2><div class="admin-links">${button('Información del curso', 'edit-course', '', 'table-link')}${button('Exportar respaldo del curso', 'backup', '', 'table-link')}${current.canDelete ? button('Eliminar curso / grupo', 'delete-course', current.course.id, 'danger-link') : ''}</div></section><section class="admin-section"><h2>Administración de estudiantes</h2><div class="admin-links"><button class="table-link" data-section="members">Listado de alumnos</button><button class="table-link" data-section="groups">Equipos de trabajo</button><button class="table-link" data-section="progress">Progreso de la clase</button></div></section><section class="admin-section"><h2>Evaluación</h2><div class="admin-links"><button class="table-link" data-section="tasks">Actividades</button><button class="table-link" data-section="grades">Calificaciones</button><button class="table-link" data-section="quizzes">Evaluaciones</button></div></section><section class="admin-section"><h2>Papelera</h2><div class="admin-links"><button class="table-link" data-section="trash">Elementos eliminados</button></div><p class="muted">Lo que eliminas del curso se puede restaurar desde aquí con todo su contenido, entregas y calificaciones.</p></section><p class="real-status">El respaldo exporta registros y metadatos en JSON. Descarga los archivos adjuntos por separado. Conserva copias periódicas fuera de la plataforma.</p>`;
+  $('#main').innerHTML = `<h1>Administración del curso</h1><section class="admin-section"><h2>Configuración</h2><div class="admin-links">${button('Información del curso', 'edit-course', '', 'table-link')}${button('Copiar a un nuevo periodo', 'copy-course', '', 'table-link')}${current.canDelete ? button(current.course.archived_at ? 'Desarchivar curso' : 'Archivar curso', 'archive-course', '', 'table-link') : ''}${button('Exportar respaldo del curso', 'backup', '', 'table-link')}${current.canDelete ? button('Eliminar curso / grupo', 'delete-course', current.course.id, 'danger-link') : ''}</div></section><section class="admin-section"><h2>Administración de estudiantes</h2><div class="admin-links"><button class="table-link" data-section="members">Listado de alumnos</button><button class="table-link" data-section="groups">Equipos de trabajo</button><button class="table-link" data-section="progress">Progreso de la clase</button></div></section><section class="admin-section"><h2>Evaluación</h2><div class="admin-links"><button class="table-link" data-section="tasks">Actividades</button><button class="table-link" data-section="grades">Calificaciones</button><button class="table-link" data-section="quizzes">Evaluaciones</button></div></section><section class="admin-section"><h2>Papelera</h2><div class="admin-links"><button class="table-link" data-section="trash">Elementos eliminados</button></div><p class="muted">Lo que eliminas del curso se puede restaurar desde aquí con todo su contenido, entregas y calificaciones.</p></section><p class="real-status">El respaldo exporta registros y metadatos en JSON. Descarga los archivos adjuntos por separado. Conserva copias periódicas fuera de la plataforma.</p>`;
 }
 async function save(kind, data, old) {
   return request('/api/record', {
@@ -456,12 +456,30 @@ function groupModal(old) {
 }
 function courseModal(edit = false) {
   const c = edit ? current.course : null;
-  modal(edit ? 'Información del curso' : 'Crear curso', field('Nombre de la materia', 'name', c?.name || '', 'text', 'required maxlength="150"') + field('Grupo o periodo', 'group', c?.group_name || '', 'text', 'required maxlength="100"') + textarea('Presentación', 'intro', c?.intro || '', false), f => request(edit ? '/api/course' : '/api/courses', {
+  modal(edit ? 'Información del curso' : 'Crear curso', field('Nombre de la materia', 'name', c?.name || '', 'text', 'required maxlength="150"') + field('Grupo', 'group', c?.group_name || '', 'text', 'required maxlength="100"') + field('Periodo', 'period', c?.period || '', 'text', 'maxlength="60" placeholder="Por ejemplo: Otoño 2026"') + textarea('Presentación', 'intro', c?.intro || '', false), f => request(edit ? '/api/course' : '/api/courses', {
     course: c?.id,
     name: f.get('name'),
     group: f.get('group'),
+    period: f.get('period'),
     intro: f.get('intro')
   }));
+}
+/** Copia la estructura del curso actual a un curso nuevo (siguiente periodo) y lo abre. */
+function copyCourseModal() {
+  const c = current.course;
+  modal('Copiar a un nuevo periodo', `<p>Se crea un curso nuevo con las unidades, materiales, noticias, foros, evaluaciones, actividades, categorías y reglas de calificación y de asistencia de <strong>${esc(c.name)}</strong>. No se copian alumnos, entregas, calificaciones, publicaciones de foro ni equipos. Los archivos se comparten: no ocupan espacio extra.</p>` + field('Nombre de la materia', 'name', c.name, 'text', 'required maxlength="150"') + field('Grupo', 'group', c.group_name, 'text', 'required maxlength="100"') + field('Periodo', 'period', '', 'text', 'maxlength="60" placeholder="Por ejemplo: Primavera 2027"') + '<label class="check-label"><input type="checkbox" name="keepDates"> Conservar las fechas de las actividades (normalmente se dejan vacías para el nuevo periodo)</label>', async (f) => {
+    const { id, copied } = await request('/api/course/copy', { course: c.id, name: f.get('name'), group: f.get('group'), period: f.get('period'), keepDates: f.get('keepDates') === 'on' });
+    await openCourse(id);
+    return `Curso copiado: ${copied.content} elementos de contenido y ${copied.tasks} actividades. Revisa las fechas e inscribe a tus alumnos.`;
+  }, 'Copiar curso');
+}
+async function toggleArchive() {
+  const archived = !current.course.archived_at;
+  if (archived && !confirm('¿Archivar este curso? Quedará de solo lectura para todos: se puede consultar y descargar, pero no hacer entregas ni cambios. Puedes desarchivarlo cuando quieras.'))
+    return;
+  await request('/api/course/archive', { course: current.course.id, archived });
+  await reload();
+  toast(archived ? 'Curso archivado.' : 'El curso vuelve a estar activo.');
 }
 /** Nombre del archivo descargado sin acentos: con acentos, Chromium descarta el nombre y guarda "download". */
 function asciiFileName(name) {
@@ -552,6 +570,12 @@ document.addEventListener('click', async (e) => {
         break;
       case 'edit-course':
         courseModal(true);
+        break;
+      case 'copy-course':
+        copyCourseModal();
+        break;
+      case 'archive-course':
+        await toggleArchive();
         break;
       case 'new-module':
         simpleRecord('module');

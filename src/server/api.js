@@ -5,6 +5,7 @@ import { access, ownsCourse, requireAdmin, requireTeacher, viewAs } from './acce
 import { attendanceRoutes } from './attendance.js';
 import { directoryRoutes, registrationStatus } from './directory.js';
 import { PRIVACY_VERSION, privacyAccepted, privacyRoutes } from './privacy.js';
+import { assertWritable, periodRoutes } from './periods.js';
 import { gradingRoutes } from './grading.js';
 import { clearSessionCookie, identity, lastLogins, revokeAllStatements } from './auth.js';
 import {
@@ -53,10 +54,14 @@ export async function api(request, env) {
   try {
     const user = await identity(request, env);
     const url = new URL(request.url);
-    if (!['GET', 'HEAD'].includes(request.method)) requireSameOrigin(request);
-    const ctx = { db: env.DB, env, user, url, request };
     const route = `${request.method} ${url.pathname}`;
-    const handler = routes[route] || attendanceRoutes[route] || gradingRoutes[route] || directoryRoutes[route] || privacyRoutes[route];
+    if (!['GET', 'HEAD'].includes(request.method)) {
+      requireSameOrigin(request);
+      await assertWritable(env.DB, route, url, request); // un curso archivado es de solo lectura
+    }
+    const ctx = { db: env.DB, env, user, url, request };
+    const handler =
+      routes[route] || attendanceRoutes[route] || gradingRoutes[route] || directoryRoutes[route] || privacyRoutes[route] || periodRoutes[route];
     if (handler) return await handler(ctx);
     if (request.method === 'GET' && url.pathname.startsWith('/api/file/')) return await downloadFile(ctx, url.pathname.slice(10));
     fail('Ruta no encontrada.', 404);
@@ -182,7 +187,7 @@ const routes = {
     await run(
       db,
       // El curso queda clasificado con la academia y la unidad de quien lo crea.
-      'INSERT INTO aula_courses (id,owner,name,group_name,intro,created,academy_id,unit_id) VALUES (?,?,?,?,?,?,?,?)',
+      'INSERT INTO aula_courses (id,owner,name,group_name,intro,created,academy_id,unit_id,period) VALUES (?,?,?,?,?,?,?,?,?)',
       id,
       user.id,
       text(body.name, 150),
@@ -191,6 +196,7 @@ const routes = {
       nowIso(),
       user.academy_id ?? null,
       user.unit_id ?? null,
+      optionalText(body.period, 60),
     );
     return json({ id }, 201);
   },
@@ -252,10 +258,11 @@ const routes = {
     requireTeacher(await access(db, user, body.course));
     await run(
       db,
-      'UPDATE aula_courses SET name=?,group_name=?,intro=? WHERE id=?',
+      'UPDATE aula_courses SET name=?,group_name=?,intro=?,period=? WHERE id=?',
       text(body.name, 150),
       text(body.group, 100),
       optionalText(body.intro, 10000),
+      optionalText(body.period, 60),
       body.course,
     );
     return json({ ok: true });
@@ -921,7 +928,7 @@ async function downloadFile({ db, env, user, url, request }, id) {
     if (!permitted) fail('No tienes acceso a este archivo.', 403);
   }
   if (url.searchParams.get('preview') === '1') return previewFile(env, request, file);
-  const object = await env.BUCKET.get(id);
+  const object = await env.BUCKET.get(file.r2_key || file.id);
   if (!object) fail('Archivo no disponible.', 404);
   return new Response(object.body, {
     headers: {
@@ -977,7 +984,7 @@ function parseRange(header, size) {
 }
 
 async function previewFile(env, request, file) {
-  const head = await env.BUCKET.get(file.id, { range: { offset: 0, length: 64 } });
+  const head = await env.BUCKET.get(file.r2_key || file.id, { range: { offset: 0, length: 64 } });
   if (!head) fail('Archivo no disponible.', 404);
   const type = sniffPreviewType(new Uint8Array(await head.arrayBuffer()));
   if (!type) fail('Este tipo de archivo no tiene vista previa. Descárgalo para abrirlo.', 415);
@@ -991,7 +998,7 @@ async function previewFile(env, request, file) {
     'Accept-Ranges': 'bytes',
   };
   if (range === 'invalid') return new Response(null, { status: 416, headers: { ...headers, 'Content-Range': `bytes */${file.size}` } });
-  const object = await env.BUCKET.get(file.id, range ? { range: { offset: range.start, length: range.end - range.start + 1 } } : {});
+  const object = await env.BUCKET.get(file.r2_key || file.id, range ? { range: { offset: range.start, length: range.end - range.start + 1 } } : {});
   if (!object) fail('Archivo no disponible.', 404);
   if (!range) return new Response(object.body, { headers: { ...headers, 'Content-Length': String(file.size) } });
   return new Response(object.body, {

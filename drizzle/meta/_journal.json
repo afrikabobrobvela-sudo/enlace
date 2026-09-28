@@ -71,6 +71,13 @@
       "when": 1790562805298,
       "tag": "0009_privacidad",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1790562968928,
+      "tag": "0010_periodos",
+      "breakpoints": true
     }
   ]
 }
