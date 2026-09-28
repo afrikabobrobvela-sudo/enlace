@@ -8,7 +8,22 @@ import { PRIVACY_VERSION, privacyAccepted, privacyRoutes } from './privacy.js';
 import { assertWritable, periodRoutes } from './periods.js';
 import { dashboardRoutes } from './dashboard.js';
 import { reportRoutes } from './reports.js';
-import { assertInTime, deadlineOf, gradeAttempt, publicQuestions, quizFields, quizInstance, sameQuestions } from './quizzes.js';
+import {
+  MAX_EXAM_EVENTS,
+  MAX_PASSWORD_FAILURES,
+  assertInTime,
+  deadlineOf,
+  examPlaceCheck,
+  finalAnswers,
+  gradeAttempt,
+  integritySummary,
+  publicQuestions,
+  publicSettings,
+  quizFields,
+  quizInstance,
+  sameQuestions,
+  validEvents,
+} from './quizzes.js';
 import { gradingRoutes } from './grading.js';
 import { clearSessionCookie, identity, lastLogins, revokeAllStatements } from './auth.js';
 import {
@@ -137,6 +152,27 @@ function assertRecordAvailable(r) {
 /** El primer intento conserva el id de la versión 8; los siguientes llevan su número. */
 const attemptId = (quiz, user, attempt) => (attempt === 1 ? `attempt:${quiz}:${user}` : `attempt:${quiz}:${user}:${attempt}`);
 
+/** Comparación en tiempo constante (no revela cuántos caracteres coinciden). */
+function sameSecret(a, b) {
+  const x = String(a);
+  const y = String(b);
+  let diff = x.length ^ y.length;
+  for (let i = 0; i < Math.max(x.length, y.length); i++) diff |= (x.charCodeAt(i) || 0) ^ (y.charCodeAt(i) || 0);
+  return diff === 0;
+}
+
+/** Intento en curso (empezado y sin enviar) de un alumno. */
+async function openStart(db, quiz, userId) {
+  return one(
+    db,
+    `SELECT s.* FROM aula_attempt_starts s WHERE s.quiz=? AND s.user_id=?
+       AND NOT EXISTS (SELECT 1 FROM aula_attempts a WHERE a.quiz=s.quiz AND a.user_id=s.user_id AND a.attempt=s.attempt)
+     ORDER BY s.attempt DESC LIMIT 1`,
+    quiz.id,
+    userId,
+  );
+}
+
 async function attemptContext(db, user, body) {
   const a = await access(db, user, body.course);
   if (a.teach) fail('Las evaluaciones se responden desde una cuenta de alumno. Usa Ver como alumno para revisarlas.');
@@ -243,7 +279,8 @@ const routes = {
           )
           .map((r) =>
             // El alumno nunca recibe respuestas correctas, fórmulas ni rangos de las variables.
-            r.kind === 'quiz' ? { ...r, data: { ...r.data, questions: publicQuestions(r.data.questions) } } : r,
+            // Del modo examen tampoco recibe la contraseña ni la ubicación del salón.
+            r.kind === 'quiz' ? { ...r, data: { ...r.data, questions: publicQuestions(r.data.questions), settings: publicSettings(r.data.settings) } } : r,
           );
     const records = [...content, ...(await courseGradebook(db, courseId, { teacher: teach, userId: viewer }))];
 
@@ -831,19 +868,49 @@ const routes = {
     const body = await readJson(request);
     const { quiz } = await attemptContext(db, user, body);
     const max = quiz.data.settings?.attempts || 1;
+    const exam = quiz.data.settings?.exam || null;
     for (;;) {
       const done = await one(db, 'SELECT count(*) AS n, coalesce(max(attempt),0) AS last FROM aula_attempts WHERE quiz=? AND user_id=?', quiz.id, user.id);
       if (done.n >= max) fail(max === 1 ? 'Ya enviaste esta evaluación. Se permite un intento.' : `Ya usaste tus ${max} intentos.`, 409);
       const attempt = done.last + 1;
-      await run(db, 'INSERT OR IGNORE INTO aula_attempt_starts (quiz,user_id,attempt,started) VALUES (?,?,?,?)', quiz.id, user.id, attempt, nowIso());
-      const { started } = await one(db, 'SELECT started FROM aula_attempt_starts WHERE quiz=? AND user_id=? AND attempt=?', quiz.id, user.id, attempt);
+      let start = await one(db, 'SELECT * FROM aula_attempt_starts WHERE quiz=? AND user_id=? AND attempt=?', quiz.id, user.id, attempt);
+      if (!start) {
+        // Modo examen: la contraseña (la dicta el docente en el salón) solo se pide al empezar; retomar tras recargar no la pide.
+        if (exam?.password) {
+          const tries = await one(db, 'SELECT failures FROM aula_exam_tries WHERE quiz=? AND user_id=?', quiz.id, user.id);
+          if ((tries?.failures || 0) >= MAX_PASSWORD_FAILURES) fail('Demasiadas contraseñas equivocadas. Pide a tu docente que te desbloquee.', 429);
+          if (!sameSecret(String(body.password ?? '').trim(), exam.password)) {
+            await run(
+              db,
+              'INSERT INTO aula_exam_tries (quiz,user_id,failures) VALUES (?,?,1) ON CONFLICT(quiz,user_id) DO UPDATE SET failures=failures+1',
+              quiz.id,
+              user.id,
+            );
+            const left = MAX_PASSWORD_FAILURES - (tries?.failures || 0) - 1;
+            fail(left > 0 ? `Contraseña incorrecta. Te ${left === 1 ? 'queda 1 intento' : `quedan ${left} intentos`}.` : 'Demasiadas contraseñas equivocadas. Pide a tu docente que te desbloquee.', left > 0 ? 400 : 429);
+          }
+        }
+        const place = exam ? examPlaceCheck(quiz, body.location, String(body.locationError || '')) : { flag: '', distance: null };
+        await run(
+          db,
+          'INSERT OR IGNORE INTO aula_attempt_starts (quiz,user_id,attempt,started,flag,distance) VALUES (?,?,?,?,?,?)',
+          quiz.id,
+          user.id,
+          attempt,
+          nowIso(),
+          place.flag,
+          place.distance,
+        );
+        start = await one(db, 'SELECT * FROM aula_attempt_starts WHERE quiz=? AND user_id=? AND attempt=?', quiz.id, user.id, attempt);
+      }
+      const { started } = start;
       const deadline = deadlineOf(quiz, started);
       // Un intento cuyo tiempo se acabó sin enviarse cuenta como intento con 0.
       if (deadline && Date.now() > Date.parse(deadline) + 60_000) {
         await run(
           db,
-          `INSERT OR IGNORE INTO aula_attempts (id,course,quiz,user_id,name,answers,correct,total,score,created,attempt,details)
-           VALUES (?,?,?,?,?,'[]',0,?,0,?,?,NULL)`,
+          `INSERT OR IGNORE INTO aula_attempts (id,course,quiz,user_id,name,answers,correct,total,score,created,attempt,details,integrity)
+           VALUES (?,?,?,?,?,'[]',0,?,0,?,?,NULL,?)`,
           attemptId(quiz.id, user.id, attempt),
           quiz.course,
           quiz.id,
@@ -852,12 +919,73 @@ const routes = {
           quiz.data.questions.length,
           nowIso(),
           attempt,
+          exam ? JSON.stringify(integritySummary(start)) : null,
         );
         continue;
       }
       const questions = quizInstance(quiz, user.id, attempt).map(({ values: _v, ...q }) => q);
-      return json({ attempt, started, deadline, attemptsLeft: max - done.n, serverNow: Date.now(), questions });
+      // Al retomar un examen se devuelven las respuestas guardadas y la pregunta en la que iba.
+      let saved = {};
+      try {
+        saved = JSON.parse(start.progress || '{}') || {};
+      } catch {
+        saved = {};
+      }
+      return json({
+        attempt, started, deadline, attemptsLeft: max - done.n, serverNow: Date.now(), questions,
+        exam: exam ? { oneByOne: exam.oneByOne, noBack: exam.noBack, position: start.position, answers: saved, flagged: Boolean(start.flag) } : null,
+      });
     }
+  },
+
+  // Modo examen: guarda las respuestas mientras se contesta, la pregunta a la que avanzó y las salidas de la pantalla.
+  'POST /api/attempt/progress': async ({ db, user, request }) => {
+    const body = await readJson(request);
+    const { quiz } = await attemptContext(db, user, body);
+    if (!quiz.data.settings?.exam) fail('Esta evaluación no está en modo examen.');
+    const start = await openStart(db, quiz, user.id);
+    if (!start || start.attempt !== Number(body.attempt)) fail('Este intento ya no está en curso. Recarga la página.', 409);
+    assertInTime(quiz, start.started);
+    const events = validEvents(body.events);
+    const noBack = quiz.data.settings.exam.noBack;
+    const position = Number.isInteger(body.position) ? Math.min(Math.max(body.position, 0), quiz.data.questions.length) : start.position;
+    let answers = null;
+    if (body.answers && typeof body.answers === 'object' && !Array.isArray(body.answers)) {
+      const next = {};
+      for (const q of quiz.data.questions.keys()) {
+        const value = body.answers[q];
+        if (Number.isInteger(value)) next[q] = value; // opción elegida
+        else if (typeof value === 'string' && value.trim()) next[q] = value.slice(0, 100); // respuesta numérica tal como se escribió
+      }
+      // Sin regresar: lo contestado en las preguntas que ya se dejaron atrás queda fijo (finalAnswers también lo usa al enviar).
+      if (noBack && start.position > 0) {
+        const saved = JSON.parse(start.progress || '{}') || {};
+        for (const q of quizInstance(quiz, user.id, start.attempt).slice(0, start.position)) {
+          if (Object.hasOwn(saved, q.index)) next[q.index] = saved[q.index];
+          else delete next[q.index];
+        }
+      }
+      answers = JSON.stringify(next);
+    }
+    await run(
+      db,
+      `UPDATE aula_attempt_starts SET
+         progress=CASE WHEN ?1 IS NULL THEN progress ELSE ?1 END,
+         position=CASE WHEN ?2 THEN max(position, ?3) ELSE ?3 END,
+         events=CASE WHEN json_array_length(events) + json_array_length(?4) <= ?5
+                     THEN (SELECT json_group_array(json(value)) FROM (SELECT value FROM json_each(events) UNION ALL SELECT value FROM json_each(?4)))
+                     ELSE events END
+       WHERE quiz=?6 AND user_id=?7 AND attempt=?8`,
+      answers,
+      noBack ? 1 : 0,
+      position,
+      JSON.stringify(events),
+      MAX_EXAM_EVENTS,
+      quiz.id,
+      user.id,
+      start.attempt,
+    );
+    return json({ ok: true });
   },
 
   'POST /api/attempt': async ({ db, user, request }) => {
@@ -867,16 +995,18 @@ const routes = {
     const done = await one(db, 'SELECT count(*) AS n, coalesce(max(attempt),0) AS last FROM aula_attempts WHERE quiz=? AND user_id=?', quiz.id, user.id);
     if (done.n >= max) fail(max === 1 ? 'Ya enviaste esta evaluación. Se permite un intento.' : `Ya usaste tus ${max} intentos.`, 409);
     const attempt = done.last + 1;
-    const start = await one(db, 'SELECT started FROM aula_attempt_starts WHERE quiz=? AND user_id=? AND attempt=?', quiz.id, user.id, attempt);
-    if (quiz.data.settings?.timeLimit && !start) fail('Comienza el intento antes de enviarlo.', 409);
+    const start = await one(db, 'SELECT * FROM aula_attempt_starts WHERE quiz=? AND user_id=? AND attempt=?', quiz.id, user.id, attempt);
+    const exam = quiz.data.settings?.exam || null;
+    if ((quiz.data.settings?.timeLimit || exam) && !start) fail('Comienza el intento antes de enviarlo.', 409);
     if (start) assertInTime(quiz, start.started);
-    const graded = gradeAttempt(quiz, quizInstance(quiz, user.id, attempt), body.answers);
+    const instance = quizInstance(quiz, user.id, attempt);
+    const graded = gradeAttempt(quiz, instance, finalAnswers(quiz, instance, start, body.answers));
     const id = attemptId(quiz.id, user.id, attempt);
     try {
       await run(
         db,
-        `INSERT INTO aula_attempts (id,course,quiz,user_id,name,answers,correct,total,score,created,attempt,details)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+        `INSERT INTO aula_attempts (id,course,quiz,user_id,name,answers,correct,total,score,created,attempt,details,integrity)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
         id,
         quiz.course,
         quiz.id,
@@ -889,11 +1019,52 @@ const routes = {
         nowIso(),
         attempt,
         JSON.stringify(graded.details),
+        exam ? JSON.stringify(integritySummary(start)) : null,
       );
     } catch {
       fail('Este intento ya se envió. Recarga la página.', 409);
     }
     return json(attemptRecord(await one(db, 'SELECT * FROM aula_attempts WHERE id=?', id)), 201);
+  },
+
+  // Examen en curso (docente): quién está contestando, sus salidas y quién quedó bloqueado por la contraseña.
+  'GET /api/exam/monitor': async ({ db, user, url }) => {
+    const course = url.searchParams.get('course');
+    requireTeacher(await access(db, user, course));
+    const quiz = await contentRecord(db, url.searchParams.get('quiz'), course, 'quiz');
+    const [running, blocked] = await Promise.all([
+      all(
+        db,
+        `SELECT s.*, coalesce(m.name, u.name) AS name FROM aula_attempt_starts s JOIN aula_users u ON u.id=s.user_id
+           LEFT JOIN aula_members m ON m.course=? AND m.user_id=s.user_id
+         WHERE s.quiz=? AND NOT EXISTS (SELECT 1 FROM aula_attempts a WHERE a.quiz=s.quiz AND a.user_id=s.user_id AND a.attempt=s.attempt)
+         ORDER BY name`,
+        course,
+        quiz.id,
+      ),
+      all(
+        db,
+        `SELECT t.user_id, t.failures, coalesce(m.name, u.name) AS name FROM aula_exam_tries t JOIN aula_users u ON u.id=t.user_id
+           LEFT JOIN aula_members m ON m.course=? AND m.user_id=t.user_id
+         WHERE t.quiz=? AND t.failures>=?`,
+        course,
+        quiz.id,
+        MAX_PASSWORD_FAILURES,
+      ),
+    ]);
+    return json({
+      running: running.map((s) => ({ name: s.name, attempt: s.attempt, started: s.started, deadline: deadlineOf(quiz, s.started), answered: Object.keys(JSON.parse(s.progress || '{}')).length, ...integritySummary(s) })),
+      blocked: blocked.map((b) => ({ user: b.user_id, name: b.name })),
+      total: quiz.data.questions.length,
+    });
+  },
+
+  'POST /api/exam/unlock': async ({ db, user, request }) => {
+    const body = await readJson(request);
+    requireTeacher(await access(db, user, body.course));
+    const quiz = await contentRecord(db, body.quiz, body.course, 'quiz');
+    await run(db, 'DELETE FROM aula_exam_tries WHERE quiz=? AND user_id=?', quiz.id, String(body.user || ''));
+    return json({ ok: true });
   },
 
   // ---- Archivos ----

@@ -1,5 +1,6 @@
 // Evaluaciones: preguntas de opción múltiple y numéricas (con tolerancia, unidades y datos aleatorios por alumno),
 // varios intentos, tiempo límite y orden aleatorio. Todo se califica en el servidor.
+import { distanceMeters } from './attendance.js';
 import { fail, text } from './http.js';
 
 export const MAX_QUESTIONS = 50;
@@ -157,7 +158,112 @@ export function quizFields(input) {
   const timeLimit = Number(input.settings?.timeLimit ?? 0);
   if (!Number.isInteger(attempts) || attempts < 1 || attempts > 10) fail('Los intentos van de 1 a 10.');
   if (!Number.isInteger(timeLimit) || timeLimit < 0 || timeLimit > 300) fail('El tiempo límite va de 0 (sin límite) a 300 minutos.');
-  return { questions, settings: { attempts, timeLimit, shuffle: input.settings?.shuffle === true } };
+  return { questions, settings: { attempts, timeLimit, shuffle: input.settings?.shuffle === true, exam: examFields(input.settings?.exam) } };
+}
+
+// ---- Modo examen ---------------------------------------------------------------------------------
+
+export const EXAM_RADII = [100, 150, 300, 500];
+export const MAX_PASSWORD_FAILURES = 10;
+const EVENT_KINDS = ['left', 'fullscreen', 'copy'];
+const MAX_EVENTS = 200;
+
+/** Configuración del modo examen (null si está desactivado). La contraseña y el salón nunca llegan al alumno. */
+function examFields(input) {
+  if (!input || input.enabled !== true) return null;
+  const password = String(input.password ?? '').trim();
+  if (password && (password.length < 4 || password.length > 30)) fail('La contraseña del examen debe tener de 4 a 30 caracteres.');
+  let place = null;
+  if (input.place) {
+    const lat = Number(input.place.lat);
+    const lng = Number(input.place.lng);
+    const radius = Number(input.place.radius);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) fail('Ubicación del salón no válida.');
+    if (!EXAM_RADII.includes(radius)) fail('Distancia máxima no válida.');
+    const accuracy = Math.min(Math.max(Number(input.place.accuracy) || 0, 0), 5000);
+    place = { lat, lng, accuracy, radius };
+  }
+  const oneByOne = input.oneByOne === true;
+  return { enabled: true, password, oneByOne, noBack: oneByOne && input.noBack === true, place };
+}
+
+/** Lo que el alumno sabe del modo examen: si pide contraseña o ubicación, pero no cuáles son. */
+export function publicSettings(settings) {
+  if (!settings?.exam) return settings;
+  const { password, place, ...exam } = settings.exam;
+  return { ...settings, exam: { ...exam, needsPassword: Boolean(password), checksLocation: Boolean(place) } };
+}
+
+/** Eventos que envía el navegador durante el examen (salir de la pantalla, de pantalla completa, copiar o pegar). */
+export function validEvents(input) {
+  if (!Array.isArray(input)) return [];
+  return input.slice(0, 20).map((e) => {
+    if (!EVENT_KINDS.includes(e?.kind)) fail('Evento no válido.');
+    const seconds = Math.round(Number(e.seconds ?? 0));
+    return { kind: e.kind, seconds: Number.isFinite(seconds) ? Math.min(Math.max(seconds, 0), 86_400) : 0, at: new Date().toISOString() };
+  });
+}
+
+export const MAX_EXAM_EVENTS = MAX_EVENTS;
+
+const km = (m) => (m >= 1000 ? `${(m / 1000).toFixed(1)} km` : `${Math.round(m / 10) * 10} m`);
+
+/** Revisa la ubicación del alumno al empezar contra la del salón. Solo marca para revisar; nunca impide el examen. */
+export function examPlaceCheck(quiz, location, locationError) {
+  const place = quiz.data.settings?.exam?.place;
+  if (!place) return { flag: '', distance: null };
+  const lat = Number(location?.lat);
+  const lng = Number(location?.lng);
+  const accuracy = Number(location?.accuracy);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) {
+    return { flag: locationError === 'denied' ? 'no permitió ver su ubicación' : 'no se obtuvo su ubicación', distance: null };
+  }
+  const acc = Number.isFinite(accuracy) && accuracy >= 0 ? accuracy : 1000;
+  if (acc > 2000) return { flag: `ubicación muy imprecisa (±${km(acc)})`, distance: null };
+  const distance = distanceMeters(place, { lat, lng });
+  const margin = Math.min(acc, 250) + Math.min(place.accuracy || 0, 250);
+  return { flag: distance > place.radius + margin ? `a ${km(distance)} del salón` : '', distance: Math.round(distance) };
+}
+
+/** Resumen para el docente: cuántas veces salió, cuánto tiempo, y el motivo de revisión de la ubicación. */
+export function integritySummary(start) {
+  if (!start) return null;
+  let events = [];
+  try {
+    events = JSON.parse(start.events || '[]');
+  } catch {
+    events = [];
+  }
+  const left = events.filter((e) => e.kind === 'left');
+  return {
+    exits: left.length,
+    awaySeconds: left.reduce((n, e) => n + (e.seconds || 0), 0),
+    fullscreenExits: events.filter((e) => e.kind === 'fullscreen').length,
+    copyAttempts: events.filter((e) => e.kind === 'copy').length,
+    flag: start.flag || '',
+    distance: start.distance ?? null,
+    events: events.slice(-50),
+  };
+}
+
+/**
+ * Respuestas finales. Si el examen es "sin regresar", las preguntas que ya se dejaron atrás conservan lo guardado
+ * al avanzar: no se pueden cambiar al final.
+ */
+export function finalAnswers(quiz, instance, start, submitted) {
+  const answers = submitted && typeof submitted === 'object' ? { ...submitted } : {};
+  if (!quiz.data.settings?.exam?.noBack || !start) return answers;
+  let saved = {};
+  try {
+    saved = JSON.parse(start.progress || '{}') || {};
+  } catch {
+    saved = {};
+  }
+  instance.slice(0, start.position).forEach((q) => {
+    if (Object.hasOwn(saved, q.index)) answers[q.index] = saved[q.index];
+    else delete answers[q.index];
+  });
+  return answers;
 }
 
 /** Forma canónica de una pregunta (las de versiones anteriores no tienen `type`: son de opción múltiple). */

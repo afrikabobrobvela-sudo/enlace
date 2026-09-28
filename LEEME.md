@@ -1,9 +1,23 @@
-# Enlace · versión 12.7
+# Enlace · versión 12.8
 
 Plataforma académica independiente para docentes y alumnos de cualquier academia (nació en la Academia de Física de la BUAP), con interfaz inspirada en Brightspace.
 No es el código de D2L Brightspace ni una plataforma oficial de la BUAP.
 
 Esta versión se despliega en **tu propia cuenta de Cloudflare** (Workers + D1 + R2, plan gratuito) y ya no depende de ChatGPT Sites.
+
+## Novedades de la versión 12.8 (modo examen)
+
+Requiere la migración **0016** (solo agrega columnas y una tabla).
+
+En el editor de una evaluación, la sección **Modo examen**:
+- **Pantalla completa, sin copiar ni pegar**, y registro de cada vez que el alumno sale de la página (otra pestaña, otra aplicación, bloquear el teléfono), con la hora y la duración. No lo impide (ninguna página web puede bloquear otras aplicaciones), pero deja constancia y disuade.
+- **Contraseña para empezar** (opcional) que dictas en el salón. Tras 10 contraseñas equivocadas el alumno queda bloqueado hasta que lo desbloqueas. Si se le cierra la página, retoma sin volver a escribirla.
+- **Una pregunta a la vez** y, si quieres, **sin regresar**: el servidor no acepta cambios a las preguntas que ya quedaron atrás, aunque se manipule la página.
+- **Ubicación del salón**: pulsa *Usar mi ubicación actual como salón* estando en el salón y guarda. Quien empiece lejos o sin dar permiso aparece marcado en los resultados (nunca se le impide el examen; solo se guarda la distancia).
+- **Respuestas guardadas mientras se contesta**: si se va la conexión o se cierra la página, el alumno continúa donde iba.
+- Para ti: **Examen en curso** (quién contesta, cuántas lleva y sus salidas; *Actualizar*) y en los resultados la columna **Integridad** con el detalle por intento.
+
+Un registro de salida no prueba por sí solo que hubo trampa (una llamada o una notificación también cuentan): úsalo como indicio para platicar con el alumno. Para bloqueo total en laboratorio de cómputo, el siguiente paso sería Safe Exam Browser.
 
 ## Novedades de la versión 12.7 (asistencia con código en el pizarrón)
 
@@ -129,7 +143,7 @@ La pantalla muestra en vivo cuántos se han registrado y quiénes acaban de hace
 
 1. Descarga la versión nueva en una carpeta **nueva** (no encima de la anterior), o `git pull` si trabajas desde GitHub.
 2. Haz un respaldo desde esa carpeta: `npm run respaldo` (ver *Respaldos*).
-3. Doble clic en `configurar.cmd` (Windows) o `configurar.command` (Mac), o `npm run configurar`. Encuentra tu base `enlace-db` y tu almacenamiento, te pide tu correo de administración y tu dirección `.workers.dev`, descarga un respaldo, aplica las migraciones pendientes (0003: asistencia y borradores; 0004: registro con QR; 0005: categorías, rúbricas y equipos; 0006: sesiones; 0007: papelera; 0008: registro de docentes; 0009: aviso de privacidad; 0010: periodos y archivo; 0011: prórrogas; 0012: intentos de evaluaciones; 0013: avisos; 0014: historial de calificaciones; 0015: asistencia con código) y publica. No cambia tus claves. Al pasar a la versión 12.1 cada persona vuelve a entrar con Google una vez (las sesiones ahora se registran en el servidor).
+3. Doble clic en `configurar.cmd` (Windows) o `configurar.command` (Mac), o `npm run configurar`. Encuentra tu base `enlace-db` y tu almacenamiento, te pide tu correo de administración y tu dirección `.workers.dev`, descarga un respaldo, aplica las migraciones pendientes (0003: asistencia y borradores; 0004: registro con QR; 0005: categorías, rúbricas y equipos; 0006: sesiones; 0007: papelera; 0008: registro de docentes; 0009: aviso de privacidad; 0010: periodos y archivo; 0011: prórrogas; 0012: intentos de evaluaciones; 0013: avisos; 0014: historial de calificaciones; 0015: asistencia con código; 0016: modo examen) y publica. No cambia tus claves. Al pasar a la versión 12.1 cada persona vuelve a entrar con Google una vez (las sesiones ahora se registran en el servidor).
 
 Si prefieres hacerlo a mano: copia tu `database_id` y tu correo del `wrangler.toml` anterior al nuevo (y `ALLOWED_EMAIL_DOMAINS` si lo usabas) y ejecuta `npm install`, `npm run db:migrate` y `npm run deploy`, **en ese orden**: si publicas antes de migrar, Asistencia y Calificaciones fallarán hasta que apliques la migración.
 
@@ -305,7 +319,7 @@ La cookie de sesión usa el prefijo `__Host-`, que exige conexión segura. Chrom
 
 ## Pruebas
 
-`npm test` compila la interfaz y ejecuta veinticuatro suites con una base SQLite temporal (con llaves foráneas activas, como D1). No tocan tu base real.
+`npm test` compila la interfaz y ejecuta veinticinco suites con una base SQLite temporal (con llaves foráneas activas, como D1). No tocan tu base real.
 
 - `test-api.mjs`: todas las verificaciones de la versión 8 más sesiones firmadas, cabeceras falsificadas, ponderaciones, restricciones de la base, docentes, inscripción masiva y el límite de 50 consultas.
 - `test-papelera.mjs`: eliminar y restaurar contenido, actividades (con sus entregas y calificaciones), evaluaciones y publicaciones de foro; permisos de moderación; nombres de alumnos en foros; cuotas de archivos.
@@ -323,6 +337,7 @@ La cookie de sesión usa el prefijo `__Host-`, que exige conexión segura. Chrom
 - `test-pendientes.mjs`: mis pendientes, avisos (sin contenido oculto) y comprobante con folio.
 - `test-reportes.mjs`: historial de calificaciones, reportes por academia y unidad y limpieza de archivos sin usar (incluidos los compartidos entre cursos copiados).
 - `test-asistencia-codigo.mjs`: registro con código (ubicación sin guardar coordenadas, red, por revisar, modo estricto, cambio de código y QR intacto).
+- `test-examen.mjs`: modo examen (contraseña con bloqueo, datos ocultos al alumno, ubicación, respuestas guardadas, sin regresar respetado por el servidor, salidas registradas y monitor).
 - `test-qr.mjs`: generador de QR. Sus huellas corresponden a códigos que se decodificaron con OpenCV; si una cambia, hay que volver a verificarlo.
 - `test-auth-ui.mjs`, `test-admin-ui.mjs`, `test-teacher-files.mjs`, `test-workspace-ui.mjs`, `test-fase1-ui.mjs`, `test-fase2-ui.mjs`, `test-fase2b-ui.mjs`: interfaz (incluye las reglas del porcentaje de asistencia, el reparto de equipos, la revisión en secuencia, la exportación a Excel sin fórmulas inyectadas, que la firma del QR del navegador sea la que acepta el servidor, el ZIP verificado por un lector independiente, las reglas de riesgo, el cálculo por categorías y puntos, el redondeo de la calificación final y la evaluación con rúbrica).
 

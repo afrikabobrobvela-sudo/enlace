@@ -82,6 +82,7 @@ export function attemptRecord(row) {
       name: row.name,
       attempt: row.attempt ?? 1,
       details: parseJson(row.details, null),
+      integrity: parseJson(row.integrity, null),
     },
   };
 }

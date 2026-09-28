@@ -516,6 +516,8 @@ export const attempts = sqliteTable(
     // Migración 0012: número de intento (varios intentos) y detalle por pregunta (valores y si fue correcta).
     attempt: integer('attempt').notNull().default(1),
     details: text('details'),
+    // Migración 0016 (modo examen): resumen de salidas de la pantalla, ubicación y eventos del intento.
+    integrity: text('integrity'),
   },
   (t) => [
     uniqueIndex('aula_attempts_quiz_user_attempt').on(t.quiz, t.userId, t.attempt),
@@ -553,8 +555,26 @@ export const attemptStarts = sqliteTable(
     userId: text('user_id').notNull(),
     attempt: integer('attempt').notNull(),
     started: text('started').notNull(),
+    // Migración 0016 (modo examen): respuestas guardadas mientras se contesta, pregunta actual (sin regresar),
+    // salidas de la pantalla y motivo "por revisar" de la ubicación (solo la distancia, nunca coordenadas).
+    progress: text('progress'),
+    position: integer('position').notNull().default(0),
+    events: text('events').notNull().default('[]'),
+    flag: text('flag').notNull().default(''),
+    distance: integer('distance'),
   },
   (t) => [primaryKey({ columns: [t.quiz, t.userId, t.attempt] })],
+);
+
+/** Migración 0016: contraseñas equivocadas al empezar un examen (a las 10 se bloquea hasta que el docente lo libere). */
+export const examTries = sqliteTable(
+  'aula_exam_tries',
+  {
+    quiz: text('quiz').notNull(),
+    userId: text('user_id').notNull(),
+    failures: integer('failures').notNull().default(0),
+  },
+  (t) => [primaryKey({ columns: [t.quiz, t.userId] })],
 );
 
 /** Migración 0014: historial de calificaciones (quién cambió qué y cuándo, con el valor anterior). */

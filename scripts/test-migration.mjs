@@ -141,9 +141,9 @@ const w = after.records.find((r) => r.kind === 'weights');
 assert.deepEqual(w.data, before.records.find((r) => r.kind === 'weights').data);
 assert.equal(w.revision, 2);
 // Los intentos llegan idénticos; la versión 12.6 solo agrega su número (1) y el detalle (vacío en los migrados).
-const withoutNewFields = (list) => list.map((r) => ({ ...r, data: Object.fromEntries(Object.entries(r.data).filter(([k]) => !['attempt', 'details'].includes(k))) }));
+const withoutNewFields = (list) => list.map((r) => ({ ...r, data: Object.fromEntries(Object.entries(r.data).filter(([k]) => !['attempt', 'details', 'integrity'].includes(k))) }));
 assert.deepEqual(withoutNewFields(pick(after.records, 'attempt')), pick(before.records, 'attempt'));
-assert(pick(after.records, 'attempt').every((r) => r.data.attempt === 1 && r.data.details === null));
+assert(pick(after.records, 'attempt').every((r) => r.data.attempt === 1 && r.data.details === null && r.data.integrity === null));
 assert.deepEqual(pick(after.records, 'notice'), pick(before.records, 'notice'));
 checks += 6;
 
