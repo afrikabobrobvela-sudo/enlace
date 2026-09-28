@@ -25,6 +25,74 @@ const MAX_PIN_FAILURES = 5;
 const CLOSED = 'El registro de asistencia de esta clase ya se cerró. Pide al docente que te registre.';
 const EXPIRED = 'El código QR expiró: cambia cada 10 segundos. Vuelve a escanear el que está proyectado.';
 const BLOCKED = 'Demasiados intentos con PIN incorrecto. Pide al docente que te registre.';
+// Registro con código escrito en el pizarrón: sin letras que se confunden (0/O, 1/I/L).
+const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+const CODE_LENGTH = 6;
+const RADII = [0, 100, 150, 300, 500];
+const NO_CODE = 'Ese código no corresponde a ningún registro abierto. Revisa que lo hayas copiado bien o pide el código actual a tu docente.';
+
+function boardCode() {
+  const bytes = crypto.getRandomValues(new Uint8Array(CODE_LENGTH));
+  return Array.from(bytes, (b) => CODE_ALPHABET[b % CODE_ALPHABET.length]).join('');
+}
+
+/** Ubicación enviada por el navegador; null si no viene o no es válida. */
+function validLocation(value) {
+  if (!value || typeof value !== 'object') return null;
+  const lat = Number(value.lat);
+  const lng = Number(value.lng);
+  const accuracy = Number(value.accuracy);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) return null;
+  return { lat, lng, accuracy: Number.isFinite(accuracy) && accuracy >= 0 ? Math.min(accuracy, 100_000) : 1000 };
+}
+
+/** Distancia en metros entre dos puntos (fórmula del semiverseno). */
+export function distanceMeters(a, b) {
+  const rad = Math.PI / 180;
+  const dLat = (b.lat - a.lat) * rad;
+  const dLng = (b.lng - a.lng) * rad;
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * rad) * Math.cos(b.lat * rad) * Math.sin(dLng / 2) ** 2;
+  return 2 * 6_371_000 * Math.asin(Math.min(1, Math.sqrt(h)));
+}
+
+/** Red de la solicitud: prefijo de la IP pública (/24 en IPv4, /48 en IPv6). Solo es un indicio: la red de la escuela suele compartir IP. */
+export function networkOf(request) {
+  const ip = String(request.headers.get('CF-Connecting-IP') || '').trim().toLowerCase();
+  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(ip)) return 'v4:' + ip.split('.').slice(0, 3).join('.');
+  if (ip.includes(':')) {
+    const [head] = ip.split('::');
+    const groups = head.split(':').filter(Boolean);
+    return 'v6:' + [...groups, '0', '0', '0'].slice(0, 3).join(':');
+  }
+  return null;
+}
+
+const distanceText = (m) => (m >= 1000 ? `${(m / 1000).toFixed(1)} km` : `${Math.round(m / 10) * 10} m`);
+
+/**
+ * Revisa la ubicación del alumno contra la del salón. Devuelve lo que se guarda (distancia, precisión, red)
+ * y el motivo para revisar ('' si todo está bien). Nunca se guardan las coordenadas del alumno.
+ */
+function locationCheck(session, place, locationError, network) {
+  const sameNetwork = session.checkin_network && network ? (session.checkin_network === network ? 1 : 0) : null;
+  const result = { distance: null, accuracy: place ? Math.round(place.accuracy) : null, sameNetwork, flag: '' };
+  if (!session.checkin_radius) return result;
+  if (session.checkin_lat === null || session.checkin_lat === undefined) {
+    // El docente no compartió la ubicación del salón: solo queda la red como indicio.
+    if (sameNetwork === 0) result.flag = 'se registró desde otra red que el docente';
+    return result;
+  }
+  if (!place || place.accuracy > 2000) {
+    if (sameNetwork !== 1) result.flag = place ? `ubicación muy imprecisa (±${distanceText(place.accuracy)})` : locationError === 'denied' ? 'no permitió ver su ubicación' : 'no se obtuvo su ubicación';
+    return result;
+  }
+  const distance = distanceMeters({ lat: session.checkin_lat, lng: session.checkin_lng }, place);
+  result.distance = Math.round(distance);
+  // Margen por la imprecisión de ambos teléfonos dentro de edificios (hasta 250 m cada uno).
+  const margin = Math.min(place.accuracy, 250) + Math.min(session.checkin_accuracy ?? 0, 250);
+  if (distance > session.checkin_radius + margin) result.flag = `a ${distanceText(distance)} del salón`;
+  return result;
+}
 
 async function qrSignature(secret, code, window) {
   const key = await crypto.subtle.importKey('raw', fromBase64url(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
@@ -53,25 +121,28 @@ async function checkinSession(db, where, value) {
 }
 
 /** Marca la asistencia y el teléfono usado, en una sola transacción. */
-async function registerCheckin(db, session, memberId, device, userId) {
+async function registerCheckin(db, session, memberId, device, userId, check = null) {
   const now = new Date();
+  const how = session.checkin_mode === 'code' ? 'Registro con código' : 'Registro con QR';
+  const note = check?.flag ? `${how} · Por revisar: ${check.flag}` : how;
   const late = session.checkin_late_minutes > 0 && now - Date.parse(session.checkin_started) > session.checkin_late_minutes * 60_000;
   const status = late ? 'late' : 'present';
   try {
     await db.batch([
       db
         .prepare(
-          `INSERT INTO aula_checkins (session,member,device,failures,checked_in) VALUES (?,?,?,0,?)
-           ON CONFLICT(session,member) DO UPDATE SET device=excluded.device, checked_in=excluded.checked_in`,
+          `INSERT INTO aula_checkins (session,member,device,failures,checked_in,distance,accuracy,same_network,flag) VALUES (?,?,?,0,?,?,?,?,?)
+           ON CONFLICT(session,member) DO UPDATE SET device=excluded.device, checked_in=excluded.checked_in, distance=excluded.distance,
+             accuracy=excluded.accuracy, same_network=excluded.same_network, flag=excluded.flag, reviewed_by=NULL`,
         )
-        .bind(session.id, memberId, device, now.toISOString()),
+        .bind(session.id, memberId, device, now.toISOString(), check?.distance ?? null, check?.accuracy ?? null, check?.sameNetwork ?? null, check?.flag || ''),
       db
         .prepare(
-          `INSERT INTO aula_attendance (session,member,status,note,updated_by,updated) VALUES (?,?,?,'Registro con QR',?,?)
+          `INSERT INTO aula_attendance (session,member,status,note,updated_by,updated) VALUES (?,?,?,?,?,?)
            ON CONFLICT(session,member) DO UPDATE SET status=excluded.status, note=excluded.note,
              updated_by=excluded.updated_by, updated=excluded.updated`,
         )
-        .bind(session.id, memberId, status, userId, now.toISOString()),
+        .bind(session.id, memberId, status, note, userId, now.toISOString()),
     ]);
   } catch (error) {
     if (/UNIQUE/i.test(String(error?.message))) {
@@ -79,7 +150,7 @@ async function registerCheckin(db, session, memberId, device, userId) {
     }
     throw error;
   }
-  return { course: session.course_name, date: session.date, start_time: session.start_time, status };
+  return { course: session.course_name, date: session.date, start_time: session.start_time, status, ...(check ? { review: Boolean(check.flag) } : {}) };
 }
 
 /** Acepta solo fechas reales con formato AAAA-MM-DD (rechaza, por ejemplo, 2026-02-30). */
@@ -232,32 +303,45 @@ export const attendanceRoutes = {
   // ---- Registro con QR ----------------------------------------------------------------------
 
   // El docente abre el registro: se genera un código nuevo, un secreto para firmar el QR y, si se pide, un PIN.
+  // Con mode='code' el código se escribe en el pizarrón y puede revisarse la ubicación del salón (del teléfono del docente).
   'POST /api/attendance/checkin/open': async ({ db, user, request }) => {
     const body = await readJson(request);
     requireTeacher(await access(db, user, body.course));
     const session = await sessionOf(db, body.session, body.course);
+    const mode = body.mode === 'code' ? 'code' : 'qr';
     const minutes = Number(body.minutes ?? 15);
     const lateMinutes = Number(body.late_minutes ?? 0);
     if (!Number.isInteger(minutes) || minutes < 1 || minutes > 180) fail('La duración debe ser de 1 a 180 minutos.');
     if (!Number.isInteger(lateMinutes) || lateMinutes < 0 || lateMinutes > 240) fail('El retardo debe ser de 0 a 240 minutos.');
-    const pin = body.pin === false ? '' : String(crypto.getRandomValues(new Uint32Array(1))[0] % 10000).padStart(4, '0');
+    const radius = mode === 'code' ? Number(body.radius ?? 150) : 0;
+    if (!RADII.includes(radius)) fail('Radio no válido.');
+    const place = mode === 'code' && radius ? validLocation(body.location) : null;
+    const pin = mode === 'code' || body.pin === false ? '' : String(crypto.getRandomValues(new Uint32Array(1))[0] % 10000).padStart(4, '0');
     const secret = randomToken(32);
     const started = new Date();
     const until = new Date(started.getTime() + minutes * 60_000).toISOString();
     let code;
     for (let attempt = 0; attempt < 3 && !code; attempt++) {
-      const candidate = randomToken(6);
+      const candidate = mode === 'code' ? boardCode() : randomToken(6);
       try {
         await run(
           db,
           `UPDATE aula_sessions SET checkin_code=?, checkin_secret=?, checkin_pin=?, checkin_started=?, checkin_until=?,
-             checkin_late_minutes=? WHERE id=? AND course=?`,
+             checkin_late_minutes=?, checkin_mode=?, checkin_lat=?, checkin_lng=?, checkin_accuracy=?, checkin_radius=?,
+             checkin_strict=?, checkin_network=? WHERE id=? AND course=?`,
           candidate,
           secret,
           pin,
           started.toISOString(),
           until,
           lateMinutes,
+          mode,
+          place?.lat ?? null,
+          place?.lng ?? null,
+          place?.accuracy ?? null,
+          radius,
+          mode === 'code' && body.strict === true ? 1 : 0,
+          networkOf(request),
           session.id,
           body.course,
         );
@@ -267,14 +351,83 @@ export const attendanceRoutes = {
       }
     }
     if (!code) fail('No se pudo abrir el registro. Inténtalo de nuevo.', 503);
-    return json({ code, secret, pin, until, started: started.toISOString(), late_minutes: lateMinutes, serverNow: Date.now(), windowMs: WINDOW_MS });
+    return json({
+      code, secret, pin, until, started: started.toISOString(), late_minutes: lateMinutes, serverNow: Date.now(), windowMs: WINDOW_MS,
+      mode, radius, strict: mode === 'code' && body.strict === true, located: Boolean(place),
+    });
+  },
+
+  // Cambia el código escrito (por ejemplo, si alguien lo compartió). El anterior deja de servir de inmediato.
+  'POST /api/attendance/checkin/rotate': async ({ db, user, request }) => {
+    const body = await readJson(request);
+    requireTeacher(await access(db, user, body.course));
+    const session = await sessionOf(db, body.session, body.course);
+    if (!isOpen(session) || session.checkin_mode !== 'code') fail('El registro con código no está abierto.', 409);
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const code = boardCode();
+      try {
+        await run(db, 'UPDATE aula_sessions SET checkin_code=? WHERE id=? AND course=?', code, session.id, body.course);
+        return json({ code });
+      } catch (error) {
+        if (!/UNIQUE/i.test(String(error?.message))) throw error;
+      }
+    }
+    fail('No se pudo cambiar el código. Inténtalo de nuevo.', 503);
+  },
+
+  // El alumno escribe el código del pizarrón; el navegador envía su ubicación si la persona lo permite.
+  'POST /api/attendance/checkin/code': async ({ db, user, request }) => {
+    const body = await readJson(request);
+    const code = String(body.code ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+    if (code.length !== CODE_LENGTH) fail(`El código tiene ${CODE_LENGTH} letras y números.`);
+    const session = await one(
+      db,
+      "SELECT s.*, c.name AS course_name FROM aula_sessions s JOIN aula_courses c ON c.id=s.course WHERE s.checkin_code=? AND s.checkin_mode='code'",
+      code,
+    );
+    if (!session) fail(NO_CODE, 404);
+    if (!isOpen(session)) fail(CLOSED, 410);
+    const device = validDevice(body.device);
+    const member = await one(db, "SELECT id FROM aula_members WHERE course=? AND user_id=? AND role='student'", session.course, user.id);
+    if (!member) fail('No estás inscrito como alumno en este curso.', 403);
+    const info = { course: session.course_name, date: session.date, start_time: session.start_time };
+    const existing = await one(db, 'SELECT status FROM aula_attendance WHERE session=? AND member=?', session.id, member.id);
+    if (existing && (existing.status === 'present' || existing.status === 'late')) return json({ ...info, status: existing.status, already: true });
+    const check = locationCheck(session, validLocation(body.location), String(body.locationError || ''), networkOf(request));
+    if (check.flag && session.checkin_strict) {
+      fail(`No se pudo registrar tu asistencia: ${check.flag}. Si estás en el salón, activa la ubicación del navegador y vuelve a intentarlo, o pide a tu docente que te registre.`, 403);
+    }
+    return json(await registerCheckin(db, session, member.id, device, user.id, check));
+  },
+
+  // El docente confirma un registro "por revisar" (la falta se marca con la lista normal).
+  'POST /api/attendance/checkin/review': async ({ db, user, request }) => {
+    const body = await readJson(request);
+    requireTeacher(await access(db, user, body.course));
+    const session = await sessionOf(db, body.session, body.course);
+    const now = nowIso();
+    const [result] = await db.batch([
+      db.prepare("UPDATE aula_checkins SET flag='', reviewed_by=? WHERE session=? AND member=? AND flag<>''").bind(user.id, session.id, body.member),
+      db
+        .prepare("UPDATE aula_attendance SET note=substr(note,1,instr(note,' · Por revisar')-1) || ' · Confirmado por el docente', updated_by=?, updated=? WHERE session=? AND member=? AND instr(note,' · Por revisar')>0")
+        .bind(user.id, now, session.id, body.member),
+    ]);
+    if (!result.meta.changes) fail('Ese registro ya no está por revisar.', 409);
+    return json({ ok: true });
   },
 
   'POST /api/attendance/checkin/close': async ({ db, user, request }) => {
     const body = await readJson(request);
     requireTeacher(await access(db, user, body.course));
     await sessionOf(db, body.session, body.course);
-    await run(db, 'UPDATE aula_sessions SET checkin_code=NULL, checkin_until=? WHERE id=? AND course=?', nowIso(), body.session, body.course);
+    // La ubicación del salón solo se necesita mientras el registro está abierto.
+    await run(
+      db,
+      'UPDATE aula_sessions SET checkin_code=NULL, checkin_until=?, checkin_lat=NULL, checkin_lng=NULL, checkin_accuracy=NULL, checkin_network=NULL WHERE id=? AND course=?',
+      nowIso(),
+      body.session,
+      body.course,
+    );
     return json({ ok: true });
   },
 
@@ -283,7 +436,10 @@ export const attendanceRoutes = {
     const course = url.searchParams.get('course');
     requireTeacher(await access(db, user, course));
     const session = await sessionOf(db, url.searchParams.get('id'), course);
-    const records = await all(db, 'SELECT member, status, note, updated FROM aula_attendance WHERE session=?', session.id);
+    const [records, flags] = await Promise.all([
+      all(db, 'SELECT member, status, note, updated FROM aula_attendance WHERE session=?', session.id),
+      all(db, "SELECT member, flag, distance FROM aula_checkins WHERE session=? AND flag<>''", session.id),
+    ]);
     const checkin = isOpen(session)
       ? {
           code: session.checkin_code,
@@ -293,9 +449,13 @@ export const attendanceRoutes = {
           started: session.checkin_started,
           late_minutes: session.checkin_late_minutes,
           windowMs: WINDOW_MS,
+          mode: session.checkin_mode,
+          radius: session.checkin_radius,
+          strict: session.checkin_strict === 1,
+          located: session.checkin_lat !== null,
         }
       : null;
-    return json({ session: { id: session.id, date: session.date, start_time: session.start_time, topic: session.topic }, records, checkin, serverNow: Date.now() });
+    return json({ session: { id: session.id, date: session.date, start_time: session.start_time, topic: session.topic }, records, flags, checkin, serverNow: Date.now() });
   },
 
   // El alumno escanea el QR. Si la clase pide PIN, recibe un permiso firmado de 2 minutos para escribirlo.
@@ -305,6 +465,7 @@ export const attendanceRoutes = {
     if (!code || !windowText || !signature) fail('Código QR no válido.');
     const session = await checkinSession(db, 'checkin_code', code);
     if (!isOpen(session)) fail(CLOSED, 410);
+    if (session.checkin_mode === 'code') fail('Código QR no válido.');
     const window = parseInt(windowText, 36);
     const current = Math.floor(Date.now() / WINDOW_MS);
     if (!Number.isSafeInteger(window) || current - window > 2 || window - current > 1) fail(EXPIRED, 410);

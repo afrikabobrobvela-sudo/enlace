@@ -423,6 +423,18 @@ export const classSessions = sqliteTable(
     checkinStarted: text('checkin_started'),
     checkinUntil: text('checkin_until'),
     checkinLateMinutes: integer('checkin_late_minutes').notNull().default(0),
+    // Migración 0015: registro con código escrito en el pizarrón. 'qr' o 'code' (se valida en el servidor:
+    // un CHECK nuevo obligaría a reconstruir la tabla y pondría en riesgo la asistencia guardada).
+    checkinMode: text('checkin_mode').notNull().default('qr'),
+    // Ubicación del salón (del teléfono del docente) solo mientras el registro está abierto; se borra al cerrarlo.
+    checkinLat: real('checkin_lat'),
+    checkinLng: real('checkin_lng'),
+    checkinAccuracy: real('checkin_accuracy'),
+    // Radio permitido en metros (0 = no se revisa la ubicación) y si se rechaza (1) o solo se marca para revisar (0).
+    checkinRadius: integer('checkin_radius').notNull().default(0),
+    checkinStrict: integer('checkin_strict').notNull().default(0),
+    // Red desde la que el docente abrió el registro (prefijo de IP), como indicio adicional.
+    checkinNetwork: text('checkin_network'),
   },
   (t) => [
     uniqueIndex('aula_sessions_course_date_time').on(t.course, t.date, t.startTime),
@@ -468,6 +480,13 @@ export const checkins = sqliteTable(
     device: text('device').notNull(),
     failures: integer('failures').notNull().default(0),
     checkedIn: text('checked_in'),
+    // Migración 0015: solo la distancia al salón (nunca las coordenadas del alumno), la precisión y si coincidió la red.
+    distance: integer('distance'),
+    accuracy: integer('accuracy'),
+    sameNetwork: integer('same_network'),
+    // Motivo por el que el registro quedó "por revisar" ('' si no hay nada que revisar) y quién lo confirmó.
+    flag: text('flag').notNull().default(''),
+    reviewedBy: text('reviewed_by'),
   },
   (t) => [
     primaryKey({ columns: [t.session, t.member] }),

@@ -2,7 +2,7 @@
 // Al cambiar el fondo de src/public/privacidad.html, sube PRIVACY_VERSION: todas las personas lo aceptan de nuevo.
 import { json, nowIso, run } from './http.js';
 
-export const PRIVACY_VERSION = '2026-10';
+export const PRIVACY_VERSION = '2026-10b'; // 2026-10b: ubicación al registrar asistencia con código
 
 export const privacyAccepted = (user) => user.privacy_version === PRIVACY_VERSION;
 

@@ -221,6 +221,7 @@ function renderRollCall() {
   $('#main').innerHTML = `<button class="back" data-att="back">❮ Resumen de asistencia</button>
     <div class="page-heading"><div><h1>Pasar lista</h1><p class="muted">${esc(sessionLabel(session, 'long'))}${session.topic ? `. ${esc(session.topic)}` : ''}</p></div>
       <div class="action-row">${missing ? `<button class="primary" data-att="all-present">${missing === students.length ? 'Todos presentes' : `Marcar ${missing} sin registro como presentes`}</button>` : ''}
+      <button class="secondary" data-att="code">Registro con código</button>
       <button class="secondary" data-att="qr">Registro con QR</button>
       <button class="danger-link" data-att="delete" data-id="${session.id}">Eliminar sesión</button></div></div>
     <p class="att-counts">${counts.present} presentes, ${counts.late} retardos, ${counts.absent} faltas, ${counts.excused} justificadas${missing ? `, ${missing} sin registro` : ''}.</p>
@@ -261,7 +262,7 @@ function renderMyAttendance() {
   const summary = attendanceSummary(records.map((r) => r.status), settings);
   const today = localToday();
   const past = sessions.filter((s) => s.date <= today).reverse();
-  $('#main').innerHTML = `<h1>Mi asistencia</h1>
+  $('#main').innerHTML = `<div class="page-heading"><h1>Mi asistencia</h1><div class="action-row"><button class="primary" data-checkin-code>Registrar asistencia con código</button></div></div>
     <section class="att-mine"><p class="att-mine-value">${percentPill(summary, settings.min_percent)}</p>
       <p>${summary.present} asistencias, ${summary.late} retardos, ${summary.absent} faltas y ${summary.excused} justificadas. El mínimo requerido es ${settings.min_percent} %.</p></section>
     <ul class="att-history">${past
@@ -415,7 +416,8 @@ document.addEventListener('click', (event) => {
   if (!button || !attendanceData) return;
   const action = button.dataset.att;
   if (action === 'today') openTodaySession();
-  if (action === 'qr') startCheckin();
+  if (action === 'qr') startCheckin('qr');
+  if (action === 'code') startCheckin('code');
   if (action === 'new') newSessionModal();
   if (action === 'generate') generateSessionsModal();
   if (action === 'settings') attendanceSettingsModal();

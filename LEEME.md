@@ -1,9 +1,20 @@
-# Enlace · versión 12.6
+# Enlace · versión 12.7
 
 Plataforma académica independiente para docentes y alumnos de cualquier academia (nació en la Academia de Física de la BUAP), con interfaz inspirada en Brightspace.
 No es el código de D2L Brightspace ni una plataforma oficial de la BUAP.
 
 Esta versión se despliega en **tu propia cuenta de Cloudflare** (Workers + D1 + R2, plan gratuito) y ya no depende de ChatGPT Sites.
+
+## Novedades de la versión 12.7 (asistencia con código en el pizarrón)
+
+Requiere la migración **0015** (solo agrega columnas). Al actualizar, cada persona vuelve a aceptar el aviso de privacidad, porque ahora menciona la ubicación.
+
+- **Registro con código**, para salones sin pantalla. El registro con QR sigue igual. En *Pasar lista*, el botón *Registro con código* muestra un código de 6 caracteres (sin letras que se confunden) para escribirlo en el pizarrón. Los alumnos pulsan **Registrar asistencia** en su pantalla de inicio (o en *Mi asistencia*) y lo escriben desde su teléfono.
+- **Filtro contra el código compartido por WhatsApp.** Tu teléfono da la ubicación del salón al abrir el registro y el de cada alumno la suya al registrarse. Si está a más de la distancia elegida (150 m por omisión, con margen por la imprecisión dentro de edificios), no dio permiso de ubicación o se conecta desde otra red, su registro queda **Por revisar** con el motivo (por ejemplo, "a 6.3 km del salón"). Con un toque lo confirmas (*Está en el salón*) o le pones falta. Si prefieres, puedes elegir que no se registre. Solo se guarda la distancia, nunca las coordenadas del alumno, y la ubicación del salón se borra al cerrar el registro.
+- **Cambiar código** a media clase: el anterior deja de servir de inmediato.
+- **Verificar 3 al azar** (en el registro con código y con QR): Enlace elige tres nombres de los registrados para que los nombres en voz alta; si alguien no está, *No está: falta*.
+- Sigue valiendo que cada teléfono solo registra a un alumno por clase.
+- Limitación: Bluetooth y el nombre de la red Wi-Fi no son accesibles desde una página web (Safari no lo permite); por eso se usan la ubicación y la red de internet.
 
 ## Novedades de la versión 12.6 (Microsoft, periodos, evaluaciones y más)
 
@@ -118,7 +129,7 @@ La pantalla muestra en vivo cuántos se han registrado y quiénes acaban de hace
 
 1. Descarga la versión nueva en una carpeta **nueva** (no encima de la anterior), o `git pull` si trabajas desde GitHub.
 2. Haz un respaldo desde esa carpeta: `npm run respaldo` (ver *Respaldos*).
-3. Doble clic en `configurar.cmd` (Windows) o `configurar.command` (Mac), o `npm run configurar`. Encuentra tu base `enlace-db` y tu almacenamiento, te pide tu correo de administración y tu dirección `.workers.dev`, descarga un respaldo, aplica las migraciones pendientes (0003: asistencia y borradores; 0004: registro con QR; 0005: categorías, rúbricas y equipos; 0006: sesiones; 0007: papelera; 0008: registro de docentes; 0009: aviso de privacidad; 0010: periodos y archivo; 0011: prórrogas; 0012: intentos de evaluaciones; 0013: avisos; 0014: historial de calificaciones) y publica. No cambia tus claves. Al pasar a la versión 12.1 cada persona vuelve a entrar con Google una vez (las sesiones ahora se registran en el servidor).
+3. Doble clic en `configurar.cmd` (Windows) o `configurar.command` (Mac), o `npm run configurar`. Encuentra tu base `enlace-db` y tu almacenamiento, te pide tu correo de administración y tu dirección `.workers.dev`, descarga un respaldo, aplica las migraciones pendientes (0003: asistencia y borradores; 0004: registro con QR; 0005: categorías, rúbricas y equipos; 0006: sesiones; 0007: papelera; 0008: registro de docentes; 0009: aviso de privacidad; 0010: periodos y archivo; 0011: prórrogas; 0012: intentos de evaluaciones; 0013: avisos; 0014: historial de calificaciones; 0015: asistencia con código) y publica. No cambia tus claves. Al pasar a la versión 12.1 cada persona vuelve a entrar con Google una vez (las sesiones ahora se registran en el servidor).
 
 Si prefieres hacerlo a mano: copia tu `database_id` y tu correo del `wrangler.toml` anterior al nuevo (y `ALLOWED_EMAIL_DOMAINS` si lo usabas) y ejecuta `npm install`, `npm run db:migrate` y `npm run deploy`, **en ese orden**: si publicas antes de migrar, Asistencia y Calificaciones fallarán hasta que apliques la migración.
 
@@ -294,7 +305,7 @@ La cookie de sesión usa el prefijo `__Host-`, que exige conexión segura. Chrom
 
 ## Pruebas
 
-`npm test` compila la interfaz y ejecuta veintitrés suites con una base SQLite temporal (con llaves foráneas activas, como D1). No tocan tu base real.
+`npm test` compila la interfaz y ejecuta veinticuatro suites con una base SQLite temporal (con llaves foráneas activas, como D1). No tocan tu base real.
 
 - `test-api.mjs`: todas las verificaciones de la versión 8 más sesiones firmadas, cabeceras falsificadas, ponderaciones, restricciones de la base, docentes, inscripción masiva y el límite de 50 consultas.
 - `test-papelera.mjs`: eliminar y restaurar contenido, actividades (con sus entregas y calificaciones), evaluaciones y publicaciones de foro; permisos de moderación; nombres de alumnos en foros; cuotas de archivos.
@@ -311,6 +322,7 @@ La cookie de sesión usa el prefijo `__Host-`, que exige conexión segura. Chrom
 - `test-evaluaciones.mjs`: evaluador de fórmulas seguro, preguntas numéricas con datos por alumno y tolerancia, intentos, tiempo límite y confidencialidad de respuestas.
 - `test-pendientes.mjs`: mis pendientes, avisos (sin contenido oculto) y comprobante con folio.
 - `test-reportes.mjs`: historial de calificaciones, reportes por academia y unidad y limpieza de archivos sin usar (incluidos los compartidos entre cursos copiados).
+- `test-asistencia-codigo.mjs`: registro con código (ubicación sin guardar coordenadas, red, por revisar, modo estricto, cambio de código y QR intacto).
 - `test-qr.mjs`: generador de QR. Sus huellas corresponden a códigos que se decodificaron con OpenCV; si una cambia, hay que volver a verificarlo.
 - `test-auth-ui.mjs`, `test-admin-ui.mjs`, `test-teacher-files.mjs`, `test-workspace-ui.mjs`, `test-fase1-ui.mjs`, `test-fase2-ui.mjs`, `test-fase2b-ui.mjs`: interfaz (incluye las reglas del porcentaje de asistencia, el reparto de equipos, la revisión en secuencia, la exportación a Excel sin fórmulas inyectadas, que la firma del QR del navegador sea la que acepta el servidor, el ZIP verificado por un lector independiente, las reglas de riesgo, el cálculo por categorías y puntos, el redondeo de la calificación final y la evaluación con rúbrica).
 

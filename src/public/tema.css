@@ -671,3 +671,19 @@ article.course.is-archived { opacity: 0.92; }
 .orphan-form { margin-top: 12px; max-width: 560px; }
 .history-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
 .history-list li { display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; border-left: 3px solid var(--accent); background: var(--canvas); border-radius: 0 var(--radius-sm) var(--radius-sm) 0; }
+
+/* ---- Registro de asistencia con código (12.7) ---- */
+.code-screen { grid-template-columns: 1fr; max-width: 640px; margin: 0 auto; }
+.board-code { font-size: clamp(2.6rem, 12vw, 4.5rem); font-weight: 800; letter-spacing: 0.12em; color: var(--brand); margin: 0.4rem 0; font-variant-numeric: tabular-nums; font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace; }
+.board-code.is-ended { color: var(--ink-faint); text-decoration: line-through; }
+.checkin-flags { border: 1px solid #f1d9a6; background: #fff6e5; border-radius: var(--radius-sm); padding: 10px 14px; margin: 10px 0; }
+.checkin-flags h2 { font-size: 1rem; margin: 0 0 6px; color: #7a4b00; }
+.checkin-flags ul, .checkin-picks ol { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; }
+.checkin-flags li { display: flex; flex-wrap: wrap; gap: 6px 12px; justify-content: space-between; align-items: center; }
+.checkin-flags .action-row { margin: 0; gap: 10px; }
+.checkin-picks { border-left: 3px solid var(--accent); background: var(--canvas); padding: 8px 12px; margin: 10px 0; border-radius: 0 var(--radius-sm) var(--radius-sm) 0; }
+.checkin-picks ol { list-style: decimal inside; }
+.checkin-picks li { display: list-item; }
+.checkin-picks .danger-link { margin-left: 8px; }
+.att-mark.review { background: #fff1d6; color: #7a4a00; width: auto; height: auto; padding: 0.05rem 0.45rem; }
+.code-input { font-size: 1.6rem !important; letter-spacing: 0.15em; text-align: center; text-transform: uppercase; font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace; }

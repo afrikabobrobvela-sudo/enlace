@@ -1,6 +1,6 @@
 {
   "name": "enlace",
-  "version": "12.6.0",
+  "version": "12.7.0",
   "private": true,
   "type": "module",
   "engines": {
@@ -18,7 +18,7 @@
     "db:generate": "drizzle-kit generate",
     "respaldo": "node scripts/respaldo.mjs",
     "respaldo:pruebas": "node scripts/respaldo.mjs --pruebas",
-    "test": "node scripts/build.mjs && node scripts/test-api.mjs && node scripts/test-auth.mjs && node scripts/test-migration.mjs && node scripts/test-fase1.mjs && node scripts/test-fase2.mjs && node scripts/test-fase2b.mjs && node scripts/test-papelera.mjs && node scripts/test-contenido.mjs && node scripts/test-registro.mjs && node scripts/test-periodos.mjs && node scripts/test-codocentes.mjs && node scripts/test-evaluaciones.mjs && node scripts/test-pendientes.mjs && node scripts/test-reportes.mjs && node scripts/test-qr.mjs && node scripts/test-auth-ui.mjs && node scripts/test-admin-ui.mjs && node scripts/test-teacher-files.mjs && node scripts/test-workspace-ui.mjs && node scripts/test-fase1-ui.mjs && node scripts/test-fase2-ui.mjs && node scripts/test-fase2b-ui.mjs && node scripts/test-formato-ui.mjs"
+    "test": "node scripts/build.mjs && node scripts/test-api.mjs && node scripts/test-auth.mjs && node scripts/test-migration.mjs && node scripts/test-fase1.mjs && node scripts/test-fase2.mjs && node scripts/test-fase2b.mjs && node scripts/test-papelera.mjs && node scripts/test-contenido.mjs && node scripts/test-registro.mjs && node scripts/test-periodos.mjs && node scripts/test-codocentes.mjs && node scripts/test-evaluaciones.mjs && node scripts/test-pendientes.mjs && node scripts/test-reportes.mjs && node scripts/test-asistencia-codigo.mjs && node scripts/test-qr.mjs && node scripts/test-auth-ui.mjs && node scripts/test-admin-ui.mjs && node scripts/test-teacher-files.mjs && node scripts/test-workspace-ui.mjs && node scripts/test-fase1-ui.mjs && node scripts/test-fase2-ui.mjs && node scripts/test-fase2b-ui.mjs && node scripts/test-formato-ui.mjs"
   },
   "devDependencies": {
     "drizzle-kit": "0.31.10",
