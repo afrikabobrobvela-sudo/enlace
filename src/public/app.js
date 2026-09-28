@@ -90,7 +90,7 @@ function render() {
   richAttachments = null;
   nav();
   if (!current)
-    return me?.role === 'admin' && homeView === 'teachers' ? renderTeachers() : me?.role === 'admin' && homeView === 'reports' ? renderReports() : me?.role === 'admin' && homeView === 'users' ? renderUsers() : renderHome();
+    return me?.role === 'admin' && homeView === 'teachers' ? renderTeachers() : me?.role === 'admin' && homeView === 'reports' ? renderReports() : me?.role === 'admin' && homeView === 'users' ? renderUsers() : homeView === 'calendar' ? renderCalendar() : homeView === 'avisos' ? renderNoticesPage() : renderHome();
   const routes = {
     hub: renderHub,
     content: renderContent,
@@ -501,7 +501,7 @@ document.addEventListener('click', async (e) => {
   if (!b || busy)
     return;
   try {
-    if (b.dataset.section || ['home', 'teachers', 'reports', 'users', 'course', 'hub', 'task', 'edit-task', 'new-task', 'review'].includes(b.dataset.action)) {
+    if (b.dataset.section || ['home', 'teachers', 'reports', 'users', 'calendar', 'course', 'hub', 'task', 'edit-task', 'new-task', 'review'].includes(b.dataset.action)) {
       if (dirty && !confirm('Hay cambios sin guardar. ¿Quieres salir de esta pantalla?'))
         return;
       dirty = false;
@@ -716,6 +716,7 @@ document.addEventListener('click', async (e) => {
       case 'teachers':
       case 'reports':
       case 'users':
+      case 'calendar':
         current = null;
         homeView = b.dataset.action;
         render();

@@ -2,10 +2,16 @@
 // Los avisos no se guardan uno por alumno: se calculan de lo publicado después de su última revisión,
 // así no se gastan escrituras de D1 (100 000 al día en el plan gratuito).
 import { access } from './access.js';
-import { base64url, fail, json, nowIso, one, all, run } from './http.js';
+import { base64url, fail, json, nowIso, one, all, readJson, run } from './http.js';
 
 const DAY = 86_400_000;
 const WINDOW_DAYS = 14;
+// Historial de avisos: hasta 60 días (y más elementos) cuando se pide con ?days=60.
+const HISTORY_DAYS = 60;
+const READ_BATCH = 50;
+const CALENDAR_MAX_DAYS = 100;
+/** Clave de un aviso: si el elemento se actualiza, cambia la fecha y vuelve a contar como nuevo. */
+const noticeKey = (item) => `${item.type}:${item.id}:${item.at}`;
 
 /** Cursos activos (no archivados ni retirados) en los que la persona es alumna. */
 const STUDENT_COURSES = `SELECT m.id AS member, m.course FROM aula_members m JOIN aula_courses c ON c.id=m.course
@@ -76,9 +82,12 @@ export const dashboardRoutes = {
     return json({ pending: pending.map((p) => ({ ...p, overdue: p.due < now.toISOString(), extended: p.extended === 1 })), grades, toGrade });
   },
 
-  // Avisos de los últimos 14 días; los posteriores a la última revisión cuentan como nuevos.
-  'GET /api/notifications': async ({ db, user }) => {
-    const since = new Date(Date.now() - WINDOW_DAYS * DAY).toISOString();
+  // Avisos de los últimos 14 días (o 60 con ?days=60, para el historial). Un aviso es nuevo si es posterior a
+  // «marcar todo como leído» (notices_seen_at) y no se abrió uno por uno (aula_notice_reads).
+  'GET /api/notifications': async ({ db, user, url }) => {
+    const days = url?.searchParams.get('days') === String(HISTORY_DAYS) ? HISTORY_DAYS : WINDOW_DAYS;
+    const limit = days === HISTORY_DAYS ? 150 : 40;
+    const since = new Date(Date.now() - days * DAY).toISOString();
     const seen = user.notices_seen_at || '';
     // D1 admite como máximo 5 términos en un SELECT compuesto (UNION): se hacen dos consultas de 3 y se juntan aquí.
     const ctes = `WITH mine AS (${STUDENT_COURSES}), teach AS (${TEACHER_COURSES})`;
@@ -99,7 +108,7 @@ export const dashboardRoutes = {
          SELECT 'quiz', r.id, r.course, c.name, json_extract(r.data,'$.title'), r.updated
            FROM mine JOIN aula_records r ON r.course=mine.course AND r.kind='quiz' AND r.deleted_at IS NULL
              AND json_type(r.data,'$.visible') IS NOT 'false' JOIN aula_courses c ON c.id=r.course WHERE r.updated>?2
-         ORDER BY at DESC LIMIT 40`,
+         ORDER BY at DESC LIMIT ${limit}`,
         user.id,
         since,
       ),
@@ -117,26 +126,128 @@ export const dashboardRoutes = {
          SELECT 'submission', t.id, s.course, c.name, t.title, s.submitted
            FROM teach JOIN aula_submissions s ON s.course=teach.course AND s.submitted>?2 AND s.manual=0
            JOIN aula_tasks t ON t.id=s.task AND t.deleted_at IS NULL JOIN aula_courses c ON c.id=s.course
-         ORDER BY at DESC LIMIT 40`,
+         ORDER BY at DESC LIMIT ${limit}`,
         user.id,
         since,
         nowIso(),
       ),
     ]);
-    const items = [...content, ...activity].sort((a, b) => (a.at < b.at ? 1 : -1)).slice(0, 40);
+    const reads = new Set((await all(db, 'SELECT item FROM aula_notice_reads WHERE user_id=?', user.id)).map((r) => r.item));
+    const items = [...content, ...activity].sort((a, b) => (a.at < b.at ? 1 : -1)).slice(0, limit);
     // Varias entregas de la misma actividad se agrupan en un solo aviso.
     const grouped = [];
     for (const item of items) {
       const same = item.type === 'submission' && grouped.find((g) => g.type === 'submission' && g.id === item.id);
       if (same) same.count++;
-      else grouped.push({ ...item, count: 1, fresh: item.at > seen });
+      else {
+        const key = noticeKey(item);
+        grouped.push({ ...item, key, count: 1, fresh: item.at > seen && !reads.has(key) });
+      }
     }
-    return json({ items: grouped, unread: grouped.filter((g) => g.fresh).length });
+    return json({ items: grouped, unread: grouped.filter((g) => g.fresh).length, days });
   },
 
+  // Marcar todo como leído: basta con la fecha; las marcas individuales ya no hacen falta y se borran.
   'POST /api/notifications/seen': async ({ db, user }) => {
-    await run(db, 'UPDATE aula_users SET notices_seen_at=? WHERE id=?', nowIso(), user.id);
+    await db.batch([
+      db.prepare('UPDATE aula_users SET notices_seen_at=? WHERE id=?').bind(nowIso(), user.id),
+      db.prepare('DELETE FROM aula_notice_reads WHERE user_id=?').bind(user.id),
+    ]);
     return json({ ok: true });
+  },
+
+  // Marcar avisos como leídos uno por uno (al abrirlos). Una sola escritura para varios.
+  'POST /api/notifications/read': async ({ db, user, request }) => {
+    const { items } = await readJson(request);
+    if (!Array.isArray(items) || !items.length || items.length > READ_BATCH || items.some((k) => typeof k !== 'string' || k.length > 200)) {
+      fail(`Envía de 1 a ${READ_BATCH} avisos.`);
+    }
+    await run(
+      db,
+      'INSERT OR IGNORE INTO aula_notice_reads (user_id,item,read_at) SELECT ?1, value, ?2 FROM json_each(?3)',
+      user.id,
+      nowIso(),
+      JSON.stringify(items),
+    );
+    return json({ ok: true });
+  },
+
+  // Calendario: actividades y clases de todos los cursos activos de la persona entre ?from y ?to (fechas ISO).
+  // Para el alumno, con su prórroga y el estado de su entrega; para quien enseña, también lo oculto (marcado) y
+  // cuántas entregas faltan por calificar.
+  'GET /api/calendar': async ({ db, user, url }) => {
+    const from = new Date(url.searchParams.get('from') || '');
+    const to = new Date(url.searchParams.get('to') || '');
+    if (Number.isNaN(+from) || Number.isNaN(+to) || to <= from) fail('Indica el periodo del calendario.');
+    if (to - from > CALENDAR_MAX_DAYS * DAY) fail(`El calendario muestra como máximo ${CALENDAR_MAX_DAYS} días a la vez.`);
+    const now = nowIso();
+    const [fromIso, toIso] = [from.toISOString(), to.toISOString()];
+    // Las clases guardan la fecha local (AAAA-MM-DD): se amplía un día a cada lado y el navegador acomoda.
+    const [fromDay, toDay] = [new Date(+from - DAY).toISOString().slice(0, 10), new Date(+to + DAY).toISOString().slice(0, 10)];
+    const teaching = user.role === 'teacher' || user.role === 'admin';
+    const [studentTasks, teacherTasks, sessions, courses] = await Promise.all([
+      all(
+        db,
+        `WITH mine AS (${STUDENT_COURSES})
+         SELECT t.id, t.title, t.course, coalesce(e.due, t.due) AS due, coalesce(e.end_at, t.end_at) AS end_at,
+                e.due IS NOT NULL AS extended, s.submitted, s.grade, s.published, s.late
+         FROM mine JOIN aula_tasks t ON t.course=mine.course AND t.visible=1 AND t.deleted_at IS NULL
+           AND (t.start_at='' OR t.start_at<=?4)
+         LEFT JOIN aula_extensions e ON e.task=t.id AND e.member=mine.member
+         LEFT JOIN aula_submissions s ON s.task=t.id AND s.member=mine.member
+         WHERE coalesce(e.due, t.due) BETWEEN ?2 AND ?3 ORDER BY due LIMIT 300`,
+        user.id,
+        fromIso,
+        toIso,
+        now,
+      ),
+      teaching
+        ? all(
+            db,
+            `WITH teach AS (${TEACHER_COURSES})
+             SELECT t.id, t.title, t.course, t.due, t.end_at, t.visible,
+               (SELECT count(*) FROM aula_submissions s WHERE s.task=t.id AND s.submitted!='' AND s.manual=0) AS submitted,
+               (SELECT count(*) FROM aula_submissions s WHERE s.task=t.id AND s.submitted!='' AND s.grade IS NULL) AS to_grade
+             FROM teach JOIN aula_tasks t ON t.course=teach.course AND t.deleted_at IS NULL
+             WHERE t.due BETWEEN ?2 AND ?3 ORDER BY t.due LIMIT 300`,
+            user.id,
+            fromIso,
+            toIso,
+          )
+        : [],
+      all(
+        db,
+        `WITH mine AS (${STUDENT_COURSES}), teach AS (${TEACHER_COURSES})
+         SELECT x.id, x.course, x.date, x.start_time, x.topic, x.role,
+           (SELECT a.status FROM aula_attendance a WHERE a.session=x.id AND a.member=x.member) AS status
+         FROM (SELECT s.*, 'student' AS role, mine.member FROM mine JOIN aula_sessions s ON s.course=mine.course
+               UNION ALL
+               SELECT s.*, 'teacher', NULL FROM teach JOIN aula_sessions s ON s.course=teach.course) x
+         WHERE x.date BETWEEN ?2 AND ?3 ORDER BY x.date, x.start_time LIMIT 400`,
+        user.id,
+        fromDay,
+        toDay,
+      ),
+      all(
+        db,
+        `WITH mine AS (${STUDENT_COURSES}), teach AS (${TEACHER_COURSES})
+         SELECT c.id, c.name, c.group_name, 'student' AS role FROM mine JOIN aula_courses c ON c.id=mine.course
+         UNION SELECT c.id, c.name, c.group_name, 'teacher' FROM teach JOIN aula_courses c ON c.id=teach.course
+         ORDER BY name`,
+        user.id,
+      ),
+    ]);
+    const status = (t) => {
+      if (t.grade !== null && t.published === 1) return 'graded';
+      if (t.submitted) return 'submitted';
+      return t.due < now ? 'missing' : 'pending';
+    };
+    const events = [
+      ...studentTasks.map((t) => ({ type: 'task', role: 'student', id: t.id, course: t.course, title: t.title, at: t.due, end: t.end_at || '', extended: t.extended === 1, status: status(t), late: t.late === 1 })),
+      ...teacherTasks.map((t) => ({ type: 'task', role: 'teacher', id: t.id, course: t.course, title: t.title, at: t.due, end: t.end_at || '', hidden: t.visible !== 1, submitted: t.submitted, toGrade: t.to_grade })),
+      ...sessions.map((s) => ({ type: 'session', role: s.role, id: s.id, course: s.course, title: s.topic || 'Clase', date: s.date, time: s.start_time, attendance: s.status || null })),
+    ];
+    return json({ events, courses });
   },
 
   // Comprobante de una entrega: lo ve quien entregó (o su equipo) y los docentes del curso.

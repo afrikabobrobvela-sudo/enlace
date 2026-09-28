@@ -397,3 +397,17 @@ dialog.sheet::backdrop { background: rgba(12, 28, 42, 0.45); }
 @media (prefers-reduced-motion: reduce) {
   dialog.sheet[open] { animation: none; }
 }
+
+/* Calendario en el teléfono: el mes se lee como puntos por día; la agenda es la vista principal. */
+@media (max-width: 720px) {
+  .cal-toolbar { gap: 10px; }
+  .cal-toolbar .filter-control { width: 100%; }
+  .cal-toolbar .filter-control select { flex: 1; min-width: 0; }
+  .cal-cell { min-height: 64px; padding: 3px; }
+  .cal-chip { font-size: 0; padding: 0; height: 8px; border-left: 0; background: var(--cal); border-radius: 4px; }
+  .cal-chip .cal-time { display: none; }
+  .cal-more { font-size: .7rem; padding: 0 2px; }
+  .cal-weekday { padding: 6px 2px; text-align: center; font-size: .72rem; }
+  .cal-daynum { align-self: center; }
+  .notice-filters select { flex: 1 1 100%; }
+}

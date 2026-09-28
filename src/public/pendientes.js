@@ -68,10 +68,7 @@ async function loadNotices() {
     return;
   }
   bell.hidden = false;
-  const badge = bell.querySelector('.badge-count');
-  badge.textContent = noticesCache.unread > 9 ? '9+' : String(noticesCache.unread);
-  badge.hidden = !noticesCache.unread;
-  bell.setAttribute('aria-label', noticesCache.unread ? `Avisos: ${noticesCache.unread} nuevos` : 'Avisos');
+  updateBellBadge();
 }
 
 function startNotices() {
@@ -80,36 +77,114 @@ function startNotices() {
   noticesTimer = setInterval(loadNotices, 5 * 60_000);
 }
 
+// Filtros de los avisos (panel e historial): curso y "solo sin leer".
+let noticeFilter = { course: '', unread: false };
+
+function noticeListHtml(items) {
+  const shown = items.filter((i) => (!noticeFilter.course || i.course === noticeFilter.course) && (!noticeFilter.unread || i.fresh));
+  if (!shown.length) return `<p class="muted bell-empty">${items.length ? 'Ningún aviso coincide con el filtro.' : 'No hay avisos recientes.'}</p>`;
+  return `<ul class="notice-list">${shown
+    .map(
+      (i) => `<li><button class="bell-item ${i.fresh ? 'is-new' : ''}" data-notice-key="${esc(i.key || '')}" ${openItemAttrs(i.course, NOTICE_TARGET[i.type], i.id)}>
+        <span class="bell-kind">${i.fresh ? '<span class="unread-dot" aria-label="Sin leer"></span>' : ''}${NOTICE_LABELS[i.type] || ''}${i.count > 1 ? ` (${i.count})` : ''}</span>
+        <span class="bell-title">${esc(i.title || 'Sin título')}</span>
+        <span class="bell-meta">${esc(i.course_name)} · ${esc(fmt(i.at))}</span></button></li>`,
+    )
+    .join('')}</ul>`;
+}
+
+function noticeFiltersHtml(items) {
+  const courses = [...new Map(items.map((i) => [i.course, i.course_name])).entries()].sort((a, b) => a[1].localeCompare(b[1], 'es'));
+  if (noticeFilter.course && !courses.some(([id]) => id === noticeFilter.course)) noticeFilter.course = '';
+  return `<div class="notice-filters">
+    ${courses.length > 1 ? `<label class="sr-only" for="noticeCourse">Curso</label><select id="noticeCourse" data-notice-course><option value="">Todos los cursos</option>${courses
+      .map(([id, name]) => `<option value="${esc(id)}" ${noticeFilter.course === id ? 'selected' : ''}>${esc(name)}</option>`)
+      .join('')}</select>` : ''}
+    <label class="check-label"><input type="checkbox" data-notice-unread ${noticeFilter.unread ? 'checked' : ''}> Solo sin leer</label>
+  </div>`;
+}
+
+function updateBellBadge() {
+  const badge = $('#bell .badge-count');
+  if (!badge || !noticesCache) return;
+  badge.textContent = noticesCache.unread > 9 ? '9+' : String(noticesCache.unread);
+  badge.hidden = !noticesCache.unread;
+  $('#bell').setAttribute('aria-label', noticesCache.unread ? `Avisos: ${noticesCache.unread} nuevos` : 'Avisos');
+}
+
+function drawNoticesPanel() {
+  const panel = $('#bellPanel');
+  const items = noticesCache?.items || [];
+  panel.innerHTML = `<div class="bell-head"><strong>Avisos</strong>${
+    noticesCache?.unread ? '<button type="button" class="text-btn" data-notices-all-read>Marcar todo como leído</button>' : '<span class="muted">Últimos 14 días</span>'
+  }</div>${items.length ? noticeFiltersHtml(items) : ''}${noticeListHtml(items)}
+  <div class="bell-foot"><button type="button" class="text-btn" data-notices-history>Ver historial (60 días)</button></div>`;
+}
+
 async function toggleNoticesPanel() {
   const panel = $('#bellPanel');
   if (!panel.hidden) return (panel.hidden = true);
   if (!noticesCache) await loadNotices();
-  const items = noticesCache?.items || [];
-  panel.innerHTML = `<div class="bell-head"><strong>Avisos</strong><span class="muted">Últimos 14 días</span></div>${
-    items.length
-      ? `<ul>${items
-          .map(
-            (i) => `<li><button class="bell-item ${i.fresh ? 'is-new' : ''}" ${openItemAttrs(i.course, NOTICE_TARGET[i.type], i.id)}>
-              <span class="bell-kind">${NOTICE_LABELS[i.type] || ''}${i.count > 1 ? ` (${i.count})` : ''}</span>
-              <span class="bell-title">${esc(i.title || 'Sin título')}</span>
-              <span class="bell-meta">${esc(i.course_name)} · ${esc(fmt(i.at))}</span></button></li>`,
-          )
-          .join('')}</ul>`
-      : '<p class="muted bell-empty">No hay avisos recientes.</p>'
-  }`;
+  drawNoticesPanel();
   panel.hidden = false;
-  if (noticesCache?.unread) {
-    request('/api/notifications/seen', {}).catch(() => {});
-    noticesCache.unread = 0;
-    noticesCache.items.forEach((i) => (i.fresh = false));
-    const badge = $('#bell .badge-count');
-    if (badge) badge.hidden = true;
+}
+
+/** Marca un aviso como leído en el servidor y en pantalla (sin esperar la respuesta). */
+function markNoticeRead(key) {
+  if (!key) return;
+  for (const list of [noticesCache?.items, noticesHistory?.items]) {
+    const item = list?.find((i) => i.key === key && i.fresh);
+    if (!item) continue;
+    item.fresh = false;
+    if (list === noticesCache?.items) noticesCache.unread = Math.max(0, noticesCache.unread - 1);
   }
+  updateBellBadge();
+  request('/api/notifications/read', { items: [key] }).catch(() => {});
+}
+
+async function markAllNoticesRead() {
+  await request('/api/notifications/seen', {});
+  for (const list of [noticesCache?.items, noticesHistory?.items]) list?.forEach((i) => (i.fresh = false));
+  if (noticesCache) noticesCache.unread = 0;
+  updateBellBadge();
+}
+
+// ---- Historial de avisos (pantalla completa, 60 días) -----------------------------------------------
+
+let noticesHistory = null;
+
+async function renderNoticesPage() {
+  $('#main').innerHTML = '<p class="empty">Cargando avisos…</p>';
+  try {
+    noticesHistory = await request('/api/notifications?days=60');
+  } catch (e) {
+    $('#main').innerHTML = `<section class="error"><h2>No se pudieron cargar los avisos</h2><p>${esc(e.message)}</p>${button('Volver a mis cursos', 'home', '', 'secondary')}</section>`;
+    return;
+  }
+  if (current || homeView !== 'avisos') return;
+  drawNoticesPage();
+}
+
+function drawNoticesPage() {
+  const items = noticesHistory.items;
+  const unread = items.filter((i) => i.fresh).length;
+  $('#main').innerHTML = `<button class="back" data-action="home">❮ Volver a mis cursos</button>
+    <div class="home-title-row"><div><h1>Avisos</h1><p class="muted">Lo publicado en tus cursos en los últimos 60 días. ${unread ? `${unread} sin leer.` : 'Todo leído.'}</p></div>
+      ${unread ? '<div class="action-row"><button class="secondary" type="button" data-notices-all-read>Marcar todo como leído</button></div>' : ''}</div>
+    <section class="panel notices-page">${items.length ? noticeFiltersHtml(items) : ''}<div id="noticesPageList">${noticeListHtml(items)}</div></section>`;
+}
+
+function redrawNotices() {
+  if (!$('#bellPanel').hidden) drawNoticesPanel();
+  if (!current && homeView === 'avisos' && noticesHistory) drawNoticesPage();
 }
 
 /** Abre un curso en la sección que corresponde al aviso o pendiente. */
 async function openFromNotice(dataset) {
   $('#bellPanel') && ($('#bellPanel').hidden = true);
+  // Desde una ventana (por ejemplo, los eventos de un día del calendario): primero se cierra.
+  const dialog = $('#modal');
+  if (dialog?.open) return closeDialogThen(dialog, () => openFromNotice(dataset).catch((error) => toast(error.message)));
   if (current?.course.id !== dataset.openCourse) await openCourse(dataset.openCourse);
   const type = dataset.openType;
   if (type === 'task' || type === 'quiz') {
@@ -146,7 +221,34 @@ async function receiptModal(submissionId) {
   );
 }
 
+document.addEventListener('change', (e) => {
+  if (e.target.matches?.('[data-notice-course]')) noticeFilter.course = e.target.value;
+  else if (e.target.matches?.('[data-notice-unread]')) noticeFilter.unread = e.target.checked;
+  else return;
+  redrawNotices();
+});
+
 document.addEventListener('click', async (e) => {
+  const allRead = e.target.closest('[data-notices-all-read]');
+  const history = e.target.closest('[data-notices-history]');
+  try {
+    if (allRead) {
+      await markAllNoticesRead();
+      return redrawNotices();
+    }
+    if (history) {
+      $('#bellPanel').hidden = true;
+      current = null;
+      previewAsStudent = false;
+      previewMember = null;
+      homeView = 'avisos';
+      return render();
+    }
+  } catch (error) {
+    return toast(error.message);
+  }
+  const noticeKey = e.target.closest('[data-notice-key]')?.dataset.noticeKey;
+  if (noticeKey) markNoticeRead(noticeKey);
   const open = e.target.closest('[data-open-course]');
   const bell = e.target.closest('#bell');
   const receipt = e.target.closest('[data-receipt]');

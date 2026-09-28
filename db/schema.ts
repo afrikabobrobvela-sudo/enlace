@@ -32,6 +32,21 @@ export const users = sqliteTable(
 );
 
 /**
+ * Migración 0018: avisos leídos uno por uno. Un aviso está leído si es anterior a aula_users.notices_seen_at
+ * ("marcar todo como leído", que además vacía esta tabla para esa persona) o si su clave está aquí.
+ * La clave incluye la fecha del aviso (tipo:id:fecha): si el elemento cambia, vuelve a aparecer como nuevo.
+ */
+export const noticeReads = sqliteTable(
+  'aula_notice_reads',
+  {
+    userId: text('user_id').notNull(),
+    item: text('item').notNull(),
+    readAt: text('read_at').notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.item] })],
+);
+
+/**
  * Migración 0017: registro de acciones delicadas de la administración y del personal docente
  * (consultar lo que ve un alumno concreto, suspender o reactivar un acceso, transferir un curso).
  */

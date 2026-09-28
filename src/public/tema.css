@@ -747,3 +747,55 @@ button.my-grade-row:hover .my-grade-title { color: var(--link); }
 .user-list li > button { flex: none; }
 .users-filters .search-control { flex: 1 1 260px; }
 .user-list.user-log li { display: block; }
+
+/* Calendario */
+.cal-toolbar { display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: center; margin: 8px 0 12px; }
+.cal-nav { display: flex; align-items: center; gap: 8px; }
+.cal-nav .secondary { min-width: 40px; padding: 6px 10px; }
+.cal-title { font-size: 1.15rem; min-width: 11ch; text-align: center; }
+.cal-tabs { display: inline-flex; border: 1px solid var(--line-strong); border-radius: 10px; overflow: hidden; }
+.cal-tabs button { background: #fff; border: 0; padding: 7px 16px; font: inherit; cursor: pointer; color: var(--ink); }
+.cal-tabs button.active { background: var(--brand); color: #fff; }
+.cal-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; font-size: .85rem; color: var(--ink-soft); margin-bottom: 12px; }
+.cal-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; flex: none; margin-right: 4px; vertical-align: middle; }
+.cal-dot.is-pending, .cal-chip.is-pending { --cal: #0e7fb4; }
+.cal-dot.is-missing, .cal-chip.is-missing { --cal: #c0392b; }
+.cal-dot.is-submitted, .cal-chip.is-submitted, .cal-dot.is-graded, .cal-chip.is-graded { --cal: #2e8b57; }
+.cal-dot.is-session, .cal-chip.is-session { --cal: #7a5cb8; }
+.cal-dot.is-teaching, .cal-chip.is-teaching { --cal: #b7791f; }
+.cal-dot { background: var(--cal); }
+.cal-item .cal-dot { background: var(--cal); }
+.cal-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: #fff; }
+.cal-weekday { padding: 8px; font-size: .8rem; font-weight: 600; color: var(--ink-soft); background: #f6f8fa; border-bottom: 1px solid var(--line); }
+.cal-cell { min-height: 110px; padding: 6px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.cal-cell:nth-child(7n) { border-right: 0; }
+.cal-cell.is-outside { background: #fafbfc; }
+.cal-cell.is-outside .cal-daynum { color: #a3b0bc; }
+.cal-daynum { font-size: .82rem; font-weight: 600; align-self: flex-end; width: 26px; height: 26px; display: grid; place-items: center; border-radius: 50%; }
+.cal-cell.is-today .cal-daynum { background: var(--brand); color: #fff; }
+.cal-chip { display: block; width: 100%; text-align: left; border: 0; border-left: 3px solid var(--cal); background: color-mix(in srgb, var(--cal) 10%, #fff); color: var(--ink); border-radius: 5px; padding: 3px 6px; font: inherit; font-size: .78rem; line-height: 1.25; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
+.cal-chip:hover { background: color-mix(in srgb, var(--cal) 18%, #fff); }
+.cal-time { font-variant-numeric: tabular-nums; color: var(--ink-soft); }
+.cal-more { border: 0; background: none; color: var(--brand-2); font: inherit; font-size: .78rem; text-align: left; padding: 2px 6px; cursor: pointer; }
+.cal-agenda { display: grid; gap: 16px; }
+.cal-day h2 { font-size: 1rem; margin: 0 0 6px; }
+.cal-key { white-space: nowrap; display: inline-flex; align-items: center; }
+.cal-day.is-today h2 { color: var(--brand-2); }
+.cal-day ul { list-style: none; margin: 0; padding: 0; background: #fff; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+.cal-day li + li { border-top: 1px solid var(--line); }
+.cal-item { display: flex; gap: 12px; align-items: center; width: 100%; padding: 12px 14px; border: 0; background: none; text-align: left; font: inherit; color: inherit; cursor: pointer; min-height: 44px; }
+.cal-item:hover { background: #f6f8fa; }
+.cal-item-time { width: 6.5ch; flex: none; font-variant-numeric: tabular-nums; color: var(--ink-soft); }
+.cal-item-body { display: flex; flex-direction: column; min-width: 0; overflow-wrap: anywhere; }
+.cal-item-body .muted { font-size: .85rem; }
+
+/* Avisos: filtros, marca de no leído e historial */
+.notice-filters { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; padding: 8px 14px; border-bottom: 1px solid var(--line); }
+.notice-filters select { max-width: 100%; font: inherit; padding: 4px 8px; border-radius: 8px; border: 1px solid var(--line-strong); }
+.bell-head .text-btn, .bell-foot .text-btn { font-size: .85rem; }
+.bell-foot { padding: 8px 14px; border-top: 1px solid var(--line); text-align: center; }
+.unread-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); margin-right: 6px; vertical-align: middle; }
+.notices-page { padding: 0; overflow: hidden; }
+.notices-page .notice-list { list-style: none; margin: 0; padding: 0; }
+.notices-page .notice-list li + li { border-top: 1px solid var(--line); }
+.notices-page .bell-item { width: 100%; }

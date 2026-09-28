@@ -85,7 +85,8 @@ async function applyRoute(route) {
         previewMember = null;
         courses = await request('/api/courses');
       }
-      homeView = route.h && me?.role === 'admin' ? route.h : 'courses';
+      // Calendario e historial de avisos son de todos; las demás vistas de inicio, solo de la administración.
+      homeView = ['calendar', 'avisos'].includes(route.h) || (route.h && me?.role === 'admin') ? route.h : 'courses';
       section = 'hub';
       detail = null;
       render();
