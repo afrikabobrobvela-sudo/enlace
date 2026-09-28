@@ -16,6 +16,8 @@ const TYPES = {
   txt: 'text/plain; charset=utf-8',
   wasm: 'application/wasm',
   woff2: 'font/woff2',
+  png: 'image/png',
+  webmanifest: 'application/manifest+json; charset=utf-8',
 };
 const decoded = new Map(); // base64 → bytes, una sola vez por instancia
 

@@ -149,6 +149,21 @@ const caida = await fetchWorker('/salud', {}, { ...baseEnv, DB: { prepare: () =>
 assert.equal(caida.status, 503);
 checks += 2;
 
+// ---- App instalable (PWA) ----
+const manifest = await fetchWorker('/manifest.webmanifest');
+assert.match(manifest.headers.get('content-type'), /application\/manifest\+json/);
+const m = await manifest.json();
+assert.deepEqual([m.display, m.start_url, m.icons.map((i) => i.sizes)], ['standalone', '/?origen=app', ['192x192', '512x512', '512x512']]);
+for (const icon of m.icons) {
+  const res = await fetchWorker(icon.src);
+  assert.equal(res.headers.get('content-type'), 'image/png');
+  assert.deepEqual([...new Uint8Array(await res.arrayBuffer()).slice(0, 4)], [0x89, 0x50, 0x4e, 0x47]);
+}
+const sw = await fetchWorker('/sw.js');
+assert.match(sw.headers.get('content-type'), /javascript/);
+assert.match(await sw.text(), /api\|auth/, 'El service worker excluye la API');
+checks += 5;
+
 // ---- Aviso de privacidad ----
 const page = await fetchWorker('/privacidad');
 assert.equal(page.status, 200);

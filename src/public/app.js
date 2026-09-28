@@ -828,6 +828,9 @@ async function init() {
     $('#retry').onclick = init;
   }
 }
+// App instalable (PWA): el service worker nunca guarda datos de la API.
+if (globalThis.navigator?.serviceWorker && location.protocol === 'https:')
+  navigator.serviceWorker.register('/sw.js').catch(() => {});
 /** Pantalla de aceptación del aviso de privacidad; al aceptar continúa donde iba la persona. */
 function renderPrivacyGate() {
   nav();
