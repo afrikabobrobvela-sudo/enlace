@@ -1,0 +1,399 @@
+/* Enlace en el teléfono (versión 12.9).
+ * Se carga después de tema.css. Hasta 720 px de ancho: encabezado de una línea, barra inferior con las secciones
+ * del curso, ventanas a pantalla completa con los botones siempre a la vista, tablas como tarjetas y campos de
+ * 16 px (en iPhone, un campo más chico hace zoom al tocarlo). Con pantalla táctil, objetivos de al menos 44 px.
+ * Algunas reglas usan !important porque las capas antiguas fijan tamaños con selectores de id.
+ */
+
+/* ---- Para todos los tamaños ---------------------------------------------------------------------- */
+
+html { -webkit-text-size-adjust: 100%; }
+button, a, summary, label, input, select, textarea { -webkit-tap-highlight-color: rgba(14, 159, 180, 0.12); touch-action: manipulation; }
+main { overflow-wrap: break-word; }
+main img, main video, main iframe, main canvas { max-width: 100%; }
+main pre, main code { white-space: pre-wrap; overflow-wrap: anywhere; }
+.katex-display { overflow-x: auto; overflow-y: hidden; padding: 4px 0; }
+
+.bottom-nav { display: none; }
+
+/* Adjuntos: «Tomar foto» abre la cámara (solo en pantallas táctiles) y las fotos se pueden unir en un PDF. */
+.file-pickers { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 4px 0; }
+.file-pickers .file-picker { margin: 0; }
+.camera-picker { display: none !important; background: var(--surface) !important; color: var(--brand) !important; border: 1px solid var(--brand); }
+#fields label.photo-merge, label.photo-merge { display: flex; gap: 10px; align-items: flex-start; margin: 12px 0 4px; font-weight: 600; line-height: 1.4; }
+#fields label.photo-merge[hidden], label.photo-merge[hidden] { display: none; }
+#fields .photo-merge input, .photo-merge input { display: inline-block; flex: none; width: 22px !important; height: 22px; margin: 0; }
+
+dialog.sheet { border: 0; padding: 0; width: min(460px, 94vw); border-radius: 18px; box-shadow: var(--shadow-lg); color: var(--ink); }
+dialog.sheet::backdrop { background: rgba(12, 28, 42, 0.45); }
+.sheet-inner { padding: 10px 18px 18px; }
+.sheet-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 4px 0 12px; }
+.sheet-head h2 { margin: 0; font-size: 17px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sheet-head .close { width: 40px; height: 40px; border: 0; border-radius: 50%; background: var(--canvas); color: var(--ink-soft); font-size: 24px; line-height: 1; flex: none; }
+.sheet-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.sheet-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-height: 92px;
+  padding: 12px 6px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--canvas);
+  color: var(--ink);
+  font: 600 13.5px/1.2 'Inter', sans-serif;
+  text-align: center;
+}
+.sheet-item svg { color: var(--brand-2); }
+.sheet-item small { font-weight: 500; font-size: 12px; color: var(--ink-faint); }
+.sheet-item.active { background: #e3f1f8; border-color: #b8dcec; color: var(--brand); }
+.sheet-links { display: grid; margin-top: 12px; padding-top: 6px; border-top: 1px solid var(--line); }
+.sheet-link {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 50px;
+  padding: 8px 6px;
+  border: 0;
+  border-radius: 10px;
+  background: none;
+  color: var(--ink);
+  font: 600 15px 'Inter', sans-serif;
+  text-align: left;
+}
+.sheet-link svg { color: var(--ink-soft); }
+
+/* ---- Teléfono ------------------------------------------------------------------------------------ */
+
+@media (max-width: 720px) {
+  /* Encabezado de una sola línea: logotipo, nombre del curso y herramientas. */
+  .shell > header {
+    position: sticky;
+    top: 0;
+    height: auto;
+    min-height: 56px;
+    flex-wrap: nowrap;
+    gap: 8px;
+    padding: calc(6px + env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) 6px max(12px, env(safe-area-inset-left));
+  }
+  .wordmark { font-size: 20px; flex: none; gap: 8px; }
+  .wordmark .brand-mark { width: 32px; height: 32px; }
+  .wordmark .brand-text span { display: none; }
+  body.in-course .wordmark .brand-text { display: none; }
+  .course-heading { order: 0; flex: 1 1 auto; min-width: 0; flex-basis: auto; padding: 0; border: 0; font-size: 16px; font-weight: 700; color: var(--ink); text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  body:not(.in-course) #crumb { visibility: hidden; }
+  #roleLabel, #logoutButton { display: none !important; }
+  .header-tools { margin-left: auto; gap: 2px; flex: none; }
+  .course-picker > summary, #bell { width: 42px; height: 42px; display: inline-flex; align-items: center; justify-content: center; }
+  .profile-square { width: 38px; height: 38px; margin-left: 4px; }
+  .course-picker-panel,
+  .bell-panel {
+    position: fixed !important;
+    left: 10px !important;
+    right: 10px !important;
+    top: calc(60px + env(safe-area-inset-top)) !important;
+    width: auto !important;
+    max-width: none !important;
+    max-height: 70vh;
+    overflow: auto;
+    z-index: 60;
+  }
+  .course-picker-panel button { min-height: 46px; }
+
+  /* En un curso, la barra superior de secciones se sustituye por la barra inferior. */
+  body.in-course #topnav { display: none !important; }
+
+  .bottom-nav:not([hidden]) {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 0;
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 40;
+    padding: 4px max(4px, env(safe-area-inset-right)) calc(4px + env(safe-area-inset-bottom)) max(4px, env(safe-area-inset-left));
+    background: rgba(255, 255, 255, 0.97);
+    backdrop-filter: saturate(1.4) blur(10px);
+    border-top: 1px solid var(--line);
+    box-shadow: 0 -6px 18px rgba(16, 38, 58, 0.06);
+  }
+  .bottom-nav button {
+    position: relative;
+    isolation: isolate;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    min-height: 54px;
+    padding: 4px 2px;
+    border: 0;
+    border-radius: 12px;
+    background: none;
+    color: var(--ink-soft);
+    font: 600 11.5px/1.1 'Inter', sans-serif;
+    letter-spacing: -0.01em;
+  }
+  .bottom-nav button span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: inherit; }
+  /* styles.css trae reglas de una barra lateral antigua para «nav button»: aquí se anulan. */
+  .bottom-nav button.active { color: var(--brand); background: none; box-shadow: none; }
+  .bottom-nav button.active::before {
+    content: '';
+    position: absolute;
+    z-index: -1;
+    top: 3px;
+    left: 50%;
+    width: 56px;
+    height: 30px;
+    transform: translateX(-50%);
+    border-radius: 999px;
+    background: #dcedf6;
+  }
+  .nav-badge {
+    position: absolute;
+    top: 1px;
+    left: calc(50% + 7px);
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
+    border-radius: 999px;
+    background: #d64528;
+    color: #fff;
+    font: 700 11px/18px 'Inter', sans-serif;
+    text-align: center;
+    box-shadow: 0 0 0 2px #fff;
+  }
+  body.has-bottomnav .shell { padding-bottom: calc(66px + env(safe-area-inset-bottom)); }
+  body.exam-running .bottom-nav,
+  body.keyboard-open .bottom-nav { display: none !important; }
+  body.exam-running .shell, body.keyboard-open .shell { padding-bottom: 0; }
+
+  main { padding: 16px max(16px, env(safe-area-inset-right)) 28px max(16px, env(safe-area-inset-left)) !important; }
+  h1 { font-size: 24px !important; line-height: 1.2; }
+  footer { padding: 14px 16px 18px; font-size: 12.5px; }
+  #toast { left: 16px; right: 16px; transform: none; max-width: none; text-align: center; border-radius: 14px; bottom: calc(16px + env(safe-area-inset-bottom)); }
+  body.has-bottomnav #toast { bottom: calc(80px + env(safe-area-inset-bottom)); }
+  #previewBar:not([hidden]) { flex-wrap: wrap; gap: 8px; padding: 10px 16px; font-size: 14px; }
+
+  /* Campos de 16 px: en iPhone un campo más chico acerca la pantalla al tocarlo. */
+  input:not([type='checkbox']):not([type='radio']):not([type='range']):not(.code-input),
+  select,
+  textarea { font-size: 16px !important; }
+  input[type='checkbox'], input[type='radio'] { width: 22px; height: 22px; }
+
+  /* Ventanas a pantalla completa con encabezado y botones fijos. */
+  dialog#modal {
+    width: 100vw;
+    max-width: 100vw;
+    height: 100dvh;
+    max-height: 100dvh;
+    margin: 0;
+    padding: 0;
+    border-radius: 0;
+    overflow: auto;
+    overscroll-behavior: contain;
+  }
+  dialog#modal > form { display: flex; flex-direction: column; min-height: 100%; }
+  #modal .dialog-head {
+    position: sticky;
+    top: 0;
+    z-index: 3;
+    margin: 0;
+    padding: calc(8px + env(safe-area-inset-top)) 8px 8px 16px;
+    background: #fff;
+    border-bottom: 1px solid var(--line);
+  }
+  #modal .dialog-head h2 { font-size: 18px; margin: 0; }
+  #modal .dialog-head .close { width: 44px; height: 44px; font-size: 28px; }
+  #fields { flex: 1 0 auto; padding: 6px 16px 16px; }
+  #formError { margin: 0; padding: 0 16px; }
+  #formError:not(:empty) { padding-bottom: 10px; }
+  #modal .dialog-actions {
+    position: sticky;
+    bottom: 0;
+    z-index: 3;
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: 1fr;
+    gap: 10px;
+    margin: 0;
+    padding: 10px 16px calc(10px + env(safe-area-inset-bottom));
+    background: #fff;
+    border-top: 1px solid var(--line);
+  }
+  #modal .dialog-actions button { min-height: 48px; font-size: 16px; }
+  #modal .dialog-actions button[hidden] { display: none; }
+
+  /* Hoja inferior (menú «Más»). */
+  dialog.sheet {
+    width: 100vw;
+    max-width: 100vw;
+    margin: auto 0 0;
+    max-height: 88dvh;
+    border-radius: 20px 20px 0 0;
+    overflow: auto;
+  }
+  dialog.sheet[open] { animation: sheet-up 0.2s ease-out; }
+  .sheet-inner { padding: 8px max(16px, env(safe-area-inset-right)) calc(16px + env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); }
+  .sheet-inner::before { content: ''; display: block; width: 40px; height: 4px; margin: 2px auto 8px; border-radius: 99px; background: var(--line-strong); }
+
+  /* Tablas: cada fila se lee como tarjeta «Columna: valor»; la primera celda es el título. */
+  table.stack-table, table.stack-table tbody, table.stack-table tr, table.stack-table td { display: block; width: 100%; }
+  table.stack-table { min-width: 0 !important; border: 0; }
+  table.stack-table thead { display: block; position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  table.stack-table tr { padding: 12px 14px; border-bottom: 1px solid var(--line); }
+  table.stack-table tr:last-child { border-bottom: 0; }
+  table.stack-table td { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; min-height: 0; padding: 4px 0; border: 0; text-align: right; font-size: 15px; }
+  table.stack-table td > * { max-width: 100%; }
+  table.stack-table td::before { content: attr(data-label); flex: none; max-width: 48%; color: var(--ink-faint); font-size: 13px; font-weight: 600; text-align: left; }
+  table.stack-table td:first-child { display: block; text-align: left; font-size: 16px; font-weight: 600; padding-top: 0; }
+  table.stack-table td:first-child::before,
+  table.stack-table td.stack-full::before,
+  table.stack-table td:not([data-label])::before { content: none; }
+  table.stack-table td.stack-full { display: block; text-align: left; }
+  table.stack-table td:empty { display: none; }
+  .table-wrap:has(> table.stack-table) { overflow: visible; }
+  .table-wrap:has(> table.stack-table) tbody tr:hover { background: none; }
+
+  /* Mis cursos: tarjetas compactas (el curso completo es tocable). */
+  .cards { grid-template-columns: minmax(0, 1fr) !important; gap: 12px !important; }
+  article.course { position: relative; display: grid; grid-template-columns: 76px minmax(0, 1fr); border-radius: 16px; }
+  article.course:hover { transform: none; }
+  article.course .course-cover { height: auto; min-height: 96px; padding: 0; border-radius: 0; border-bottom: 0; display: flex; align-items: center; justify-content: center; }
+  article.course .course-cover::after { display: none; }
+  article.course .course-cover .code { display: none; }
+  article.course .course-letter { position: static; font-size: 26px; }
+  article.course .course-content { padding: 12px 14px; display: flex; flex-direction: column; justify-content: center; gap: 2px; }
+  article.course .course-content h2 { margin: 6px 0 0; font-size: 17px; line-height: 1.25; }
+  article.course .course-content p { margin: 0; }
+  article.course .course-card-footer { display: none; }
+  article.course .course-title-link::after { content: ''; position: absolute; inset: 0; z-index: 1; }
+  article.course .card-actions { position: absolute; top: 6px; right: 6px; z-index: 2; }
+  article.course .card-actions summary { background: var(--canvas) !important; color: var(--ink-soft) !important; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; }
+  .workspace-filterbar { display: grid; grid-template-columns: 1fr; gap: 10px; }
+  .workspace-filterbar .filter-control { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 10px; }
+  .home-title-row { gap: 12px; }
+  .home-title-row .action-row { width: 100%; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .home-title-row .action-row > button { width: 100%; min-height: 48px; font-size: 16px; }
+  .home-title-row .action-row > button:first-child:not(.secondary) { grid-column: 1 / -1; }
+  .home-title-row .action-row > button:only-child { grid-column: 1 / -1; }
+  /* Pestañas con una sola opción («Mis evaluaciones», «Lista de foros») no aportan en el teléfono. */
+  .home-tabs:not(:has(button + button)) { display: none; }
+  article.course .course-cover { position: static; }
+  .my-grade-summary { gap: 14px; padding: 14px 16px; }
+  .my-grade-big { min-width: 84px; font-size: 28px; padding: 12px 8px; }
+  .workspace-eyebrow { display: none; }
+
+  /* Inicio del curso. */
+  .hub-banner { padding: 22px 18px 18px !important; margin-bottom: 16px !important; border-radius: 16px !important; }
+  .hub-banner h1 { font-size: 26px !important; margin-top: 8px !important; }
+  .panel { padding: 16px !important; }
+  .admin-section { padding: 14px 16px !important; background: var(--surface); border: 1px solid var(--line); margin-bottom: 14px; }
+  .admin-section h2 { font-size: 19px !important; margin: 0 0 4px !important; }
+  .admin-links button { min-height: 48px; }
+  .module-cards { grid-template-columns: minmax(0, 1fr) !important; gap: 10px !important; }
+  .module-card .module-cover { min-height: 64px !important; height: auto !important; padding: 16px !important; font-size: 18px !important; overflow-wrap: normal; }
+  .hub-info.is-empty { display: none; }
+
+  /* Contenido: con una unidad abierta se oculta la lista de unidades (se regresa con «Contenido»). */
+  .content-layout { display: block !important; margin: 0 !important; }
+  .content-layout.has-unit .content-tree { display: none; }
+  .content-tree { margin: 0 0 16px !important; padding: 14px !important; border-radius: var(--radius); }
+  .content-detail { padding: 0 !important; border: 0 !important; background: transparent !important; box-shadow: none !important; }
+  .material-entry summary { min-height: 56px; }
+
+  /* Pasar lista: los cuatro estados en una sola fila. */
+  .att-states { display: grid !important; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px !important; }
+  .att-state { min-height: 44px; padding: 6px 2px !important; font-size: 13.5px !important; }
+  .att-compact { display: none; }
+
+  /* Libro de calificaciones y lista de asistencia (matrices): columna de nombres más angosta. */
+  .gradebook .sticky-name { min-width: 132px !important; max-width: 150px; white-space: normal; }
+  .gradebook td { min-width: 76px !important; }
+  .home-tabs { flex-wrap: wrap; gap: 0 18px; }
+  .home-tabs button { font-size: 15px !important; }
+
+  /* Revisión: anterior y siguiente en una fila; los botones de guardar siempre a la vista. */
+  .review-nav { display: grid !important; grid-template-columns: auto minmax(0, 1fr) auto; gap: 8px; align-items: center; }
+  .review-nav select { min-width: 0; width: 100%; }
+  .review-actions { position: sticky; bottom: calc(66px + env(safe-area-inset-bottom)); z-index: 5; background: var(--surface); padding: 8px 0; }
+  .review-keys { display: none; }
+
+  /* Evaluaciones y examen. */
+  .quiz-question label { min-height: 44px; }
+  .exam-nav button { flex: 1; min-height: 48px; }
+  body.exam-running #quizSubmit { width: 100%; min-height: 50px; }
+
+  /* Registro de asistencia del alumno. */
+  .checkin-card { margin: 8px 0 !important; padding: 20px 16px !important; }
+  .checkin-card .code-input { width: 100%; }
+
+  .toolbar, .action-row { flex-wrap: wrap; }
+
+  /* Acceso: el botón para entrar queda a la vista también en teléfonos pequeños. */
+  .login-layout { margin: 0 !important; }
+  .login-brand { padding: 20px 20px 22px !important; gap: 8px !important; }
+  .login-brand .brand-mark { display: none; }
+  .login-brand h2 { margin: 0 0 6px !important; font-size: 22px !important; }
+  .login-brand p { font-size: 15px; line-height: 1.5; }
+  .login-layout .login-panel { padding: 22px 20px !important; }
+  .login-panel h1 { font-size: 24px !important; }
+
+  /* Filtros de listas: los campos no se salen de su recuadro. */
+  .workspace-filterbar input, .workspace-filterbar select, .toolbar input[type='search'] { width: 100%; min-width: 0; box-sizing: border-box; }
+  .workspace-filterbar .search-control { display: block; }
+  article.course .course-content { align-items: flex-start; }
+
+  /* Visor de archivos: los botones bajan de línea en lugar de salirse. */
+  .viewer-toolbar { gap: 8px; padding-left: 12px; padding-right: 12px; }
+  .viewer-group { flex-wrap: wrap; }
+  .viewer-btn { min-height: 44px; }
+
+  /* Casillas de verificación y barra de formato con tamaño para el dedo. */
+  .check-label input, .check-row input { width: 22px !important; height: 22px !important; }
+  .rich-tool { min-height: 40px !important; min-width: 40px; }
+  .review-actions { display: grid !important; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: 8px; }
+  .review-actions .secondary { order: -1; }
+  .card-actions .card-menu { left: auto !important; right: 0 !important; }
+
+  /* Textos pequeños: nada por debajo de ~12.5 px en el teléfono. */
+  .role-pill, .status-pill, .count-pill, .bell-kind, .content-tree small, .material-entry small, .draft-tag { font-size: 12.5px !important; }
+  .assignment-date, .deadline, .crumbs, .crumbs button, .rich-hint, .table-footnote, .table-subtext { font-size: 14px !important; }
+  #crumb { min-height: 40px; display: flex; align-items: center; }
+  .visibility-toggle, .course-guide small, .pending-grade, .content-detail p.muted { font-size: 13.5px !important; }
+  .editor-layout { margin: 0 !important; display: block !important; }
+  .editor-main, .editor-sidebar, .editor-bottom { margin-left: 0 !important; margin-right: 0 !important; }
+  .wordmark { min-height: 40px; }
+  .page-heading, .heading, .panel-head { flex-wrap: wrap; gap: 10px; }
+}
+
+@media (max-width: 400px) {
+  .att-full { display: none; }
+  .att-compact { display: inline; }
+}
+
+/* ---- Pantalla táctil: objetivos de al menos 44 px ----------------------------------------------- */
+
+@media (pointer: coarse) {
+  .camera-picker { display: inline-flex !important; }
+  button.primary, button.secondary, .primary, .secondary, .file-picker { min-height: 44px; }
+  .text-btn, .table-link, .danger-link, .crumbs button, button.back, .preview-btn, .visibility-toggle, .assignment-title {
+    min-height: 40px;
+    display: inline-flex;
+    align-items: center;
+  }
+  .file-item a { display: inline-flex; align-items: center; min-height: 40px; }
+  summary { min-height: 40px; }
+  .check-label, .check-row { min-height: 40px; }
+}
+
+@keyframes sheet-up {
+  from { transform: translateY(30%); opacity: 0.4; }
+  to { transform: none; opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  dialog.sheet[open] { animation: none; }
+}

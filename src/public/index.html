@@ -2,7 +2,7 @@
 <html lang="es">
   <head>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
     <title>Enlace · Aula virtual BUAP</title>
     <meta name="description" content="Espacio docente de cursos y actividades">
     <link rel="manifest" href="/manifest.webmanifest">
@@ -21,6 +21,7 @@
     <link rel="stylesheet" href="/fase2.css">
     <link rel="stylesheet" href="/vendor/katex-0.16.45/katex.min.css">
     <link rel="stylesheet" href="/tema.css">
+    <link rel="stylesheet" href="/movil.css">
   </head>
   <body>
     <a class="skip-link" href="#main">Ir al contenido</a>
@@ -44,6 +45,7 @@
       <div id="previewBar" role="status" hidden></div>
       <div id="connection" role="status" hidden></div>
       <main tabindex="-1" id="main" aria-live="polite"><p class="empty">Cargando tus cursos…</p></main>
+      <nav id="bottomnav" class="bottom-nav" aria-label="Secciones del curso" hidden></nav>
       <footer>Espacio docente independiente para grupos BUAP · No es una plataforma institucional oficial. · <a href="/privacidad">Aviso de privacidad</a></footer>
     </div>
     <dialog id="modal" aria-labelledby="modalTitle">
@@ -59,6 +61,12 @@
           <button type="submit" class="primary" id="formSave">Guardar</button>
         </div>
       </form>
+    </dialog>
+    <dialog id="sheet" class="sheet" aria-labelledby="sheetTitle">
+      <div class="sheet-inner">
+        <div class="sheet-head"><h2 id="sheetTitle">Más</h2><button type="button" class="close" data-sheet-close aria-label="Cerrar">×</button></div>
+        <div id="sheetBody"></div>
+      </div>
     </dialog>
     <div id="toast" role="status"></div>
     <script src="/vendor/katex-0.16.45/katex.min.js" defer></script>
@@ -83,6 +91,8 @@
     <script src="/trash.js" defer></script>
     <script src="/evaluaciones.js" defer></script>
     <script src="/pendientes.js" defer></script>
+    <script src="/navegacion.js" defer></script>
+    <script src="/movil.js" defer></script>
     <script src="/app.js" defer></script>
   </body>
 </html>

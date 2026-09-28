@@ -5,8 +5,10 @@ const ATT_STATUS = {
   present: { label: 'Presente', short: 'P' },
   late: { label: 'Retardo', short: 'R' },
   absent: { label: 'Falta', short: 'F' },
-  excused: { label: 'Justificada', short: 'J' },
+  excused: { label: 'Justificada', short: 'J', compact: 'Justif.' },
 };
+/** Nombre del estado en el botón; en teléfonos angostos se usa la forma corta (movil.css) para que quepan los cuatro. */
+const attStateLabel = (info) => (info.compact ? `<span class="att-full">${info.label}</span><span class="att-compact" aria-hidden="true">${info.compact}</span>` : info.label);
 const ATT_QUEUE_KEY = 'enlace:asistencia:pendientes';
 const WEEKDAYS = [[1, 'Lun'], [2, 'Mar'], [3, 'Mié'], [4, 'Jue'], [5, 'Vie'], [6, 'Sáb'], [0, 'Dom']];
 let attendanceData = null;
@@ -233,7 +235,7 @@ function renderRollCall() {
         return `<li data-search-row class="${record ? '' : 'att-missing'}">
           <div class="att-name">${esc(m.name)}<small>${esc(m.matricula || '')}</small></div>
           <div class="att-states" role="group" aria-label="Asistencia de ${esc(m.name)}">${Object.entries(ATT_STATUS)
-            .map(([status, info]) => `<button type="button" class="att-state ${status}" data-att="mark" data-member="${m.id}" data-status="${status}" aria-pressed="${record?.status === status}">${info.label}</button>`)
+            .map(([status, info]) => `<button type="button" class="att-state ${status}" data-att="mark" data-member="${m.id}" data-status="${status}" aria-pressed="${record?.status === status}" aria-label="${info.label}">${attStateLabel(info)}</button>`)
             .join('')}</div>
           ${record && (record.status !== 'present' || record.note) ? `<input class="att-note" data-att-note data-member="${m.id}" value="${esc(record.note || '')}" placeholder="Nota (opcional), por ejemplo: llegó 7:15 o constancia médica" aria-label="Nota para ${esc(m.name)}" maxlength="500">` : ''}
         </li>`;

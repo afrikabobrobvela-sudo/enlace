@@ -18,6 +18,18 @@ function quizSettingsText(settings) {
   return parts.join(' · ');
 }
 
+/** Lo que el alumno ve en la lista: su mejor resultado o que está pendiente (y si es en modo examen). */
+function quizStudentStatus(q) {
+  const settings = quizSettings(q);
+  const attempts = records('attempt').filter((a) => a.data.quiz === q.id);
+  if (attempts.length) {
+    const best = Math.max(...attempts.map((a) => a.data.score));
+    const left = settings.attempts - attempts.length;
+    return `${best.toFixed(2)} / 10${left > 0 ? ` · ${left === 1 ? 'queda 1 intento' : `quedan ${left} intentos`}` : ''}`;
+  }
+  return settings.exam?.enabled ? 'Pendiente · modo examen' : 'Pendiente';
+}
+
 // ---- Editor ---------------------------------------------------------------------------------------
 
 function blankQuestion(type = 'choice') {

@@ -1,44 +1,77 @@
 function attachmentPanel(teacher = false, where = 'la actividad') {
-  return `<section class="attachment-box"><h2>${teacher ? 'Material para tus alumnos' : 'Archivos adjuntos'}</h2><p>${teacher ? `Sube presentaciones PowerPoint (.ppt, .pptx), PDF, Word, Excel, imágenes u otros archivos. Tus alumnos podrán descargarlos desde ${where}.` : 'Selecciona documentos, imágenes, audio o video. Las fotos se reducen solas antes de subirlas.'} También puedes arrastrarlos aquí.</p><label class="file-picker">Seleccionar archivos<input type="file" multiple data-file-input></label><p class="muted" data-file-limit></p><ul class="attachment-list" data-file-list></ul><p role="status" data-upload-status></p><progress data-upload-progress hidden max="100" value="0"></progress><p class="error" data-file-error hidden></p></section>`;
+  return `<section class="attachment-box"><h2>${teacher ? 'Material para tus alumnos' : 'Archivos adjuntos'}</h2><p>${teacher ? `Sube presentaciones PowerPoint (.ppt, .pptx), PDF, Word, Excel, imágenes u otros archivos. Tus alumnos podrán descargarlos desde ${where}.` : 'Selecciona documentos, imágenes, audio o video. Las fotos se reducen solas antes de subirlas.'} También puedes arrastrarlos aquí.</p><div class="file-pickers"><label class="file-picker">Seleccionar archivos<input type="file" multiple data-file-input></label><label class="file-picker camera-picker">Tomar foto<input type="file" accept="image/*" capture="environment" data-camera-input></label></div><label class="check-label photo-merge" hidden><input type="checkbox" data-photo-merge checked> <span>Unir las fotos en un solo PDF, una página por foto (recomendado para tareas a mano)</span></label><p class="muted" data-file-limit></p><ul class="attachment-list" data-file-list></ul><p role="status" data-upload-status></p><progress data-upload-progress hidden max="100" value="0"></progress><p class="error" data-file-error hidden></p></section>`;
 }
 function attachmentManager(root, existing = [], scope = 'material', max = 5, extensions = []) {
   const box = root.querySelector('.attachment-box'), input = box.querySelector('[data-file-input]'), list = box.querySelector('[data-file-list]'), status = box.querySelector('[data-upload-status]'), progress = box.querySelector('progress'), error = box.querySelector('[data-file-error]');
+  const camera = box.querySelector('[data-camera-input]'), mergeRow = box.querySelector('.photo-merge'), mergeBox = box.querySelector('[data-photo-merge]');
   let items = existing.map(id => ({ id, ...current.files.find(f => f.id === id) }));
   const size = n => n > 1048576 ? (n / 1048576).toFixed(1) + ' MB' : Math.ceil(n / 1024) + ' KB';
+  // Fotos que se unirán en un PDF: se permite si la actividad acepta PDF. Si solo acepta PDF, las fotos se unen siempre.
+  const extensionOf = name => String(name || '').split('.').pop().toLowerCase();
+  const pdfAllowed = !extensions.length || extensions.includes('pdf');
+  const pendingPhotos = () => items.filter(f => !f.id && f.file && isPhoto(f.file));
+  const merging = () => pdfAllowed && pendingPhotos().length > 0 && (pendingPhotos().some(f => f.mustMerge) || (pendingPhotos().length > 1 && mergeBox?.checked !== false));
+  // Cuántos archivos quedarán al enviar (las fotos unidas cuentan como uno).
+  const finalCount = () => items.length - (merging() ? pendingPhotos().length - 1 : 0);
   box.querySelector('[data-file-limit]').textContent = `Máximo ${max} archivo(s), 20 MB cada uno.${extensions.length ? ' Formatos: ' + extensions.join(', ') + '.' : ''}`;
   if (extensions.length)
     input.accept = extensions.map(x => '.' + x).join(',');
   const render = () => {
-    list.innerHTML = items.map((f, i) => `<li><div><strong>${esc(f.name || 'Archivo adjunto')}</strong><small>${size(f.size || 0)} · ${f.id ? 'Cargado' : 'Pendiente de guardar'}</small></div><button type="button" class="text-btn" data-remove-file="${i}" aria-label="Quitar ${esc(f.name)}">Quitar</button></li>`).join('');
+    const merge = merging();
+    list.innerHTML = items.map((f, i) => `<li><div><strong>${esc(f.name || 'Archivo adjunto')}</strong><small>${size(f.size || 0)} · ${f.id ? 'Cargado' : merge && isPhoto(f.file) ? 'Se unirá al PDF' : 'Pendiente de guardar'}</small></div><button type="button" class="text-btn" data-remove-file="${i}" aria-label="Quitar ${esc(f.name)}">Quitar</button></li>`).join('');
+    if (mergeRow) {
+      const forced = pendingPhotos().some(f => f.mustMerge);
+      mergeRow.hidden = !pdfAllowed || (!forced && pendingPhotos().length < 2);
+      mergeBox.disabled = forced;
+      if (forced) mergeBox.checked = true;
+      mergeRow.querySelector('span').textContent = forced
+        ? 'Esta actividad recibe PDF: tus fotos se unirán en un solo PDF, una página por foto.'
+        : 'Unir las fotos en un solo PDF, una página por foto (recomendado para tareas a mano)';
+    }
   };
   function add(files) {
     error.hidden = true;
     for (const file of files) {
       let msg = '';
-      if (items.length >= max)
-        msg = `Puedes adjuntar hasta ${max} archivos.`;
-      else if (!file.size)
+      const photo = isPhoto(file) && pdfAllowed;
+      // Una foto que la actividad no acepta como imagen pero sí como PDF se unirá en un PDF.
+      const mustMerge = photo && extensions.length > 0 && !extensions.includes(extensionOf(file.name));
+      if (!file.size)
         msg = 'El archivo está vacío.';
       else if (file.size > 20 * 1048576)
         msg = 'Cada archivo debe pesar como máximo 20 MB.';
-      else if (extensions.length && !extensions.includes(file.name.split('.').pop().toLowerCase()))
+      else if (extensions.length && !extensions.includes(extensionOf(file.name)) && !mustMerge)
         msg = 'Formato no permitido: ' + file.name;
+      else if (photo && pendingPhotos().length >= MAX_PDF_PHOTOS)
+        msg = `Puedes unir hasta ${MAX_PDF_PHOTOS} fotos en un PDF.`;
+      else {
+        // Se agrega y se revisa cuántos archivos quedarían al enviar (las fotos unidas cuentan como uno).
+        items.push({ file, name: file.name, size: file.size, mustMerge });
+        if (finalCount() > max) {
+          items.pop();
+          msg = `Puedes adjuntar hasta ${max} archivos.${photo && mergeBox && !mergeBox.checked ? ' Marca «Unir las fotos en un solo PDF» para enviar más fotos.' : ''}`;
+        } else
+          dirty = true;
+      }
       if (msg) {
         error.textContent = msg;
         error.hidden = false;
-        continue;
       }
-      items.push({
-        file,
-        name: file.name,
-        size: file.size
-      });
-      dirty = true;
     }
     input.value = '';
+    if (camera) camera.value = '';
     render();
   }
   input.onchange = () => add([...input.files]);
+  if (camera) camera.onchange = () => add([...camera.files]);
+  if (mergeBox) mergeBox.onchange = () => {
+    if (!mergeBox.checked && finalCount() > max) {
+      mergeBox.checked = true;
+      error.textContent = `Sin unirlas serían más de ${max} archivos: quita algunas fotos antes de desmarcar esta opción.`;
+      error.hidden = false;
+    }
+    render();
+  };
   box.ondragover = e => {
     e.preventDefault();
     box.classList.add('dragging');
@@ -117,6 +150,20 @@ function attachmentManager(root, existing = [], scope = 'material', max = 5, ext
       progress.hidden = false;
       let completed = 0;
       try {
+        if (merging()) {
+          // Las fotos pendientes se reemplazan por un PDF en el lugar de la primera.
+          const photos = pendingPhotos();
+          status.textContent = `Uniendo ${photos.length} ${photos.length === 1 ? 'foto' : 'fotos'} en un PDF…`;
+          const pdf = await photosToPdf(photos.map(f => f.file), `fotos-${new Date().toISOString().slice(0, 10)}.pdf`);
+          if (pdf.size > 20 * 1048576)
+            throw new Error('Las fotos juntas pesan más de 20 MB. Quita algunas o envíalas en dos partes.');
+          const at = items.indexOf(photos[0]);
+          items = items.filter(f => !photos.includes(f));
+          items.splice(at, 0, { file: pdf, name: pdf.name, size: pdf.size });
+          render();
+        }
+        if (finalCount() > max)
+          throw new Error(`Puedes adjuntar hasta ${max} archivos.`);
         for (const item of items) {
           if (!item.id) {
             status.textContent = 'Subiendo ' + item.name;

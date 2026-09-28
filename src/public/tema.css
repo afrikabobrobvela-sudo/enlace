@@ -711,3 +711,19 @@ body.exam-running #main { padding-top: 16px; }
 .quiz-attempt.is-exam .quiz-attempt-head { display: flex; flex-wrap: wrap; gap: 4px 16px; align-items: baseline; }
 .quiz-attempt.is-exam .quiz-attempt-head > * { white-space: nowrap; }
 .quiz-attempt.is-exam .quiz-clock { margin-left: auto; }
+
+/* ---- Mis calificaciones (alumno, 12.9) ---- */
+.my-grade-summary { display: flex; align-items: center; gap: 18px; padding: 18px 20px; margin: 8px 0 18px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow-sm); }
+.my-grade-summary h2 { margin: 0 0 4px; font-size: 17px; }
+.my-grade-summary .muted { margin: 0; }
+.my-grade-big { flex: none; margin: 0; min-width: 96px; padding: 14px 10px; border-radius: 14px; text-align: center; font-size: 32px; font-weight: 800; font-variant-numeric: tabular-nums; background: var(--canvas); color: var(--ink); }
+.my-grade-list { list-style: none; margin: 0; padding: 0; }
+.my-grade-item { border-top: 1px solid var(--line); }
+.my-grade-item:first-child { border-top: 0; }
+.my-grade-row { display: flex; width: 100%; align-items: center; justify-content: space-between; gap: 12px; min-height: 52px; padding: 10px 2px; border: 0; background: none; color: var(--ink); text-align: left; font: inherit; }
+button.my-grade-row:hover .my-grade-title { color: var(--link); }
+.my-grade-title { display: flex; flex-direction: column; gap: 2px; font-weight: 600; min-width: 0; }
+.my-grade-title small { font-weight: 500; color: var(--ink-faint); font-size: 13px; }
+.my-grade-value { flex: none; max-width: 48%; padding: 4px 10px; border-radius: 999px; font-weight: 700; font-variant-numeric: tabular-nums; text-align: right; background: var(--canvas); }
+.my-grade-value.is-pending { font-weight: 500; font-size: 13.5px; color: var(--ink-soft); background: none; padding-right: 0; }
+.my-grade-item .grade-feedback { margin: -2px 2px 12px; padding: 8px 12px; border-left: 3px solid var(--accent); background: #f6fafc; border-radius: 0 var(--radius-sm) var(--radius-sm) 0; max-width: none; font-size: 14.5px; white-space: pre-wrap; }

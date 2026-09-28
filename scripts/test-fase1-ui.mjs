@@ -44,6 +44,8 @@ load('richtext.js');
 load('trash.js');
 load('evaluaciones.js');
 load('pendientes.js');
+load('navegacion.js');
+load('movil.js');
 load('registro.js');
 load('workspace.js');
 load('preview.js');

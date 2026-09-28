@@ -114,6 +114,72 @@ function studentGrade(memberId, { final = false } = {}) {
 
 const formatGrade = (value, decimals = 2) => (value === null || value === undefined ? '—' : Number(value).toFixed(decimals));
 
+/**
+ * Mis calificaciones (alumno): el promedio parcial arriba y después cada actividad con su calificación y los
+ * comentarios del docente, y los resultados de las evaluaciones. Se lee bien en el teléfono (sin tabla ancha).
+ */
+function myGradesHtml() {
+  const member = current.members.find((m) => m.user_id === me.id);
+  if (!member) {
+    return `<h1>Mis calificaciones</h1><p class="real-status">${
+      previewAsStudent ? 'En la vista de alumno no hay un alumno en particular: aquí cada alumno ve sus calificaciones y los comentarios que les dejes.' : 'No apareces como alumno en este curso.'
+    }</p>`;
+  }
+  const grading = gradingSettings();
+  const cats = grading.scheme === 'categories' ? grading.categories : [];
+  const weights = records('weights')[0]?.data.weights;
+  const tasks = records('task');
+  const weighted = !cats.length && weights && tasks.every((t) => Number.isFinite(weights[t.id]));
+  const result = studentGrade(member.id);
+  const avg = result.value;
+  const tone = (value) => (value === null ? '' : value >= grading.final.passing ? 'grade-pass' : 'grade-low');
+  const now = Date.now();
+  const taskItems = tasks
+    .map((t) => {
+      const s = gradeOf(member.id, t.id);
+      const graded = s?.data.grade !== null && s?.data.grade !== undefined;
+      const due = dueFor(t, member.id);
+      const state = graded ? '' : s?.data.submitted ? 'Por calificar' : due && Date.parse(due) < now ? 'Sin entrega' : 'Pendiente';
+      const detailText = [
+        !graded && !s?.data.submitted && due && Date.parse(due) >= now ? 'vence ' + fmt(due) : '',
+        cats.find((c) => c.id === t.data.category)?.name,
+        weighted ? `peso ${weights[t.id]} %` : '',
+      ]
+        .filter(Boolean)
+        .join(' · ');
+      return `<li class="my-grade-item"><button type="button" class="my-grade-row" data-action="task" data-id="${esc(t.id)}"><span class="my-grade-title">${esc(t.data.title)}${
+        detailText ? `<small>${esc(detailText)}</small>` : ''
+      }</span><span class="my-grade-value ${graded ? tone(Number(s.data.grade)) : 'is-pending'}">${graded ? esc(s.data.grade) : esc(state)}</span></button>${
+        s?.data.feedback ? `<p class="grade-feedback">${esc(s.data.feedback)}</p>` : ''
+      }</li>`;
+    })
+    .join('');
+  const quizItems = records('quiz')
+    .map((q) => {
+      const attempts = records('attempt').filter((a) => a.data.quiz === q.id);
+      const best = attempts.length ? Math.max(...attempts.map((a) => a.data.score)) : null;
+      return `<li class="my-grade-item"><button type="button" class="my-grade-row" data-action="quiz" data-id="${esc(q.id)}"><span class="my-grade-title">${esc(q.data.title)}${
+        attempts.length ? `<small>${attempts.length} ${attempts.length === 1 ? 'intento' : 'intentos'}</small>` : ''
+      }</span><span class="my-grade-value ${best === null ? 'is-pending' : tone(best)}">${best === null ? 'Sin contestar' : best.toFixed(2)}</span></button></li>`;
+    })
+    .join('');
+  const scheme = cats.length ? 'por categorías' : weighted ? 'ponderado' : 'simple';
+  return `<h1>Mis calificaciones</h1>
+    <section class="my-grade-summary">
+      <p class="my-grade-big ${tone(avg)}">${formatGrade(avg)}</p>
+      <div><h2>Promedio parcial</h2><p class="muted">Promedio ${scheme}, de 0 a 10, de lo ya calificado.</p></div>
+    </section>
+    ${
+      cats.length
+        ? `<section class="panel"><h2>Por categoría</h2><ul class="my-grade-list">${result.categories
+            .map((c) => `<li class="my-grade-item"><div class="my-grade-row is-static"><span class="my-grade-title">${esc(c.name)}<small>${c.weight} % del promedio</small></span><span class="my-grade-value ${c.value === null ? 'is-pending' : tone(c.value)}">${c.value === null ? 'Sin calificar' : formatGrade(c.value)}</span></div></li>`)
+            .join('')}</ul></section>`
+        : ''
+    }
+    <section class="panel"><h2>Actividades</h2>${taskItems ? `<ul class="my-grade-list">${taskItems}</ul>` : '<p class="muted">Todavía no hay actividades publicadas.</p>'}</section>
+    ${quizItems ? `<section class="panel"><h2>Evaluaciones</h2><p class="muted">Tu mejor intento en cada evaluación. No se suman solas al promedio parcial.</p><ul class="my-grade-list">${quizItems}</ul></section>` : ''}`;
+}
+
 // ---- Administrar: esquema, categorías y reglas finales ----------------------------------------
 
 function gradingManageHtml(weightsHtml = '') {

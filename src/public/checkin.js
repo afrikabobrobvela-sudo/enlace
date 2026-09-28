@@ -351,6 +351,7 @@ function checkinResult(result) {
 /** Alumno: escribe el código del pizarrón. La ubicación se pide en ese momento y solo se usa para calcular la distancia. */
 function renderCodeEntry() {
   current = null;
+  nav(); // fuera del curso: encabezado de Mis cursos y sin barra inferior
   renderCheckinCard(`<p>Escribe el código que tu docente puso en el pizarrón.</p>
     <form id="codeForm" class="real-form checkin-pin-form">
       <label>Código de asistencia<input name="code" class="code-input" autocapitalize="characters" autocomplete="off" spellcheck="false" maxlength="9" placeholder="ABC 123" required></label>

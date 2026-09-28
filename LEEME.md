@@ -1,9 +1,25 @@
-# Enlace · versión 12.8
+# Enlace · versión 12.9
 
 Plataforma académica independiente para docentes y alumnos de cualquier academia (nació en la Academia de Física de la BUAP), con interfaz inspirada en Brightspace.
 No es el código de D2L Brightspace ni una plataforma oficial de la BUAP.
 
 Esta versión se despliega en **tu propia cuenta de Cloudflare** (Workers + D1 + R2, plan gratuito) y ya no depende de ChatGPT Sites.
+
+## Novedades de la versión 12.9 (experiencia en el celular)
+
+No requiere migraciones: solo cambia la interfaz. En computadora todo se ve igual que antes (salvo «Mis calificaciones» del alumno, que ahora es más clara también ahí).
+
+- **El botón «Atrás» del teléfono funciona dentro de Enlace**: regresa a la pantalla anterior (de una actividad a la lista, de ahí al curso y a Mis cursos) en lugar de salir de la aplicación. Si hay una ventana abierta (entrega, formulario, vista previa, menú), «Atrás» la cierra; si ya se escribió algo, pregunta antes. En un examen, avisa que el tiempo sigue corriendo.
+- **Cada pantalla tiene su dirección** (por ejemplo `…/#c=…&s=task&d=…`): al recargar, Enlace regresa a la misma pantalla, y se puede compartir el enlace directo a una actividad o evaluación (cada quien la ve según sus permisos).
+- **Barra inferior** con Inicio, Contenido, Actividades y Notas (alumno) o Asistencia (docente), y **Más** con las demás secciones, «Ver como alumno», «Actualizar el curso» y «Todos mis cursos». La barra marca con un número las actividades por entregar (alumno) o por calificar (docente) y se oculta mientras se escribe o se contesta un examen.
+- **Encabezado de una línea** con el nombre del curso; «Cerrar sesión» está en tu perfil (toca tu inicial).
+- **Ventanas a pantalla completa** con los botones de guardar o enviar siempre a la vista.
+- **Tablas como tarjetas**: actividades, evaluaciones, entregas, alumnos, foros, etc. se leen sin desplazarse de lado. El libro de calificaciones y la lista de asistencia (docente) se quedan como tabla, con la columna de nombres más angosta.
+- **Mis calificaciones** (alumno): promedio parcial arriba, cada actividad con su calificación o estado (pendiente, por calificar, sin entrega) y los comentarios del docente, y el mejor intento de cada evaluación.
+- **Tomar foto y unir en PDF**: al entregar desde el teléfono aparece «Tomar foto» (abre la cámara). Con dos o más fotos, Enlace las une en un solo PDF, una página por foto, en el propio teléfono (no usa tiempo del servidor). Si la actividad solo acepta PDF, las fotos se unen siempre, y cuentan como un archivo para el límite de la actividad.
+- **Campos de 16 px** (en iPhone ya no acercan la pantalla al tocarlos), botones de al menos 44 px, pasar lista con los cuatro estados en una fila, Mis cursos en tarjetas compactas y márgenes para la muesca del teléfono cuando Enlace está instalado como aplicación.
+
+Cómo se revisó: todas las pantallas de alumno y docente se recorrieron con Chromium a 360 y 390 px de ancho (tamaños de Android y iPhone), midiendo que nada se salga de la pantalla, que los botones tengan tamaño para el dedo y que los campos no provoquen zoom. Falta probarlo en teléfonos reales, sobre todo en iPhone.
 
 ## Novedades de la versión 12.8 (modo examen)
 
@@ -319,12 +335,13 @@ La cookie de sesión usa el prefijo `__Host-`, que exige conexión segura. Chrom
 
 ## Pruebas
 
-`npm test` compila la interfaz y ejecuta veinticinco suites con una base SQLite temporal (con llaves foráneas activas, como D1). No tocan tu base real.
+`npm test` compila la interfaz y ejecuta veintiséis suites con una base SQLite temporal (con llaves foráneas activas, como D1). No tocan tu base real.
 
 - `test-api.mjs`: todas las verificaciones de la versión 8 más sesiones firmadas, cabeceras falsificadas, ponderaciones, restricciones de la base, docentes, inscripción masiva y el límite de 50 consultas.
 - `test-papelera.mjs`: eliminar y restaurar contenido, actividades (con sus entregas y calificaciones), evaluaciones y publicaciones de foro; permisos de moderación; nombres de alumnos en foros; cuotas de archivos.
 - `test-registro.mjs`: catálogo de academias y unidades, solicitud con correo institucional, aprobación o rechazo, y clasificación de docentes y cursos.
 - `test-contenido.mjs`: archivos en unidades (con permisos según la visibilidad) y mostrar u ocultar con un toque.
+- `test-movil-ui.mjs`: direcciones de cada pantalla (botón «Atrás»), barra inferior y menú «Más», tablas como tarjetas, «Mis calificaciones» del alumno y el PDF que se arma con las fotos.
 - `test-formato-ui.mjs`: texto con formato, fórmulas intactas y protección contra HTML, enlaces `javascript:` e imágenes externas.
 - `test-auth.mjs`: flujo completo de Google y del enlace por correo con respuestas simuladas (estado, nonce, audiencia, correo verificado, dominios, redirecciones abiertas, uso único, revocación en el servidor, cierre de sesión por dispositivo y en todos los dispositivos).
 - `test-migration.mjs`: genera datos con el servidor de la versión 8 real (`scripts/fixtures/server-v8.js`), aplica la migración 0002 y comprueba con la versión 9 que todo llegó idéntico.
