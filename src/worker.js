@@ -33,7 +33,9 @@ export default {
     if (url.pathname.startsWith('/auth/')) return auth(request, env);
     if (request.method !== 'GET' && request.method !== 'HEAD') return new Response('Method not allowed', { status: 405 });
 
-    const name = url.pathname === '/' ? 'index.html' : decodeURIComponent(url.pathname.slice(1));
+    let name = url.pathname === '/' ? 'index.html' : decodeURIComponent(url.pathname.slice(1));
+    // Páginas públicas sin extensión, por ejemplo /privacidad → privacidad.html.
+    if (!Object.hasOwn(assets, name) && Object.hasOwn(assets, name + '.html')) name += '.html';
     if (!Object.hasOwn(assets, name)) return new Response('Not found', { status: 404 });
     // Las bibliotecas llevan su versión en la ruta, así que pueden guardarse en caché de forma permanente.
     const cache = name.startsWith('vendor/') ? { 'Cache-Control': 'public, max-age=31536000, immutable' } : {};

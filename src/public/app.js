@@ -781,6 +781,9 @@ async function init() {
     courses = await request('/api/courses');
     document.body.classList.remove('signed-out');
     $('#logoutButton').hidden = false;
+    // Aviso de privacidad: antes de usar Enlace (y cada vez que cambie su versión).
+    if (me.privacyAccepted === false)
+      return renderPrivacyGate();
     if (new URLSearchParams(location.search).has('a')) {
       nav();
       return startCheckinFromLink();
@@ -795,6 +798,29 @@ async function init() {
     $('#main').innerHTML = `<section class="error"><h2>No se pudo cargar tu espacio</h2><p>${esc(e.message)}</p><button class="secondary" id="retry">Volver a intentar</button></section>`;
     $('#retry').onclick = init;
   }
+}
+/** Pantalla de aceptación del aviso de privacidad; al aceptar continúa donde iba la persona. */
+function renderPrivacyGate() {
+  nav();
+  $('#main').innerHTML = `<section class="panel privacy-gate">
+    <h1>Aviso de privacidad</h1>
+    <p>Antes de continuar, revisa cómo Enlace usa tus datos: tu nombre, correo y matrícula, tus entregas, calificaciones y asistencia se usan solo para tus cursos; tus compañeros ven únicamente tu nombre, y no se usan con fines comerciales.</p>
+    <p><a href="/privacidad" target="_blank" rel="noopener">Leer el aviso de privacidad completo ↗</a></p>
+    <label class="check-label"><input type="checkbox" id="privacyCheck"> He leído el aviso de privacidad y acepto el tratamiento de mis datos para las finalidades descritas.</label>
+    <div class="form-actions"><button class="primary" id="privacyAccept" disabled>Aceptar y continuar</button></div>
+  </section>`;
+  $('#privacyCheck').onchange = (e) => ($('#privacyAccept').disabled = !e.target.checked);
+  $('#privacyAccept').onclick = async () => {
+    $('#privacyAccept').disabled = true;
+    try {
+      await request('/api/privacy/accept', {});
+      await init();
+    }
+    catch (e) {
+      toast(e.message);
+      $('#privacyAccept').disabled = false;
+    }
+  };
 }
 init();
 if (document.modelContext?.registerTool) {

@@ -18,6 +18,9 @@ export const users = sqliteTable(
     // Migración 0008: academia y unidad académica del docente (registro de docentes).
     academyId: text('academy_id').references(() => academies.id),
     unitId: text('unit_id').references(() => units.id),
+    // Migración 0009: versión del aviso de privacidad aceptada y cuándo.
+    privacyVersion: text('privacy_version'),
+    privacyAcceptedAt: text('privacy_accepted_at'),
   },
   (t) => [uniqueIndex('aula_users_email').on(t.email)],
 );

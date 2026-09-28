@@ -4,6 +4,7 @@
 import { access, ownsCourse, requireAdmin, requireTeacher, viewAs } from './access.js';
 import { attendanceRoutes } from './attendance.js';
 import { directoryRoutes, registrationStatus } from './directory.js';
+import { PRIVACY_VERSION, privacyAccepted, privacyRoutes } from './privacy.js';
 import { gradingRoutes } from './grading.js';
 import { clearSessionCookie, identity, lastLogins, revokeAllStatements } from './auth.js';
 import {
@@ -55,7 +56,7 @@ export async function api(request, env) {
     if (!['GET', 'HEAD'].includes(request.method)) requireSameOrigin(request);
     const ctx = { db: env.DB, env, user, url, request };
     const route = `${request.method} ${url.pathname}`;
-    const handler = routes[route] || attendanceRoutes[route] || gradingRoutes[route] || directoryRoutes[route];
+    const handler = routes[route] || attendanceRoutes[route] || gradingRoutes[route] || directoryRoutes[route] || privacyRoutes[route];
     if (handler) return await handler(ctx);
     if (request.method === 'GET' && url.pathname.startsWith('/api/file/')) return await downloadFile(ctx, url.pathname.slice(10));
     fail('Ruta no encontrada.', 404);
@@ -127,7 +128,8 @@ function assertRecordAvailable(r) {
 // ---- Rutas -------------------------------------------------------------------------------------
 
 const routes = {
-  'GET /api/me': async ({ db, env, user }) => json({ ...publicUser(user), ...(await registrationStatus(db, env, user)) }),
+  'GET /api/me': async ({ db, env, user }) =>
+    json({ ...publicUser(user), ...(await registrationStatus(db, env, user)), privacyAccepted: privacyAccepted(user), privacyVersion: PRIVACY_VERSION }),
 
   // Cierra la sesión en todos los dispositivos de la persona (por ejemplo, si perdió su teléfono).
   'POST /api/logout-all': async ({ db, user }) => {

@@ -574,3 +574,5 @@ dialog:not(.viewer)::backdrop { background: rgba(12, 28, 42, 0.45); backdrop-fil
 /* ---- Acceso con Microsoft y Google ------------------------------------------------------------- */
 .login-buttons { display: grid; gap: 10px; margin: 6px 0 4px; }
 .login-buttons a { display: flex; align-items: center; justify-content: center; gap: 10px; min-height: 48px; text-decoration: none; }
+.privacy-gate { max-width: 720px; margin: 24px auto; }
+.privacy-gate .check-label { align-items: flex-start; margin: 16px 0; }

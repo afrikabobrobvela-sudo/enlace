@@ -141,6 +141,18 @@ assert.equal(noSecret.status, 503);
 assert.match((await noSecret.json()).error, /SESSION_SECRET/);
 checks++;
 
+// ---- Aviso de privacidad ----
+const page = await fetchWorker('/privacidad');
+assert.equal(page.status, 200);
+assert.match(await page.text(), /Aviso de privacidad/);
+const nuevo = cookiesFrom(await googleLogin({ sub: 'g-priv', email: 'priv@example.test' }));
+assert.equal((await (await me(nuevo)).json()).privacyAccepted, false);
+const accept = await fetchWorker('/api/privacy/accept', { method: 'POST', headers: { Origin: ORIGIN, 'X-Aula-Request': '1', cookie: cookieHeader(nuevo) }, body: '{}' });
+assert.equal(accept.status, 200);
+assert.equal((await (await me(nuevo)).json()).privacyAccepted, true);
+assert(store.raw().prepare("SELECT privacy_accepted_at FROM aula_users WHERE email='priv@example.test'").get().privacy_accepted_at, 'Se guarda cuándo se aceptó');
+checks += 4;
+
 // ---- Microsoft (correo institucional) ----
 const TENANT = '11111111-2222-3333-4444-555555555555';
 const msEnv = { ...baseEnv, MICROSOFT_CLIENT_ID: 'ms-app', MICROSOFT_CLIENT_SECRET: 'ms-secreto', MICROSOFT_TENANT_ID: TENANT };
@@ -276,4 +288,4 @@ assert.match(html, /data-action="logout"/);
 checks += 2;
 
 store.close();
-console.log(`PASS: ${checks} verificaciones de acceso — Google (estado, nonce, audiencia, correo verificado, dominios), vinculación con cuentas previas, enlace por correo de un solo uso, revocación y cierre de sesión.`);
+console.log(`PASS: ${checks} verificaciones de acceso — Google (estado, nonce, audiencia, correo verificado, dominios), vinculación con cuentas previas, Microsoft (inquilino fijo, dominios), enlace por correo de un solo uso, aviso de privacidad, revocación y cierre de sesión.`);
