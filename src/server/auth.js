@@ -62,23 +62,40 @@ export async function identity(request, env) {
   const db = env.DB;
   if (!db) fail('El servicio de datos no está disponible.', 503);
   const session = await verifyToken(readCookie(request, SESSION_COOKIE), env.SESSION_SECRET);
-  // Una sola consulta: la sesión debe existir en aula_logins, no estar revocada ni vencida.
+  // Una sola consulta: la sesión debe existir en aula_logins, no estar revocada ni vencida. De paso se averigua si
+  // la persona tiene un examen abierto que bloquea el resto de Enlace (opción «lockPlatform»): intento empezado, sin
+  // enviar y dentro de su tiempo (sin tiempo límite, 12 horas como máximo). Usa el índice aula_attempt_starts_user.
+  const now = nowIso();
   const user =
     session?.sid &&
     (await one(
       db,
-      `SELECT u.* FROM aula_logins l JOIN aula_users u ON u.id=l.user_id
-       WHERE l.id=? AND l.user_id=? AND l.revoked_at IS NULL AND l.expires>?`,
+      `SELECT u.*, (
+         SELECT s.quiz || '|' || r.course FROM aula_attempt_starts s
+           JOIN aula_records r ON r.id=s.quiz AND r.kind='quiz' AND r.deleted_at IS NULL
+         WHERE s.user_id=u.id AND s.started>?4 AND json_extract(r.data,'$.settings.exam.lockPlatform')=1
+           AND NOT EXISTS (SELECT 1 FROM aula_attempts a WHERE a.quiz=s.quiz AND a.user_id=s.user_id AND a.attempt=s.attempt)
+           AND CASE WHEN coalesce(json_extract(r.data,'$.settings.timeLimit'),0)=0 THEN 1
+                    WHEN json_extract(r.data,'$.settings.timerMode')='fixed' AND json_extract(r.data,'$.settings.opensAt') IS NOT NULL
+                      THEN datetime(json_extract(r.data,'$.settings.opensAt'), '+' || (json_extract(r.data,'$.settings.timeLimit') + 1) || ' minutes') > datetime(?3)
+                    ELSE datetime(s.started, '+' || (json_extract(r.data,'$.settings.timeLimit') + 1) || ' minutes') > datetime(?3) END
+           AND (json_extract(r.data,'$.settings.closesAt') IS NULL OR datetime(json_extract(r.data,'$.settings.closesAt'), '+1 minutes') > datetime(?3))
+         ORDER BY s.started DESC LIMIT 1) AS active_exam
+       FROM aula_logins l JOIN aula_users u ON u.id=l.user_id
+       WHERE l.id=?1 AND l.user_id=?2 AND l.revoked_at IS NULL AND l.expires>?3`,
       session.sid,
       session.uid,
-      nowIso(),
+      now,
+      new Date(Date.parse(now) - 12 * 3_600_000).toISOString(),
     ));
   if (!user || user.session_version !== session.ver) {
     fail('Inicia sesión para continuar.', 401, { login: providers(env) });
   }
   // Suspender también cierra sus sesiones; esto cubre una sesión que siguiera abierta.
   if (user.suspended_at) fail(SUSPENDED_MESSAGE, 403, { suspended: true });
-  return user;
+  // `sid`: la sesión (el dispositivo) de esta solicitud; el examen se contesta en una sola.
+  const [quiz, course] = user.active_exam ? user.active_exam.split('|') : [];
+  return { ...user, sid: session.sid, activeExam: quiz ? { quiz, course } : null };
 }
 
 /** Enrutador de /auth/*. Estas rutas no exigen sesión. */

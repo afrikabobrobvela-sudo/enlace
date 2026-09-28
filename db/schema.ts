@@ -622,8 +622,11 @@ export const attemptStarts = sqliteTable(
     unlockCode: text('unlock_code'),
     unlockFailures: integer('unlock_failures').notNull().default(0),
     locks: integer('locks').notNull().default(0),
+    // Migración 0021: sesión (dispositivo) donde se está contestando. Entrar desde otra sesión bloquea el intento.
+    sessionId: text('session_id'),
   },
-  (t) => [primaryKey({ columns: [t.quiz, t.userId, t.attempt] })],
+  // El índice por usuario permite saber en cada solicitud, sin recorrer la tabla, si la persona tiene un examen abierto.
+  (t) => [primaryKey({ columns: [t.quiz, t.userId, t.attempt] }), index('aula_attempt_starts_user').on(t.userId, t.started)],
 );
 
 /** Migración 0016: contraseñas equivocadas al empezar un examen (a las 10 se bloquea hasta que el docente lo libere). */

@@ -830,3 +830,26 @@ button.my-grade-row:hover .my-grade-title { color: var(--link); }
 .exam-locked-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; padding: 10px 12px; margin-bottom: 8px; border-radius: 10px; background: #fff4e5; border: 1px solid #f3c98b; }
 .exam-locked-row > div { flex: 1 1 200px; }
 .exam-unlock-code { font-size: 1.6rem; font-weight: 700; letter-spacing: .15em; font-variant-numeric: tabular-nums; color: #8a4b00; }
+
+/* Imágenes en las preguntas */
+.quiz-image { display: block; max-width: 100%; max-height: 360px; height: auto; margin: 8px 0 12px; border-radius: 8px; border: 1px solid var(--line); background: #fff; object-fit: contain; }
+.quiz-image-edit { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; margin: 4px 0 10px; }
+.quiz-image-add { display: inline-flex; align-items: center; cursor: pointer; }
+.quiz-text-hint { margin: -4px 0 6px; font-size: .82rem; }
+
+/* Examen que bloquea el resto de Enlace: solo queda la evaluación en pantalla */
+body.exam-platform-lock header, body.exam-platform-lock #topnav, body.exam-platform-lock footer, body.exam-platform-lock #main > .back,
+body.exam-platform-lock #bellPanel, body.exam-platform-lock #previewBar, body.exam-platform-lock .bottom-nav { display: none !important; }
+body.exam-platform-lock #main { padding-top: 16px; }
+
+/* Capturas en el examen: marca de agua con el nombre del alumno, pantalla tapada al detectar la tecla, y sin imprimir */
+.quiz-attempt.is-exam { position: relative; }
+.exam-watermark { position: absolute; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; user-select: none; -webkit-user-select: none; }
+.exam-watermark > div { position: absolute; inset: -60%; display: flex; flex-wrap: wrap; gap: 56px 40px; align-content: flex-start; transform: rotate(-24deg); opacity: 0.1; color: var(--ink); font-size: 0.85rem; font-weight: 600; white-space: nowrap; }
+.quiz-attempt.is-exam > fieldset, .quiz-attempt.is-exam > button, .quiz-attempt.is-exam > .exam-nav { position: relative; z-index: 1; }
+body.exam-shield #main { visibility: hidden; }
+body.exam-shield::after { content: 'Captura de pantalla bloqueada durante el examen'; position: fixed; inset: 0; display: grid; place-items: center; padding: 24px; text-align: center; background: var(--surface); color: var(--ink); font-weight: 600; z-index: 9999; }
+@media print {
+  body.exam-running #main, body.exam-running #modal { display: none !important; }
+  body.exam-running::after { content: 'El examen no se puede imprimir.'; display: block; padding: 40px; font: 16px sans-serif; }
+}

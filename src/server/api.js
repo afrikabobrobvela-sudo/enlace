@@ -17,6 +17,8 @@ import {
   MAX_PASSWORD_FAILURES,
   MAX_UNLOCK_FAILURES,
   assertInTime,
+  assertOpen,
+  studentAttemptView,
   deadlineOf,
   examPlaceCheck,
   finalAnswers,
@@ -74,6 +76,29 @@ const VISIBILITY_KINDS = ['module', 'material', 'notice', 'forum', 'quiz'];
 const TRASH_KINDS = ['module', 'material', 'notice', 'forum', 'post', 'quiz', 'task'];
 const trashTitle = (kind, data) => (kind === 'post' ? `${data.title || 'Publicación'} · ${data.name || ''}` : data.title || '');
 
+// ---- Plataforma bloqueada durante un examen (opción «lockPlatform») -----------------------------------
+// Mientras el alumno tenga el examen abierto, Enlace solo le responde lo necesario para contestarlo: aunque abra otra
+// pestaña, otro navegador o vuelva a iniciar sesión, no puede ver otros cursos, materiales, foros ni noticias.
+const EXAM_ROUTES = new Set([
+  'GET /api/me',
+  'GET /api/course',
+  'POST /api/attempt/start',
+  'POST /api/attempt/progress',
+  'POST /api/attempt',
+  'POST /api/attempt/away',
+  'POST /api/attempt/back',
+  'POST /api/attempt/unlock',
+  'POST /api/privacy/accept',
+]);
+const ACTIVE_EXAM_MESSAGE = 'Estás contestando un examen: hasta que lo envíes (o se acabe el tiempo) solo puedes usar el examen.';
+
+function assertExamRoute(route, url, user) {
+  const allowed =
+    (EXAM_ROUTES.has(route) && (route !== 'GET /api/course' || url.searchParams.get('id') === user.activeExam.course)) ||
+    (route.startsWith('GET /api/file/') && route.length > 'GET /api/file/'.length); // solo imágenes del examen (downloadFile)
+  if (!allowed) fail(ACTIVE_EXAM_MESSAGE, 423, { activeExam: user.activeExam });
+}
+
 export async function api(request, env) {
   try {
     const user = await identity(request, env);
@@ -83,6 +108,7 @@ export async function api(request, env) {
       requireSameOrigin(request);
       await assertWritable(env.DB, route, url, request); // un curso archivado es de solo lectura
     }
+    if (user.activeExam) assertExamRoute(route, url, user);
     const ctx = { db: env.DB, env, user, url, request };
     const handler =
       routes[route] || attendanceRoutes[route] || gradingRoutes[route] || directoryRoutes[route] || privacyRoutes[route] || periodRoutes[route] || dashboardRoutes[route] || reportRoutes[route] || demoRoutes[route] || backupRoutes[route] || userRoutes[route];
@@ -175,14 +201,14 @@ const lockCode = () => String(crypto.getRandomValues(new Uint32Array(1))[0] % 1_
 const lockEnabled = (quiz) => Boolean(quiz.data.settings?.exam?.lockOnLeave);
 
 /** Bloquea el intento (si no lo estaba) y deja constancia en sus eventos. */
-async function lockAttempt(db, start, seconds) {
+async function lockAttempt(db, start, seconds, reason = 'salida') {
   let events = [];
   try {
     events = JSON.parse(start.events || '[]');
   } catch {
     events = [];
   }
-  events.push({ kind: 'locked', seconds: Math.max(0, Math.round(seconds)), at: nowIso() });
+  events.push({ kind: 'locked', seconds: Math.max(0, Math.round(seconds)), reason, at: nowIso() });
   await run(
     db,
     `UPDATE aula_attempt_starts SET locked_at=?, unlock_code=?, unlock_failures=0, locks=locks+1, away_since=NULL, events=?
@@ -234,6 +260,37 @@ async function unlockAttempt(db, start, by) {
   );
 }
 
+// ---- Un solo dispositivo -------------------------------------------------------------------------------
+// El intento queda atado a la sesión (el dispositivo y navegador) donde se empezó. Volver a iniciar sesión, abrir
+// otra pestaña privada u otro teléfono no da un examen "limpio": con bloqueo al salir, queda bloqueado hasta el código
+// del docente y sigue solo en el nuevo dispositivo; el anterior deja de poder guardar o enviar.
+const OTHER_DEVICE_MESSAGE = 'Este examen continúa en otro dispositivo o sesión. Si quieres seguir aquí, vuelve a abrir el examen: se bloqueará y necesitarás el código de tu docente.';
+
+/** Al retomar desde otra sesión: se registra y, con bloqueo al salir, se bloquea. El examen pasa a esta sesión. */
+async function claimDevice(db, quiz, start, user) {
+  if (!start.session_id || start.session_id === user.sid) {
+    if (!start.session_id) await run(db, 'UPDATE aula_attempt_starts SET session_id=? WHERE quiz=? AND user_id=? AND attempt=?', user.sid, start.quiz, start.user_id, start.attempt);
+    return;
+  }
+  if (lockEnabled(quiz) && !start.locked_at) await lockAttempt(db, start, 0, 'otro dispositivo');
+  else {
+    let events = [];
+    try {
+      events = JSON.parse(start.events || '[]');
+    } catch {
+      events = [];
+    }
+    events.push({ kind: 'device', seconds: 0, at: nowIso() });
+    await run(db, 'UPDATE aula_attempt_starts SET events=? WHERE quiz=? AND user_id=? AND attempt=?', JSON.stringify(events.slice(-MAX_EXAM_EVENTS)), start.quiz, start.user_id, start.attempt);
+  }
+  await run(db, 'UPDATE aula_attempt_starts SET session_id=? WHERE quiz=? AND user_id=? AND attempt=?', user.sid, start.quiz, start.user_id, start.attempt);
+}
+
+/** Guardar, enviar o desbloquear solo desde la sesión que tiene el examen. */
+function assertDevice(quiz, start, user) {
+  if (quiz.data.settings?.exam && start?.session_id && start.session_id !== user.sid) fail(OTHER_DEVICE_MESSAGE, 409, { otherDevice: true });
+}
+
 const LOCKED_MESSAGE = 'Tu examen está bloqueado porque saliste de la página. Pide a tu docente el código para continuar.';
 
 async function openStart(db, quiz, userId) {
@@ -251,6 +308,7 @@ async function attemptContext(db, user, body) {
   const a = await access(db, user, body.course);
   if (a.teach) fail('Las evaluaciones se responden desde una cuenta de alumno. Usa Ver como alumno para revisarlas.');
   const quiz = await contentRecord(db, body.quiz, body.course, 'quiz');
+  if (user.activeExam && user.activeExam.quiz !== quiz.id) fail(ACTIVE_EXAM_MESSAGE, 423, { activeExam: user.activeExam });
   assertRecordAvailable(quiz);
   return { a, quiz };
 }
@@ -259,7 +317,14 @@ async function attemptContext(db, user, body) {
 
 const routes = {
   'GET /api/me': async ({ db, env, user }) =>
-    json({ ...publicUser(user), ...(await registrationStatus(db, env, user)), privacyAccepted: privacyAccepted(user), privacyVersion: PRIVACY_VERSION }),
+    json({
+      ...publicUser(user),
+      ...(await registrationStatus(db, env, user)),
+      privacyAccepted: privacyAccepted(user),
+      privacyVersion: PRIVACY_VERSION,
+      // Examen abierto que bloquea el resto de Enlace: la interfaz entra directo a él.
+      activeExam: user.activeExam || null,
+    }),
 
   // Cierra la sesión en todos los dispositivos de la persona (por ejemplo, si perdió su teléfono).
   'POST /api/logout-all': async ({ db, user }) => {
@@ -359,7 +424,11 @@ const routes = {
             // Del modo examen tampoco recibe la contraseña ni la ubicación del salón.
             r.kind === 'quiz' ? { ...r, data: { ...r.data, questions: publicQuestions(r.data.questions), settings: publicSettings(r.data.settings) } } : r,
           );
-    const records = [...content, ...(await courseGradebook(db, courseId, { teacher: teach, userId: viewer, memberId: viewing?.id, attemptUser }))];
+    const quizzesById = new Map(rows.filter((r) => r.kind === 'quiz').map((r) => [r.id, r]));
+    // El alumno ve de sus intentos lo que permita cada evaluación («qué ve al terminar»).
+    const records = [...content, ...(await courseGradebook(db, courseId, { teacher: teach, userId: viewer, memberId: viewing?.id, attemptUser }))].map((r) =>
+      !teach && r.kind === 'attempt' ? studentAttemptView(r, quizzesById.get(r.data.quiz)) : r,
+    );
 
     const memberRows = await all(db, "SELECT * FROM aula_members WHERE course=? AND role!='removed' ORDER BY name", courseId);
     const members = teach
@@ -381,6 +450,25 @@ const routes = {
     if (!teach) {
       const shared = new Set(records.filter((r) => ['module', 'material', 'task'].includes(r.kind)).flatMap((r) => r.data.fileIds || []));
       files = files.filter((f) => (viewer && f.owner === viewer) || (f.scope === 'material' && shared.has(f.id)));
+    }
+    // Con un examen abierto que bloquea la plataforma, del curso solo se entrega esa evaluación (y sus imágenes).
+    if (user.activeExam && !teach) {
+      const quizId = user.activeExam.quiz;
+      const quiz = records.find((r) => r.id === quizId);
+      const images = new Set((quiz?.data.questions || []).map((q) => q.image).filter(Boolean));
+      return json({
+        course: a.course,
+        canTeach: false,
+        canPreview: false,
+        preview: false,
+        viewing: null,
+        canDelete: false,
+        records: records.filter((r) => r.id === quizId || (r.kind === 'attempt' && r.data.quiz === quizId)),
+        members: members.filter((m) => m.user_id === user.id),
+        files: files.filter((f) => images.has(f.id)),
+        progress: [],
+        examOnly: true,
+      });
     }
     return json({
       course: a.course,
@@ -765,6 +853,12 @@ const routes = {
       }
       if (kind === 'quiz') {
         Object.assign(data, quizFields(input));
+        // Imágenes de las preguntas: archivos de material de este curso.
+        const images = [...new Set(data.questions.map((q) => q.image).filter(Boolean))];
+        if (images.length) {
+          const found = await one(db, "SELECT count(*) AS n FROM aula_files WHERE course=? AND scope='material' AND id IN (SELECT value FROM json_each(?))", body.course, JSON.stringify(images));
+          if (found.n !== images.length) fail('Una imagen de las preguntas no es válida. Vuelve a subirla.');
+        }
         // Cuenta en la calificación: dentro de una categoría (de actividades) del curso, con su valor en puntos.
         if (input.grade?.category) {
           const category = await one(db, "SELECT id FROM aula_grade_categories WHERE id=? AND course=? AND source='tasks'", String(input.grade.category), body.course);
@@ -1007,6 +1101,7 @@ const routes = {
       const attempt = done.last + 1;
       let start = await one(db, 'SELECT * FROM aula_attempt_starts WHERE quiz=? AND user_id=? AND attempt=?', quiz.id, user.id, attempt);
       if (!start) {
+        assertOpen(quiz); // fechas de disponibilidad: solo para empezar; lo que está en curso lo corta el límite de tiempo
         // Modo examen: la contraseña (la dicta el docente en el salón) solo se pide al empezar; retomar tras recargar no la pide.
         if (exam?.password) {
           const tries = await one(db, 'SELECT failures FROM aula_exam_tries WHERE quiz=? AND user_id=?', quiz.id, user.id);
@@ -1025,39 +1120,65 @@ const routes = {
         const place = exam ? examPlaceCheck(quiz, body.location, String(body.locationError || '')) : { flag: '', distance: null };
         await run(
           db,
-          'INSERT OR IGNORE INTO aula_attempt_starts (quiz,user_id,attempt,started,flag,distance) VALUES (?,?,?,?,?,?)',
+          'INSERT OR IGNORE INTO aula_attempt_starts (quiz,user_id,attempt,started,flag,distance,session_id) VALUES (?,?,?,?,?,?,?)',
           quiz.id,
           user.id,
           attempt,
           nowIso(),
           place.flag,
           place.distance,
+          exam ? user.sid : null,
         );
         start = await one(db, 'SELECT * FROM aula_attempt_starts WHERE quiz=? AND user_id=? AND attempt=?', quiz.id, user.id, attempt);
       }
       const { started } = start;
       const deadline = deadlineOf(quiz, started);
-      // Un intento cuyo tiempo se acabó sin enviarse cuenta como intento con 0.
+      // Un intento cuyo tiempo se acabó sin enviarse se cierra: con lo que dejó guardado (modo examen) o con 0.
       if (deadline && Date.now() > Date.parse(deadline) + 60_000) {
+        let saved = null;
+        try {
+          saved = start.progress ? JSON.parse(start.progress) : null;
+        } catch {
+          saved = null;
+        }
+        const instance = quizInstance(quiz, user.id, attempt);
+        let graded = { correct: 0, total: quiz.data.questions.length, score: 0, details: null };
+        if (saved && Object.keys(saved).length) {
+          try {
+            graded = gradeAttempt(quiz, instance, finalAnswers(quiz, instance, start, saved));
+          } catch {
+            // Una respuesta guardada inválida no impide cerrar el intento.
+          }
+        }
         await run(
           db,
           `INSERT OR IGNORE INTO aula_attempts (id,course,quiz,user_id,name,answers,correct,total,score,created,attempt,details,integrity)
-           VALUES (?,?,?,?,?,'[]',0,?,0,?,?,NULL,?)`,
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
           attemptId(quiz.id, user.id, attempt),
           quiz.course,
           quiz.id,
           user.id,
           user.name,
-          quiz.data.questions.length,
+          JSON.stringify(graded.details ? graded.details.map((d) => d.answer) : []),
+          graded.correct,
+          graded.total,
+          graded.score,
           nowIso(),
           attempt,
+          graded.details ? JSON.stringify(graded.details) : null,
           exam ? JSON.stringify(integritySummary(start)) : null,
         );
         continue;
       }
+      // Retomar desde otra sesión o dispositivo: se registra (y con bloqueo al salir, se bloquea).
+      if (exam) {
+        await claimDevice(db, quiz, start, user);
+        start = await one(db, 'SELECT * FROM aula_attempt_starts WHERE quiz=? AND user_id=? AND attempt=?', quiz.id, user.id, attempt);
+      }
       // Retomar después de salir (por ejemplo, cerró el navegador): si pasó la tolerancia, queda bloqueado.
       const locked = exam ? await applyLock(db, quiz, start) : false;
-      const questions = quizInstance(quiz, user.id, attempt).map(({ values: _v, ...q }) => q);
+      // Al navegador no van los valores internos ni la permutación de opciones (solo las opciones ya en su orden).
+      const questions = quizInstance(quiz, user.id, attempt).map(({ values: _v, perm: _p, ...q }) => q);
       // Al retomar un examen se devuelven las respuestas guardadas y la pregunta en la que iba.
       let saved = {};
       try {
@@ -1082,6 +1203,7 @@ const routes = {
     const start = await openStart(db, quiz, user.id);
     if (!start || start.attempt !== Number(body.attempt)) fail('Este intento ya no está en curso. Recarga la página.', 409);
     assertInTime(quiz, start.started);
+    assertDevice(quiz, start, user);
     if (start.locked_at) fail(LOCKED_MESSAGE, 423, { locked: true });
     const events = validEvents(body.events);
     const noBack = quiz.data.settings.exam.noBack;
@@ -1136,6 +1258,7 @@ const routes = {
     const exam = quiz.data.settings?.exam || null;
     if ((quiz.data.settings?.timeLimit || exam) && !start) fail('Comienza el intento antes de enviarlo.', 409);
     if (start) assertInTime(quiz, start.started);
+    if (exam) assertDevice(quiz, start, user);
     if (exam && (await applyLock(db, quiz, start))) fail(LOCKED_MESSAGE, 423, { locked: true });
     const instance = quizInstance(quiz, user.id, attempt);
     const graded = gradeAttempt(quiz, instance, finalAnswers(quiz, instance, start, body.answers));
@@ -1162,7 +1285,7 @@ const routes = {
     } catch {
       fail('Este intento ya se envió. Recarga la página.', 409);
     }
-    return json(attemptRecord(await one(db, 'SELECT * FROM aula_attempts WHERE id=?', id)), 201);
+    return json(studentAttemptView(attemptRecord(await one(db, 'SELECT * FROM aula_attempts WHERE id=?', id)), quiz), 201);
   },
 
   // El navegador avisa que el alumno salió de la página (se envía al ocultarse, con keepalive).
@@ -1172,6 +1295,7 @@ const routes = {
     if (!lockEnabled(quiz)) return json({ ok: true });
     const start = await openStart(db, quiz, user.id);
     if (!start || start.attempt !== Number(body.attempt)) fail('Este intento ya no está en curso.', 409);
+    assertDevice(quiz, start, user);
     await run(
       db,
       'UPDATE aula_attempt_starts SET away_since=coalesce(away_since, ?) WHERE quiz=? AND user_id=? AND attempt=? AND locked_at IS NULL',
@@ -1191,6 +1315,7 @@ const routes = {
     if (!lockEnabled(quiz)) return json({ locked: false });
     const start = await openStart(db, quiz, user.id);
     if (!start || start.attempt !== Number(body.attempt)) fail('Este intento ya no está en curso.', 409);
+    assertDevice(quiz, start, user);
     if (start.locked_at) return json({ locked: true });
     const reported = Math.min(Math.max(Number(body.seconds) || 0, 0), 86_400);
     const measured = start.away_since ? (Date.now() - Date.parse(start.away_since)) / 1000 : 0;
@@ -1204,6 +1329,7 @@ const routes = {
     const { quiz } = await attemptContext(db, user, body);
     const start = await openStart(db, quiz, user.id);
     if (!start || start.attempt !== Number(body.attempt)) fail('Este intento ya no está en curso.', 409);
+    assertDevice(quiz, start, user);
     if (!start.locked_at) return json({ locked: false });
     if (start.unlock_failures >= MAX_UNLOCK_FAILURES) fail('Demasiados códigos equivocados. Tu docente puede desbloquearte desde su monitor.', 429);
     const code = String(body.code ?? '').replace(/\D/g, '');
@@ -1440,6 +1566,16 @@ const routes = {
 async function downloadFile({ db, env, user, url, request }, id) {
   const file = await one(db, 'SELECT * FROM aula_files WHERE id=?', id);
   if (!file) fail('Archivo no encontrado.', 404);
+  // Con un examen abierto que bloquea la plataforma, solo se descargan las imágenes de ese examen.
+  if (user.activeExam) {
+    const inExam = await one(
+      db,
+      "SELECT 1 AS ok FROM aula_records r, json_each(r.data,'$.questions') qq WHERE r.id=? AND json_extract(qq.value,'$.image')=? LIMIT 1",
+      user.activeExam.quiz,
+      id,
+    );
+    if (!inExam) fail(ACTIVE_EXAM_MESSAGE, 423, { activeExam: user.activeExam });
+  }
   const a = await access(db, user, file.course);
   if (!a.teach && file.owner !== user.id) {
     // Un alumno solo descarga material del docente enlazado desde una unidad visible, un material visible
@@ -1468,10 +1604,17 @@ async function downloadFile({ db, env, user, url, request }, id) {
                            AND p.deleted_at IS NULL AND ${publishedSql('p', '?3')}))
          UNION ALL
          SELECT 1 FROM aula_tasks t, json_each(t.file_ids) j WHERE t.course=?1 AND t.visible=1 AND t.deleted_at IS NULL AND j.value=?2
+         UNION ALL
+         -- Imagen de una pregunta: evaluación publicada y, si es examen, solo después de empezarlo (no se adelantan preguntas).
+         SELECT 1 FROM aula_records r, json_each(r.data,'$.questions') qq
+         WHERE r.course=?1 AND r.kind='quiz' AND r.deleted_at IS NULL AND ${publishedSql('r', '?3')} AND json_extract(qq.value,'$.image')=?2
+           AND (coalesce(json_extract(r.data,'$.settings.exam.enabled'),0)=0
+                OR EXISTS (SELECT 1 FROM aula_attempt_starts s WHERE s.quiz=r.id AND s.user_id=?4))
          LIMIT 1`,
         file.course,
         id,
         nowIso(),
+        user.id,
       ));
     if (!permitted) fail('No tienes acceso a este archivo.', 403);
   }

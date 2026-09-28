@@ -60,8 +60,11 @@ async function request(path, data, method = 'POST') {
     body: data === undefined ? undefined : JSON.stringify(data)
   });
   const b = await r.json();
+  // Examen abierto que bloquea la plataforma: cualquier otra pantalla lleva de vuelta al examen.
+  if (r.status === 423 && b.activeExam && typeof goToActiveExam === 'function')
+    goToActiveExam(b.activeExam).catch(() => {});
   if (!r.ok)
-    throw Object.assign(new Error(b.error || 'No se pudo completar la operación.'), { status: r.status, login: b.login });
+    throw Object.assign(new Error(b.error || 'No se pudo completar la operación.'), { status: r.status, login: b.login, data: b });
   return b;
 }
 async function reload() {
@@ -865,6 +868,11 @@ async function init() {
     // Aviso de privacidad: antes de usar Enlace (y cada vez que cambie su versión).
     if (me.privacyAccepted === false)
       return renderPrivacyGate();
+    // Con un examen abierto que bloquea el resto de Enlace, se entra directo a él (en cualquier pestaña o sesión).
+    if (me.activeExam) {
+      await goToActiveExam(me.activeExam);
+      return startRoutes();
+    }
     startNotices();
     if (new URLSearchParams(location.search).has('a')) {
       nav();

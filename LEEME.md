@@ -1,9 +1,38 @@
-# Enlace · versión 12.15
+# Enlace · versión 12.16
 
 Plataforma académica independiente para docentes y alumnos de cualquier academia (nació en la Academia de Física de la BUAP), con interfaz inspirada en Brightspace.
 No es el código de D2L Brightspace ni una plataforma oficial de la BUAP.
 
 Esta versión se despliega en **tu propia cuenta de Cloudflare** (Workers + D1 + R2, plan gratuito) y ya no depende de ChatGPT Sites.
+
+## Novedades de la versión 12.16 (examen estricto: contraseña, plataforma bloqueada, un solo dispositivo, imágenes y fechas)
+
+Requiere la migración **0021**: solo agrega una columna y un índice y no modifica datos. `npm run configurar` descarga un respaldo y la aplica.
+
+- **Contraseña y bloqueo al salir juntos.** La contraseña se pide solo para empezar; al retomar un examen ya empezado («Continuar examen») no se vuelve a pedir.
+- **Plataforma bloqueada mientras contesta** (opción nueva del modo examen, activada por omisión):
+  - Desde que empieza hasta que envía (o se acaba el tiempo), Enlace solo le responde ese examen.
+  - No puede abrir otros cursos, materiales, foros, avisos, calendario ni archivos, ni empezar otra evaluación.
+  - Lo hace cumplir el servidor: aunque abra otra pestaña, recargue o vuelva a iniciar sesión, lo único que ve es el examen.
+- **Un solo dispositivo:**
+  - Si vuelve a iniciar sesión (en otro teléfono, otra computadora o el mismo navegador), el examen pasa a esa sesión **bloqueado**, y necesita el código de su docente para seguir.
+  - La sesión anterior ya no puede guardar ni enviar nada, y muestra «El examen continúa en otro dispositivo».
+  - En el monitor, el bloqueo dice «otro dispositivo».
+- **Capturas de pantalla:**
+  - Cada pregunta lleva una marca de agua con el nombre y el correo del alumno y la hora, así que una captura que circule lo identifica.
+  - En computadora, la tecla de captura (Impr Pant; Win+Mayús+S; Cmd+Mayús+3/4/5) tapa el examen, intenta vaciar el portapapeles y queda registrada. En la integridad del intento aparece «intentó una captura de pantalla».
+  - El examen no se puede imprimir.
+  - **Límite:** ninguna página web puede impedir la captura de un teléfono, porque la hace el sistema operativo y el navegador ni se entera. Por eso la marca de agua, más el bloqueo al salir, son la protección real en el celular.
+- **Opciones en orden aleatorio** (nueva casilla): además del orden de las preguntas, cada alumno ve las opciones en distinto orden. Se califica bien y el orden real nunca llega al navegador.
+- **Imágenes en las preguntas:**
+  - En el editor, «Agregar imagen» en cada pregunta; se comprime en el navegador.
+  - Solo se descargan cuando la evaluación está publicada y, en modo examen, después de que el alumno empezó. No se pueden ver antes del examen.
+- **Fechas y disponibilidad** (como en Brightspace):
+  - Fecha y hora de inicio y de final: antes de abrir dice «Abre el…», y después de cerrar ya no se puede empezar.
+  - El final corta el tiempo de quien siga contestando.
+  - **Temporizador a hora fija:** el tiempo cuenta desde la hora de inicio para todos. Si alguien entra tarde, tiene menos tiempo.
+- **Qué ve el alumno al terminar:** mostrar u ocultar la calificación (queda «Pendiente» hasta que la actives) y mostrar u ocultar el detalle de sus respuestas.
+- **Se acabó el tiempo sin enviar:** ahora se califica lo que dejó guardado, en vez de un cero.
 
 ## Novedades de la versión 12.15 (examen: bloqueo al salir de la página)
 
@@ -282,7 +311,7 @@ La pantalla muestra en vivo cuántos se han registrado y quiénes acaban de hace
 
 1. Descarga la versión nueva en una carpeta **nueva** (no encima de la anterior), o `git pull` si trabajas desde GitHub.
 2. Haz un respaldo desde esa carpeta: `npm run respaldo`, y de los archivos desde Enlace (ver *Respaldos*).
-3. Doble clic en `configurar.cmd` (Windows) o `configurar.command` (Mac), o `npm run configurar`. Encuentra tu base `enlace-db` y tu almacenamiento, usa el correo de administración y la dirección `.workers.dev` de la vez anterior (desde la versión 12.11 los recuerda; la primera vez te los pregunta y revisa que el correo ya haya entrado a Enlace), descarga un respaldo, aplica las migraciones pendientes (0003: asistencia y borradores; 0004: registro con QR; 0005: categorías, rúbricas y equipos; 0006: sesiones; 0007: papelera; 0008: registro de docentes; 0009: aviso de privacidad; 0010: periodos y archivo; 0011: prórrogas; 0012: intentos de evaluaciones; 0013: avisos; 0014: historial de calificaciones; 0015: asistencia con código; 0016: modo examen; 0017: usuarios y registro de acciones; 0018: avisos leídos; 0019: seguimiento del contenido; 0020: bloqueo del examen) y publica. No cambia tus claves. Al pasar a la versión 12.1 cada persona vuelve a entrar con Google una vez (las sesiones ahora se registran en el servidor).
+3. Doble clic en `configurar.cmd` (Windows) o `configurar.command` (Mac), o `npm run configurar`. Encuentra tu base `enlace-db` y tu almacenamiento, usa el correo de administración y la dirección `.workers.dev` de la vez anterior (desde la versión 12.11 los recuerda; la primera vez te los pregunta y revisa que el correo ya haya entrado a Enlace), descarga un respaldo, aplica las migraciones pendientes (0003: asistencia y borradores; 0004: registro con QR; 0005: categorías, rúbricas y equipos; 0006: sesiones; 0007: papelera; 0008: registro de docentes; 0009: aviso de privacidad; 0010: periodos y archivo; 0011: prórrogas; 0012: intentos de evaluaciones; 0013: avisos; 0014: historial de calificaciones; 0015: asistencia con código; 0016: modo examen; 0017: usuarios y registro de acciones; 0018: avisos leídos; 0019: seguimiento del contenido; 0020: bloqueo del examen; 0021: examen estricto) y publica. No cambia tus claves. Al pasar a la versión 12.1 cada persona vuelve a entrar con Google una vez (las sesiones ahora se registran en el servidor).
 
 **No publiques con `npx wrangler deploy` directamente**: el `wrangler.toml` del ZIP trae valores de ejemplo y quedarías sin la cuenta de administración (`npm run deploy` y `npm run db:migrate` ya lo impiden). Si prefieres hacerlo a mano: copia tu `database_id` y tu correo del `wrangler.toml` anterior al nuevo (y `ALLOWED_EMAIL_DOMAINS` si lo usabas) y ejecuta `npm install`, `npm run db:migrate` y `npm run deploy`, **en ese orden**: si publicas antes de migrar, Asistencia y Calificaciones fallarán hasta que apliques la migración.
 
@@ -492,6 +521,7 @@ La cookie de sesión usa el prefijo `__Host-`, que exige conexión segura. Chrom
 - `test-respaldo-archivos.mjs`: respaldo de archivos solo para administración, incremental, con índice; restauración solo de lo que falta y con el tamaño exacto.
 - `test-restaurar.mjs`: la exportación de D1 se reordena y comprueba con el esquema real; `npm run restaurar` solo escribe en bases vacías.
 - `test-bloqueo-examen.mjs`: bloqueo al salir (tolerancia, sin guardar ni enviar mientras está bloqueado, código solo para el docente, 5 intentos, desbloqueo del docente, al retomar tras cerrar el navegador).
+- `test-examen-estricto.mjs`: contraseña con bloqueo, plataforma bloqueada mientras contesta (ni otros cursos, materiales, avisos ni archivos), un solo dispositivo (volver a iniciar sesión bloquea y la sesión anterior ya no guarda), opciones aleatorias bien calificadas, imágenes que no se adelantan, capturas registradas, fechas, temporizador fijo y qué ve el alumno al terminar.
 - `test-programacion.mjs`: publicación programada por todas las vías (curso, descargas, foro, evaluación, avisos), evaluaciones en la calificación (validación y cálculo real: mejor, último, promedio) y seguimiento del contenido.
 - `test-calendario.mjs`: calendario con fechas por alumno (prórrogas), estado de entrega, sin lo oculto ni lo archivado, vista del docente; avisos leídos uno por uno o todos, historial y archivo .ics.
 - `test-usuarios.mjs`: la vista de un alumno es idéntica a la suya y queda registrada; directorio, suspender y reactivar sin perder datos, transferir cursos.

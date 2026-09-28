@@ -1,7 +1,7 @@
 // Evaluaciones: preguntas de opción múltiple y numéricas (con tolerancia, unidades y datos aleatorios por alumno),
 // varios intentos, tiempo límite y orden aleatorio. Todo se califica en el servidor.
 import { distanceMeters } from './attendance.js';
-import { fail, text } from './http.js';
+import { fail, isoDate, text } from './http.js';
 
 export const MAX_QUESTIONS = 50;
 const TIME_GRACE_MS = 60_000; // margen para la conexión al enviar
@@ -133,11 +133,13 @@ export function quizFields(input) {
     const label = `Pregunta ${n + 1}`;
     const type = q.type === 'numeric' ? 'numeric' : 'choice';
     const prompt = text(q.text, 3000);
+    // Imagen de la pregunta (archivo del docente en el curso; el servidor comprueba que exista al guardar).
+    const image = typeof q.image === 'string' && /^[A-Za-z0-9-]{1,64}$/.test(q.image) ? { image: q.image } : {};
     if (type === 'choice') {
       const validOptions =
         Array.isArray(q.options) && q.options.length >= 2 && q.options.length <= 6 && Number.isInteger(q.correct) && q.correct >= 0 && q.correct < q.options.length;
       if (!validOptions) fail(`${label}: agrega de 2 a 6 opciones y marca la correcta.`);
-      return { type, text: prompt, options: q.options.map((o) => text(o, 1500)), correct: q.correct };
+      return { type, text: prompt, options: q.options.map((o) => text(o, 1500)), correct: q.correct, ...image };
     }
     const variables = validVariables(q.variables);
     const answer = text(String(q.answer ?? ''), 300);
@@ -152,13 +154,36 @@ export function quizFields(input) {
         fail(`${label}: la respuesta no se puede calcular (${error.message}).`);
       }
     }
-    return { type, text: prompt, answer, tolerance, unit: String(q.unit ?? '').trim().slice(0, 30), variables };
+    return { type, text: prompt, answer, tolerance, unit: String(q.unit ?? '').trim().slice(0, 30), variables, ...image };
   });
   const attempts = Number(input.settings?.attempts ?? 1);
   const timeLimit = Number(input.settings?.timeLimit ?? 0);
   if (!Number.isInteger(attempts) || attempts < 1 || attempts > 10) fail('Los intentos van de 1 a 10.');
   if (!Number.isInteger(timeLimit) || timeLimit < 0 || timeLimit > 300) fail('El tiempo límite va de 0 (sin límite) a 300 minutos.');
-  return { questions, settings: { attempts, timeLimit, shuffle: input.settings?.shuffle === true, exam: examFields(input.settings?.exam) } };
+  // Disponibilidad: desde cuándo se puede empezar y hasta cuándo (al cerrar, termina también lo que esté en curso).
+  const opensAt = isoDate(input.settings?.opensAt || '');
+  const closesAt = isoDate(input.settings?.closesAt || '');
+  if (opensAt && closesAt && closesAt <= opensAt) fail('La fecha final debe ser posterior a la de inicio.');
+  // Temporizador: por intento (desde que cada alumno empieza) o fijo (desde la hora de inicio, igual para todos).
+  const timerMode = input.settings?.timerMode === 'fixed' ? 'fixed' : 'attempt';
+  if (timerMode === 'fixed' && (!opensAt || !timeLimit)) fail('Para que el tiempo empiece a la hora de inicio, indica la fecha de inicio y el tiempo límite.');
+  // Qué ve el alumno al terminar: su calificación (o «pendiente») y si acertó cada pregunta.
+  const results = { score: input.settings?.results?.score !== false, review: input.settings?.results?.review === 'none' ? 'none' : 'marks' };
+  return {
+    questions,
+    settings: {
+      attempts,
+      timeLimit,
+      shuffle: input.settings?.shuffle === true,
+      // Cada alumno ve las opciones de cada pregunta en otro orden (se califica con el orden original).
+      shuffleOptions: input.settings?.shuffleOptions === true,
+      ...(opensAt ? { opensAt } : {}),
+      ...(closesAt ? { closesAt } : {}),
+      timerMode,
+      results,
+      exam: examFields(input.settings?.exam),
+    },
+  };
 }
 
 // ---- Modo examen ---------------------------------------------------------------------------------
@@ -168,7 +193,7 @@ export const EXAM_RADII = [100, 150, 300, 500];
 export const LOCK_GRACES = [0, 5, 15, 30];
 export const MAX_UNLOCK_FAILURES = 5;
 export const MAX_PASSWORD_FAILURES = 10;
-const EVENT_KINDS = ['left', 'fullscreen', 'copy'];
+const EVENT_KINDS = ['left', 'fullscreen', 'copy', 'capture'];
 const MAX_EVENTS = 200;
 
 /** Configuración del modo examen (null si está desactivado). La contraseña y el salón nunca llegan al alumno. */
@@ -189,7 +214,8 @@ function examFields(input) {
   const oneByOne = input.oneByOne === true;
   const lockOnLeave = input.lockOnLeave === true;
   const lockGrace = LOCK_GRACES.includes(Number(input.lockGrace)) ? Number(input.lockGrace) : 5;
-  return { enabled: true, password, oneByOne, noBack: oneByOne && input.noBack === true, place, lockOnLeave, lockGrace: lockOnLeave ? lockGrace : 0 };
+  // lockPlatform: mientras contesta, Enlace solo le responde el examen (ni otros cursos ni materiales).
+  return { enabled: true, password, oneByOne, noBack: oneByOne && input.noBack === true, place, lockOnLeave, lockGrace: lockOnLeave ? lockGrace : 0, lockPlatform: input.lockPlatform === true };
 }
 
 /** Lo que el alumno sabe del modo examen: si pide contraseña o ubicación, pero no cuáles son. */
@@ -199,7 +225,7 @@ export function publicSettings(settings) {
   return { ...settings, exam: { ...exam, needsPassword: Boolean(password), checksLocation: Boolean(place) } };
 }
 
-/** Eventos que envía el navegador durante el examen (salir de la pantalla, de pantalla completa, copiar o pegar). */
+/** Eventos que envía el navegador durante el examen (salir de la pantalla, de pantalla completa, copiar o pegar, captura de pantalla). */
 export function validEvents(input) {
   if (!Array.isArray(input)) return [];
   return input.slice(0, 20).map((e) => {
@@ -245,6 +271,7 @@ export function integritySummary(start) {
     awaySeconds: left.reduce((n, e) => n + (e.seconds || 0), 0),
     fullscreenExits: events.filter((e) => e.kind === 'fullscreen').length,
     copyAttempts: events.filter((e) => e.kind === 'copy').length,
+    captures: events.filter((e) => e.kind === 'capture').length,
     locks: events.filter((e) => e.kind === 'locked').length,
     flag: start.flag || '',
     distance: start.distance ?? null,
@@ -283,7 +310,8 @@ export const sameQuestions = (a, b) => JSON.stringify((a || []).map(canonical)) 
 
 /** Lo que el alumno ve de las preguntas antes de empezar (sin respuestas ni fórmulas). */
 export function publicQuestions(questions) {
-  return questions.map((q) => (q.type === 'numeric' ? { type: q.type, text: q.text, unit: q.unit } : { type: 'choice', text: q.text, options: q.options }));
+  const image = (q) => (q.image ? { image: q.image } : {});
+  return questions.map((q) => (q.type === 'numeric' ? { type: q.type, text: q.text, unit: q.unit, ...image(q) } : { type: 'choice', text: q.text, options: q.options, ...image(q) }));
 }
 
 // ---- Intento de un alumno --------------------------------------------------------------------------
@@ -292,17 +320,31 @@ export function publicQuestions(questions) {
 export function quizInstance(quiz, userId, attempt) {
   const random = generator(seedOf(`${quiz.id}:${userId}:${attempt}`));
   const questions = quiz.data.questions.map((q, index) => {
-    if (q.type !== 'numeric') return { index, type: 'choice', text: q.text, options: q.options };
+    if (q.type !== 'numeric') return { index, type: 'choice', text: q.text, options: q.options, ...(q.image ? { image: q.image } : {}) };
     const values = Object.fromEntries(
       (q.variables || []).map((v) => [v.name, Number((v.min + random() * (v.max - v.min)).toFixed(v.decimals))]),
     );
     const shown = q.text.replace(/\{([A-Za-z_][A-Za-z0-9_]*)\}/g, (all, name) => (Object.hasOwn(values, name) ? String(values[name]) : all));
-    return { index, type: 'numeric', text: shown, unit: q.unit, values };
+    return { index, type: 'numeric', text: shown, unit: q.unit, values, ...(q.image ? { image: q.image } : {}) };
   });
   if (quiz.data.settings?.shuffle) {
     for (let i = questions.length - 1; i > 0; i--) {
       const j = Math.floor(random() * (i + 1));
       [questions[i], questions[j]] = [questions[j], questions[i]];
+    }
+  }
+  // Opciones en otro orden: `perm[j]` es la opción original que el alumno ve en la posición j. Se genera después
+  // del orden de preguntas, así las evaluaciones sin esta opción conservan exactamente sus instancias anteriores.
+  if (quiz.data.settings?.shuffleOptions) {
+    for (const item of questions) {
+      if (item.type !== 'choice') continue;
+      const perm = item.options.map((_, i) => i);
+      for (let i = perm.length - 1; i > 0; i--) {
+        const j = Math.floor(random() * (i + 1));
+        [perm[i], perm[j]] = [perm[j], perm[i]];
+      }
+      item.perm = perm;
+      item.options = perm.map((i) => item.options[i]);
     }
   }
   return questions;
@@ -331,9 +373,11 @@ export function gradeAttempt(quiz, instance, answers) {
     if (raw === undefined || raw === null || raw === '') return { index: item.index, answer: null, correct: false, values: item.values };
     if (q.type !== 'numeric') {
       if (!Number.isInteger(raw) || raw < 0 || raw >= q.options.length) fail('Respuesta no válida.');
-      const ok = raw === q.correct;
+      // El alumno responde con la posición que vio; con opciones mezcladas se traduce a la opción original.
+      const original = item.perm ? item.perm[raw] : raw;
+      const ok = original === q.correct;
       if (ok) correct++;
-      return { index: item.index, answer: raw, correct: ok };
+      return { index: item.index, answer: original, correct: ok };
     }
     const value = parseNumber(raw);
     if (!Number.isFinite(value)) fail(`Escribe un número en la pregunta ${instance.indexOf(item) + 1} (por ejemplo 9.8).`);
@@ -348,8 +392,34 @@ export function gradeAttempt(quiz, instance, answers) {
 
 /** ¿Sigue abierto el intento? Con tiempo límite, hasta el inicio + límite (+1 min de margen). */
 export function deadlineOf(quiz, started) {
-  const minutes = quiz.data.settings?.timeLimit || 0;
-  return minutes ? new Date(Date.parse(started) + minutes * 60_000).toISOString() : null;
+  const settings = quiz.data.settings || {};
+  const minutes = settings.timeLimit || 0;
+  // Con temporizador fijo cuenta desde la hora de inicio (igual para todos); si no, desde que empezó el alumno.
+  const from = settings.timerMode === 'fixed' && settings.opensAt ? settings.opensAt : started;
+  let deadline = minutes ? new Date(Date.parse(from) + minutes * 60_000).toISOString() : null;
+  // La fecha final corta cualquier intento en curso.
+  if (settings.closesAt && (!deadline || settings.closesAt < deadline)) deadline = settings.closesAt;
+  return deadline;
+}
+
+/** ¿Se puede empezar un intento ahora? (fechas de disponibilidad) */
+export function assertOpen(quiz, now = Date.now()) {
+  const { opensAt, closesAt } = quiz.data.settings || {};
+  const when = (iso) => new Date(iso).toLocaleString('es-MX', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'America/Mexico_City' });
+  if (opensAt && now < Date.parse(opensAt)) fail(`Esta evaluación se abre el ${when(opensAt)}.`, 403);
+  if (closesAt && now > Date.parse(closesAt)) fail(`Esta evaluación cerró el ${when(closesAt)}.`, 403);
+}
+
+/**
+ * Lo que el alumno recibe de sus intentos según «qué ve al terminar»: sin calificación (pendiente de publicar) y/o
+ * sin el detalle de qué preguntas acertó. El docente siempre recibe todo.
+ */
+export function studentAttemptView(record, quiz) {
+  const results = quiz?.data.settings?.results || { score: true, review: 'marks' };
+  const data = { ...record.data };
+  if (results.score === false) Object.assign(data, { score: null, correct: null, hidden: true });
+  if (results.review === 'none' || results.score === false) Object.assign(data, { details: null, answers: null });
+  return { ...record, data };
 }
 
 export function assertInTime(quiz, started) {

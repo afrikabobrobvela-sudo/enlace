@@ -122,8 +122,9 @@ function quizScore(quiz, memberId) {
   const attempts = records('attempt')
     .filter((a) => a.data.quiz === quiz.id && a.author === key)
     .sort((a, b) => (a.data.attempt || 1) - (b.data.attempt || 1));
-  if (!attempts.length) return null;
-  const scores = attempts.map((a) => Number(a.data.score));
+  // Calificación oculta al alumno («pendiente de publicar»): no cuenta en su promedio hasta que se muestre.
+  const scores = attempts.filter((a) => a.data.score !== null && a.data.score !== undefined).map((a) => Number(a.data.score));
+  if (!scores.length) return null;
   const policy = quiz.data.grade?.policy || 'best';
   if (policy === 'last') return scores.at(-1);
   if (policy === 'average') return scores.reduce((a, b) => a + b, 0) / scores.length;
@@ -200,14 +201,15 @@ function myGradesHtml() {
     .map((q) => {
       const attempts = records('attempt').filter((a) => a.data.quiz === q.id && a.author === attemptKeyOf(member.id));
       const counted = counts.includes(q);
-      const best = counted ? quizScore(q, member.id) : attempts.length ? Math.max(...attempts.map((a) => a.data.score)) : null;
+      const shown = attempts.map((a) => a.data.score).filter((x) => x !== null && x !== undefined);
+      const best = counted ? quizScore(q, member.id) : shown.length ? Math.max(...shown) : null;
       const note = [
         attempts.length ? `${attempts.length} ${attempts.length === 1 ? 'intento' : 'intentos'}` : '',
         counted ? `cuenta en ${cats.find((c) => c.id === q.data.grade.category)?.name || 'la calificación'} · ${QUIZ_POLICIES[q.data.grade.policy] || QUIZ_POLICIES.best}` : 'no cuenta en el promedio',
       ]
         .filter(Boolean)
         .join(' · ');
-      return `<li class="my-grade-item"><button type="button" class="my-grade-row" data-action="quiz" data-id="${esc(q.id)}"><span class="my-grade-title">${esc(q.data.title)}<small>${esc(note)}</small></span><span class="my-grade-value ${best === null ? 'is-pending' : tone(best)}">${best === null ? 'Sin contestar' : best.toFixed(2)}</span></button></li>`;
+      return `<li class="my-grade-item"><button type="button" class="my-grade-row" data-action="quiz" data-id="${esc(q.id)}"><span class="my-grade-title">${esc(q.data.title)}<small>${esc(note)}</small></span><span class="my-grade-value ${best === null ? 'is-pending' : tone(best)}">${best === null ? (attempts.length ? 'Pendiente' : 'Sin contestar') : best.toFixed(2)}</span></button></li>`;
     })
     .join('');
   const scheme = cats.length ? 'por categorías' : weighted ? 'ponderado' : 'simple';

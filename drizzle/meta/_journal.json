@@ -148,6 +148,13 @@
       "when": 1790628011220,
       "tag": "0020_bloqueo_examen",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "6",
+      "when": 1790628807861,
+      "tag": "0021_examen_estricto",
+      "breakpoints": true
     }
   ]
 }

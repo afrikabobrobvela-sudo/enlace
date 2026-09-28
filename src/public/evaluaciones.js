@@ -15,6 +15,9 @@ function quizSettingsText(settings) {
   const parts = [settings.attempts === 1 ? 'Un intento' : `${settings.attempts} intentos (cuenta el mejor)`];
   parts.push(settings.timeLimit ? `${settings.timeLimit} minutos por intento` : 'sin tiempo límite');
   if (settings.shuffle) parts.push('preguntas en orden aleatorio');
+  if (settings.opensAt || settings.closesAt)
+    parts.push([settings.opensAt ? `abre ${fmt(settings.opensAt)}` : '', settings.closesAt ? `cierra ${fmt(settings.closesAt)}` : ''].filter(Boolean).join(', '));
+  if (settings.timerMode === 'fixed') parts.push('el tiempo corre desde la hora de inicio');
   if (settings.exam?.enabled) parts.push(`modo examen${settings.exam.oneByOne ? (settings.exam.noBack ? ', una pregunta a la vez sin regresar' : ', una pregunta a la vez') : ''}`);
   return parts.join(' · ');
 }
@@ -24,14 +27,20 @@ function quizStudentStatus(q) {
   const settings = quizSettings(q);
   const attempts = records('attempt').filter((a) => a.data.quiz === q.id);
   if (attempts.length) {
-    const best = Math.max(...attempts.map((a) => a.data.score));
+    const scores = attempts.map((a) => a.data.score).filter((x) => x !== null && x !== undefined);
     const left = settings.attempts - attempts.length;
-    return `${best.toFixed(2)} / 10${left > 0 ? ` · ${left === 1 ? 'queda 1 intento' : `quedan ${left} intentos`}` : ''}`;
+    const more = left > 0 ? ` · ${left === 1 ? 'queda 1 intento' : `quedan ${left} intentos`}` : '';
+    return scores.length ? `${Math.max(...scores).toFixed(2)} / 10${more}` : `Enviada · calificación pendiente${more}`;
   }
+  if (settings.opensAt && Date.parse(settings.opensAt) > Date.now()) return `Abre ${fmt(settings.opensAt)}`;
+  if (settings.closesAt && Date.parse(settings.closesAt) < Date.now()) return 'Cerrada';
   return settings.exam?.enabled ? 'Pendiente · modo examen' : 'Pendiente';
 }
 
 // ---- Editor ---------------------------------------------------------------------------------------
+
+/** Imagen de una pregunta (se sirve con la misma revisión de permisos que cualquier archivo del curso). */
+const quizImageHtml = (id, n) => (id ? `<img class="quiz-image" src="/api/file/${esc(id)}?preview=1" alt="Imagen de la pregunta ${n + 1}">` : '');
 
 function blankQuestion(type = 'choice') {
   return type === 'numeric'
@@ -78,6 +87,12 @@ function quizQuestionHtml(q, i) {
       ${quizDraft.length > 1 ? `<button type="button" class="danger-link" data-quiz="remove-question">Quitar pregunta</button>` : ''}
     </div>
     <label>Enunciado<textarea data-f="text" required maxlength="3000">${esc(q.text)}</textarea></label>
+    <p class="muted quiz-text-hint">Puedes escribir fórmulas entre signos de pesos: $v = v_0 + a t$.</p>
+    <div class="quiz-image-edit"><input type="hidden" data-f="image" value="${esc(q.image || '')}">${
+      q.image
+        ? `<img class="quiz-image" src="/api/file/${esc(q.image)}?preview=1" alt="Imagen de la pregunta ${i + 1}"><button type="button" class="danger-link" data-quiz="remove-image">Quitar imagen</button>`
+        : `<label class="secondary quiz-image-add">＋ Imagen (diagrama, gráfica, foto)<input type="file" accept="image/*" data-quiz-image hidden></label>`
+    }</div>
     ${body}
   </fieldset>`;
 }
@@ -86,8 +101,10 @@ function quizQuestionHtml(q, i) {
 function readQuizQuestions() {
   return [...document.querySelectorAll('#quizQuestions [data-question]')].map((box, i) => {
     const get = (f) => box.querySelector(`[data-f="${f}"]`)?.value ?? '';
+    const image = get('image') ? { image: get('image') } : {};
     if (get('type') === 'numeric') {
       return {
+        ...image,
         type: 'numeric',
         text: get('text'),
         answer: get('answer'),
@@ -103,7 +120,7 @@ function readQuizQuestions() {
     }
     const options = [...box.querySelectorAll('[data-o]')].map((input) => input.value);
     const checked = box.querySelector(`input[name="correct_${i}"]:checked`);
-    return { type: 'choice', text: get('text'), options, correct: checked ? Number(checked.value) : -1 };
+    return { type: 'choice', text: get('text'), options, correct: checked ? Number(checked.value) : -1, ...image };
   });
 }
 
@@ -140,7 +157,16 @@ function quizModal(old) {
       `<fieldset class="quiz-settings"><legend>Configuración</legend><div class="quiz-grid">
         <label>Intentos por alumno<input name="attempts" type="number" min="1" max="10" value="${settings.attempts}"></label>
         <label>Tiempo límite (minutos, 0 = sin límite)<input name="timeLimit" type="number" min="0" max="300" value="${settings.timeLimit}"></label>
-      </div><label class="check-label"><input type="checkbox" name="shuffle" ${settings.shuffle ? 'checked' : ''}> Presentar las preguntas en orden aleatorio a cada alumno</label></fieldset>` +
+      </div><label class="check-label"><input type="checkbox" name="shuffle" ${settings.shuffle ? 'checked' : ''}> Presentar las preguntas en orden aleatorio a cada alumno</label>
+      <label class="check-label"><input type="checkbox" name="shuffleOptions" ${settings.shuffleOptions ? 'checked' : ''}> También el orden de las opciones de cada pregunta (distinto para cada alumno)</label></fieldset>
+      <fieldset class="quiz-settings"><legend>Fechas y disponibilidad</legend><div class="quiz-grid">
+        <label>Fecha de inicio (opcional)<input name="opensAt" type="datetime-local" value="${esc(localDate(settings.opensAt))}"></label>
+        <label>Fecha final (opcional)<input name="closesAt" type="datetime-local" value="${esc(localDate(settings.closesAt))}"></label></div>
+        <label class="check-label"><input type="checkbox" name="timerFixed" ${settings.timerMode === 'fixed' ? 'checked' : ''}> El tiempo empieza a la hora de inicio, igual para todos (quien entra tarde tiene menos tiempo)</label>
+        <p class="muted">Antes del inicio no se puede empezar; en la fecha final termina todo lo que esté en curso y se califica lo que cada alumno dejó guardado.</p></fieldset>
+      <fieldset class="quiz-settings"><legend>Qué ve el alumno al terminar</legend>
+        <label class="check-label"><input type="checkbox" name="showScore" ${settings.results?.score !== false ? 'checked' : ''}> Su calificación (si lo desmarcas, ve «pendiente» hasta que lo actives)</label>
+        <label class="check-label"><input type="checkbox" name="showReview" ${settings.results?.review !== 'none' ? 'checked' : ''}> Qué preguntas acertó (✓ y ✗, sin mostrar las respuestas correctas)</label></fieldset>` +
       examSettingsHtml(settings.exam) +
       quizGradeHtml(old?.data.grade) +
       visible(old?.data.visible ?? false, old?.data.publishAt || '') +
@@ -156,7 +182,17 @@ function quizModal(old) {
           visible: f.get('visible') === 'on',
           publishAt: iso(f.get('publishAt')),
           grade: f.get('gradeCategory') ? { category: f.get('gradeCategory'), points: Number(f.get('gradePoints')), policy: f.get('gradePolicy') } : null,
-          settings: { attempts: Number(f.get('attempts')), timeLimit: Number(f.get('timeLimit')), shuffle: f.get('shuffle') === 'on', exam: readExamSettings(f) },
+          settings: {
+            attempts: Number(f.get('attempts')),
+            timeLimit: Number(f.get('timeLimit')),
+            shuffle: f.get('shuffle') === 'on',
+            shuffleOptions: f.get('shuffleOptions') === 'on',
+            opensAt: iso(f.get('opensAt')),
+            closesAt: iso(f.get('closesAt')),
+            timerMode: f.get('timerFixed') === 'on' ? 'fixed' : 'attempt',
+            results: { score: f.get('showScore') === 'on', review: f.get('showReview') === 'on' ? 'marks' : 'none' },
+            exam: readExamSettings(f),
+          },
           questions: readQuizQuestions(),
         },
         old,
@@ -175,6 +211,7 @@ function examSettingsHtml(exam) {
       <label>Contraseña para empezar (opcional; la dictas en el salón)<input name="examPassword" value="${esc(exam?.password || '')}" maxlength="30" autocomplete="off" placeholder="Por ejemplo: gauss"></label>
       <label class="check-label"><input type="checkbox" name="oneByOne" ${exam?.oneByOne ? 'checked' : ''}> Una pregunta a la vez</label>
       <label class="check-label"><input type="checkbox" name="noBack" ${exam?.noBack ? 'checked' : ''}> Sin regresar a preguntas anteriores (requiere "una pregunta a la vez")</label>
+      <label class="check-label"><input type="checkbox" name="lockPlatform" ${exam?.lockPlatform || !exam ? 'checked' : ''}> Bloquear el resto de Enlace mientras contesta: no puede abrir otros cursos, materiales, foros ni avisos, aunque abra otra pestaña o vuelva a iniciar sesión</label>
       <label class="check-label"><input type="checkbox" name="lockOnLeave" ${exam?.lockOnLeave ? 'checked' : ''}> Bloquear si sale de la página: para continuar necesita un código que tú le das (aparece en tu monitor del examen)</label>
       <label>Tolerancia antes de bloquear<select name="lockGrace">${[0, 5, 15, 30]
         .map((g) => `<option value="${g}" ${(exam?.lockOnLeave ? exam.lockGrace : 5) === g ? 'selected' : ''}>${g ? `${g} segundos (por ejemplo, una notificación)` : 'Ninguna: se bloquea al salir'}</option>`)
@@ -202,7 +239,16 @@ function readExamSettings(f) {
   }
   const oneByOne = f.get('oneByOne') === 'on';
   const lockOnLeave = f.get('lockOnLeave') === 'on';
-  return { enabled: true, password: String(f.get('examPassword') || '').trim(), oneByOne, noBack: oneByOne && f.get('noBack') === 'on', place, lockOnLeave, lockGrace: Number(f.get('lockGrace') || 5) };
+  return {
+    enabled: true,
+    password: String(f.get('examPassword') || '').trim(),
+    oneByOne,
+    noBack: oneByOne && f.get('noBack') === 'on',
+    place,
+    lockOnLeave,
+    lockGrace: Number(f.get('lockGrace') || 5),
+    lockPlatform: f.get('lockPlatform') === 'on',
+  };
 }
 
 async function captureExamPlace() {
@@ -234,6 +280,7 @@ function quizEditorAction(action, target) {
   }
   if (action === 'add-var' && (q.variables || []).length < 8) (q.variables ||= []).push({ name: '', min: 1, max: 10, decimals: 0 });
   if (action === 'remove-var') q.variables.splice(Number(target.dataset.varIndex), 1);
+  if (action === 'remove-image') delete q.image;
   renderQuizQuestions();
   dirty = true;
 }
@@ -243,11 +290,38 @@ document.addEventListener('click', (e) => {
   if (b && $('#quizQuestions')) quizEditorAction(b.dataset.quiz, b);
   if (e.target.closest('[data-exam-place]')) captureExamPlace();
 });
+// Imagen de una pregunta: se reduce en el teléfono o la computadora (no en el servidor) y se sube como material.
+document.addEventListener('change', async (e) => {
+  if (!e.target.matches('#quizQuestions [data-quiz-image]')) return;
+  const file = e.target.files?.[0];
+  const box = e.target.closest('[data-question]');
+  if (!file || !box) return;
+  const label = e.target.closest('label');
+  label.firstChild.textContent = 'Subiendo imagen…';
+  try {
+    const blob = await compressImage(file);
+    const r = await fetch(`/api/upload?course=${encodeURIComponent(current.course.id)}&scope=material`, {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'X-Aula-Request': '1', 'x-file-name': encodeURIComponent(file.name || 'imagen.jpg'), 'content-type': blob.type || file.type || 'image/jpeg' },
+      body: blob,
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || 'No se pudo subir la imagen.');
+    quizDraft = readQuizQuestions();
+    quizDraft[Number(box.dataset.question)].image = data.id;
+    renderQuizQuestions();
+    dirty = true;
+  } catch (error) {
+    label.firstChild.textContent = '＋ Imagen (diagrama, gráfica, foto)';
+    toast(error.message);
+  }
+});
 document.addEventListener('change', (e) => {
   if (!e.target.matches('#quizQuestions [data-f="type"]')) return;
   quizDraft = readQuizQuestions();
   const i = Number(e.target.closest('[data-question]').dataset.question);
-  quizDraft[i] = { ...blankQuestion(e.target.value), text: quizDraft[i].text };
+  quizDraft[i] = { ...blankQuestion(e.target.value), text: quizDraft[i].text, ...(quizDraft[i].image ? { image: quizDraft[i].image } : {}) };
   renderQuizQuestions();
 });
 
@@ -265,10 +339,10 @@ function renderQuiz() {
     const questions = q.data.questions
       .map((x, i) =>
         x.type === 'numeric'
-          ? `<section class="quiz-question"><h3>${i + 1}. ${esc(x.text)}</h3><p>Respuesta: <code>${esc(x.answer)}</code> ${x.unit ? esc(x.unit) : ''} · tolerancia ${esc(x.tolerance)} %</p>${
+          ? `<section class="quiz-question"><h3>${i + 1}. ${esc(x.text)}</h3>${quizImageHtml(x.image, i)}<p>Respuesta: <code>${esc(x.answer)}</code> ${x.unit ? esc(x.unit) : ''} · tolerancia ${esc(x.tolerance)} %</p>${
               x.variables?.length ? `<p class="muted">Datos por alumno: ${x.variables.map((v) => `${esc(v.name)} entre ${esc(v.min)} y ${esc(v.max)}`).join('; ')}</p>` : ''
             }</section>`
-          : `<section class="quiz-question"><h3>${i + 1}. ${esc(x.text)}</h3><ol type="A">${x.options.map((o, j) => `<li>${esc(o)} ${j === x.correct ? '✓' : ''}</li>`).join('')}</ol></section>`,
+          : `<section class="quiz-question"><h3>${i + 1}. ${esc(x.text)}</h3>${quizImageHtml(x.image, i)}<ol type="A">${x.options.map((o, j) => `<li>${esc(o)} ${j === x.correct ? '✓' : ''}</li>`).join('')}</ol></section>`,
       )
       .join('');
     // Resultados por alumno: mejor calificación y número de intentos.
@@ -305,23 +379,34 @@ function renderQuiz() {
     }
     return;
   }
-  const best = attempts.length ? Math.max(...attempts.map((a) => a.data.score)) : null;
+  // La calificación puede estar oculta («pendiente») si el docente así lo configuró.
+  const shownScores = attempts.map((a) => a.data.score).filter((x) => x !== null && x !== undefined);
+  const best = shownScores.length ? Math.max(...shownScores) : null;
   const left = settings.attempts - attempts.length;
   const history = attempts.length
-    ? `<div class="quiz-result"><p>Mejor calificación: <b>${best.toFixed(2)} / 10</b></p><ul>${attempts
+    ? `<div class="quiz-result">${best === null ? '<p>Tu docente publicará la calificación.</p>' : `<p>Mejor calificación: <b>${best.toFixed(2)} / 10</b></p>`}<ul>${attempts
         .sort((a, b) => (a.data.attempt || 1) - (b.data.attempt || 1))
-        .map((a) => `<li>Intento ${a.data.attempt || 1}: ${a.data.score.toFixed(2)} / 10 · ${a.data.correct} de ${a.data.total} correctas · ${fmt(a.created)}</li>`)
+        .map((a) => `<li>Intento ${a.data.attempt || 1}: ${a.data.score === null || a.data.score === undefined ? 'enviado' : `${a.data.score.toFixed(2)} / 10 · ${a.data.correct} de ${a.data.total} correctas`} · ${fmt(a.created)}</li>`)
         .join('')}</ul></div>`
     : '';
   const last = quizLastResult?.quiz === q.id ? quizLastResult.result : null;
-  const lastHtml = last
+  const lastHtml = last?.data.hidden
+    ? '<div class="quiz-result is-new"><p><b>Tu evaluación se envió.</b> Tu docente publicará la calificación.</p></div>'
+    : last
     ? `<div class="quiz-result is-new"><p>Resultado del intento ${last.data.attempt}: <b>${last.data.score.toFixed(2)} / 10</b> (${last.data.correct} de ${last.data.total} correctas)</p><ul class="quiz-detail">${(last.data.details || [])
         .map((d) => `<li class="${d.correct ? 'ok' : 'bad'}">${d.correct ? '✓' : '✗'} ${esc((q.data.questions[d.index]?.text || '').replace(/\{([A-Za-z_]\w*)\}/g, (m, name) => d.values?.[name] ?? m))}</li>`)
         .join('')}</ul></div>`
     : '';
   const exam = settings.exam?.enabled ? settings.exam : null;
+  // Fechas de disponibilidad: antes de abrir o después de cerrar no hay botón para empezar.
+  const notYet = settings.opensAt && Date.parse(settings.opensAt) > Date.now();
+  const closed = settings.closesAt && Date.parse(settings.closesAt) < Date.now();
   $('#main').innerHTML = `${head}${lastHtml}${history}${
-    left > 0 && exam
+    left > 0 && notYet
+      ? `<p class="real-status">Esta evaluación se abre el <b>${esc(fmt(settings.opensAt))}</b>. Vuelve a esta página a esa hora.</p>`
+      : left > 0 && closed
+      ? `<p class="real-status">Esta evaluación cerró el ${esc(fmt(settings.closesAt))}.</p>`
+      : left > 0 && exam
       ? examIntroHtml(exam, attempts.length)
       : left > 0
       ? `<p class="real-status">${attempts.length ? `Te quedan ${left} intento${left === 1 ? '' : 's'}.` : 'Revisa tus respuestas antes de enviar.'}${settings.timeLimit ? ` El tiempo empieza a contar al comenzar y no se detiene si cierras la página.` : ''}</p>
@@ -339,7 +424,7 @@ async function startQuizAttempt(quizId, extra = {}) {
   const required = exam ? '' : 'required'; // en el examen, lo que quede sin contestar cuenta como incorrecto
   const questions = data.questions
     .map(
-      (x, n) => `<fieldset class="quiz-question" data-index="${x.index}" data-position="${n}"><legend>${n + 1}. ${esc(x.text)}</legend>${
+      (x, n) => `<fieldset class="quiz-question" data-index="${x.index}" data-position="${n}"><legend>${n + 1}. ${esc(x.text)}</legend>${quizImageHtml(x.image, n)}${
         x.type === 'numeric'
           ? `<label class="quiz-number"><input name="q_${x.index}" inputmode="decimal" autocomplete="off" ${required} placeholder="Tu respuesta"> ${x.unit ? `<span>${esc(x.unit)}</span>` : ''}</label>`
           : x.options.map((o, j) => `<label><input type="radio" ${required} name="q_${x.index}" value="${j}"> ${esc(o)}</label>`).join('')
@@ -371,8 +456,10 @@ async function startQuizAttempt(quizId, extra = {}) {
       result = await request('/api/attempt', { course: current.course.id, quiz: quizId, answers });
     } catch (error) {
       if (error.status === 423) showExamLock();
+      if (error.data?.otherDevice) showOtherDevice();
       throw error;
     }
+    releaseActiveExam();
     clearInterval(quizTimer);
     stopExam();
     quizLastResult = { quiz: quizId, result };
@@ -416,6 +503,7 @@ function integrityText(i) {
   if (i.fullscreenExits) parts.push(`dejó pantalla completa ${i.fullscreenExits} ${i.fullscreenExits === 1 ? 'vez' : 'veces'}`);
   if (i.locks) parts.push(`se bloqueó ${i.locks} ${i.locks === 1 ? 'vez' : 'veces'}`);
   if (i.copyAttempts) parts.push(`intentó copiar o pegar ${i.copyAttempts} ${i.copyAttempts === 1 ? 'vez' : 'veces'}`);
+  if (i.captures) parts.push(`intentó una captura de pantalla ${i.captures} ${i.captures === 1 ? 'vez' : 'veces'}`);
   if (i.flag) parts.push(i.flag);
   return parts.join(' · ');
 }
@@ -431,7 +519,7 @@ function integrityModal(author) {
   const attempts = records('attempt')
     .filter((a) => a.data.quiz === q.id && a.author === author && a.data.integrity)
     .sort((a, b) => (a.data.attempt || 1) - (b.data.attempt || 1));
-  const labels = { left: 'Salió de la página', fullscreen: 'Dejó pantalla completa', copy: 'Intentó copiar o pegar', locked: 'Examen bloqueado', unlocked: 'Desbloqueado' };
+  const labels = { left: 'Salió de la página', fullscreen: 'Dejó pantalla completa', copy: 'Intentó copiar o pegar', capture: 'Intentó una captura de pantalla', locked: 'Examen bloqueado', unlocked: 'Desbloqueado' };
   modal(
     `Integridad: ${attempts[0]?.data.name || ''}`, // modal() usa textContent para el título
     attempts
@@ -504,19 +592,54 @@ document.addEventListener('click', async (e) => {
 
 // ---- Modo examen (alumno) --------------------------------------------------------------------------
 
+/** Lleva al examen abierto y oculta todo lo demás (el servidor tampoco responde otra cosa hasta enviarlo). */
+async function goToActiveExam(active) {
+  if (!active) return;
+  document.body.classList.add('exam-platform-lock');
+  if (current?.course.id !== active.course || !current.examOnly) await openCourse(active.course);
+  if (section === 'quiz' && detail === active.quiz && document.getElementById('quizAttempt')) return;
+  section = 'quiz';
+  detail = active.quiz;
+  render();
+}
+
+/** Al terminar el examen (enviado o sin tiempo) la plataforma vuelve a estar disponible. */
+function releaseActiveExam() {
+  if (!me?.activeExam) return;
+  me.activeExam = null;
+  document.body.classList.remove('exam-platform-lock');
+}
+
+/** Este dispositivo dejó de tener el examen (se abrió en otro): se avisa y se ofrece continuar aquí. */
+function showOtherDevice() {
+  if (!examState || document.getElementById('examLock')) return;
+  examState.locked = true;
+  document.body.insertAdjacentHTML(
+    'beforeend',
+    `<div id="examLock" class="exam-lock" role="alertdialog" aria-modal="true" aria-labelledby="examLockTitle"><div class="exam-lock-card">
+      <p class="exam-lock-icon" aria-hidden="true">📱</p><h2 id="examLockTitle">El examen continúa en otro dispositivo</h2>
+      <p>Se abrió en otro teléfono, computadora o sesión. Desde aquí ya no se guarda ni se envía nada.</p>
+      <p class="muted">Si quieres seguir en este dispositivo, pulsa el botón: el examen se bloqueará y necesitarás el código de tu docente.</p>
+      <button type="button" class="primary" data-exam-here>Continuar en este dispositivo</button></div></div>`,
+  );
+}
+
 function examIntroHtml(exam, used) {
+  const resuming = me?.activeExam?.quiz === detail;
   const fullscreen = Boolean(document.documentElement.requestFullscreen || document.documentElement.webkitRequestFullscreen);
   return `<section class="exam-intro"><h2>Modo examen</h2><ul>
     <li>${fullscreen ? 'Se abre en pantalla completa. ' : ''}Si sales de la página, cambias de aplicación o de pestaña, queda registrado con la hora y la duración, y tu docente lo verá.</li>
     <li>No se puede copiar, pegar ni usar el menú del botón derecho.</li>
+    <li>No se permiten capturas de pantalla: cada pregunta lleva tu nombre como marca de agua, en computadora la tecla de captura tapa el examen y queda registrada, y el examen no se puede imprimir.</li>
     ${exam.oneByOne ? `<li>Verás una pregunta a la vez${exam.noBack ? ' y <strong>no podrás regresar</strong> a las anteriores' : ''}.</li>` : ''}
     ${exam.lockOnLeave ? `<li><strong>Si sales de la página${exam.lockGrace ? ` más de ${exam.lockGrace} segundos` : ''} (otra aplicación, WhatsApp, bloquear el teléfono), el examen se bloquea</strong> y necesitarás un código de tu docente para continuar. El tiempo sigue corriendo. Silencia las notificaciones antes de empezar.</li>` : ''}
     ${exam.checksLocation ? '<li>Se pedirá tu ubicación para confirmar que estás en el salón (solo se guarda la distancia).</li>' : ''}
     <li>Tus respuestas se guardan mientras contestas: si se cierra la página, vuelve a entrar y continúa donde ibas.</li></ul>
     <form id="examStart" class="real-form">
-      ${exam.needsPassword ? '<label>Contraseña que dio tu docente<input name="password" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="30"></label>' : ''}
+      ${resuming ? '<p class="real-status">Tienes este examen en curso: continúa donde ibas.</p>' : ''}
+      ${exam.needsPassword && !resuming ? '<label>Contraseña que dio tu docente<input name="password" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="30"></label>' : ''}
       <p class="form-error error" hidden></p>
-      <button class="primary">${used ? 'Comenzar otro intento' : 'Comenzar examen'}</button>
+      <button class="primary">${resuming ? 'Continuar examen' : used ? 'Comenzar otro intento' : 'Comenzar examen'}</button>
     </form></section>`;
 }
 
@@ -548,6 +671,7 @@ function startExam(quizId, data, collect) {
   showExamQuestion();
   if (exam.locked) showExamLock();
   const form = $('#quizAttempt');
+  examWatermark(form);
   form.addEventListener('input', () => queueExamSave());
   form.addEventListener('change', () => queueExamSave());
   for (const type of ['copy', 'cut', 'paste', 'contextmenu', 'dragstart', 'drop']) form.addEventListener(type, examBlockCopy);
@@ -557,6 +681,9 @@ function startExam(quizId, data, collect) {
   document.addEventListener('fullscreenchange', examFullscreenCheck);
   document.addEventListener('webkitfullscreenchange', examFullscreenCheck);
   window.addEventListener('beforeunload', examBeforeUnload);
+  document.addEventListener('keydown', examCaptureKey, true);
+  document.addEventListener('keyup', examCaptureKey, true);
+  window.addEventListener('beforeprint', examPrint);
 }
 
 function stopExam() {
@@ -568,7 +695,10 @@ function stopExam() {
   document.removeEventListener('fullscreenchange', examFullscreenCheck);
   document.removeEventListener('webkitfullscreenchange', examFullscreenCheck);
   window.removeEventListener('beforeunload', examBeforeUnload);
-  document.body.classList.remove('exam-running');
+  document.removeEventListener('keydown', examCaptureKey, true);
+  document.removeEventListener('keyup', examCaptureKey, true);
+  window.removeEventListener('beforeprint', examPrint);
+  document.body.classList.remove('exam-running', 'exam-shield');
   document.getElementById('examFullscreenBar')?.remove();
   hideExamLock();
   examState = null;
@@ -586,6 +716,57 @@ function examBlockCopy(e) {
   examState.lastCopy = Date.now();
   examState.events.push({ kind: 'copy' });
   toast('En el examen no se puede copiar ni pegar. Quedó registrado.');
+  saveExamProgress(true).catch(() => {});
+}
+
+// ---- Capturas de pantalla ----------------------------------------------------------------------------
+// Una página web no puede impedir la captura del teléfono (es del sistema operativo). Lo que sí se hace:
+// cada pregunta lleva una marca de agua con el nombre del alumno (la captura lo delata), no se imprime,
+// y en computadora se detectan las teclas de captura: se tapa el examen y queda registrado.
+
+function examWatermark(form) {
+  const member = myMember();
+  const who = [me?.name, member?.matricula || me?.email].filter(Boolean).join(' · ');
+  const text = `${who} · ${new Date().toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short' })}`;
+  const mark = document.createElement('div');
+  mark.className = 'exam-watermark';
+  mark.setAttribute('aria-hidden', 'true');
+  mark.innerHTML = `<div>${Array.from({ length: 40 }, () => `<span>${esc(text)}</span>`).join('')}</div>`;
+  form.prepend(mark);
+}
+
+function isCaptureKey(e) {
+  const key = String(e.key || '');
+  if (key === 'PrintScreen' || e.code === 'PrintScreen') return true;
+  // Windows: Win + Mayús + S. Mac: Cmd + Mayús + 3, 4 o 5.
+  if (e.shiftKey && e.metaKey && (/^[sS345#$%]$/.test(key) || ['KeyS', 'Digit3', 'Digit4', 'Digit5'].includes(e.code))) return true;
+  return false;
+}
+
+function examCaptureKey(e) {
+  if (!examState || !isCaptureKey(e)) return;
+  e.preventDefault();
+  examShield();
+  if (e.type === 'keyup' || Date.now() - (examState.lastCapture || 0) < 3000) return;
+  examState.lastCapture = Date.now();
+  examState.events.push({ kind: 'capture' });
+  // La tecla Impr Pant copia al portapapeles: se intenta vaciarlo (el navegador puede no permitirlo).
+  navigator.clipboard?.writeText?.('').catch?.(() => {});
+  toast('En el examen no se permiten capturas de pantalla. Quedó registrado.');
+  saveExamProgress(true).catch(() => {});
+}
+
+/** Tapa el examen unos segundos (lo que alcance a salir en la captura es la pantalla en blanco). */
+function examShield() {
+  document.body.classList.add('exam-shield');
+  clearTimeout(examState?.shieldTimer);
+  if (examState) examState.shieldTimer = setTimeout(() => document.body.classList.remove('exam-shield'), 2500);
+}
+
+function examPrint() {
+  if (!examState || Date.now() - (examState.lastCapture || 0) < 3000) return;
+  examState.lastCapture = Date.now();
+  examState.events.push({ kind: 'capture' });
   saveExamProgress(true).catch(() => {});
 }
 
@@ -730,6 +911,7 @@ async function saveExamProgress() {
   } catch (error) {
     state.events.unshift(...events); // se reintenta en el siguiente guardado
     if (error.status === 423) showExamLock();
+    if (error.data?.otherDevice) showOtherDevice();
     throw error;
   }
 }
@@ -799,11 +981,26 @@ document.addEventListener('submit', async (e) => {
     }
     await startQuizAttempt(q.id, extra);
   } catch (err) {
+    // El intento ya se cerró (por ejemplo, se acabó el tiempo): la plataforma se libera.
+    if (err.status === 409) releaseActiveExam();
     if (isFullscreen()) (document.exitFullscreen || document.webkitExitFullscreen)?.call(document)?.catch?.(() => {});
     error.textContent = err.message;
     error.hidden = false;
     button.disabled = false;
     button.textContent = 'Comenzar examen';
+  }
+});
+
+document.addEventListener('click', async (e) => {
+  if (!e.target.closest('[data-exam-here]') || !examState) return;
+  // Reabrir aquí: el servidor bloquea el intento y lo pasa a este dispositivo (hará falta el código del docente).
+  const quizId = examState.quizId;
+  hideExamLock();
+  stopExam();
+  try {
+    await startQuizAttempt(quizId, {});
+  } catch (error) {
+    toast(error.message);
   }
 });
 
