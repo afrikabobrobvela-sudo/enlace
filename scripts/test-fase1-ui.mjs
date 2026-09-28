@@ -43,6 +43,7 @@ const load = (file, transform = (s) => s) => vm.runInContext(transform(readFileS
 load('richtext.js');
 load('trash.js');
 load('evaluaciones.js');
+load('pendientes.js');
 load('registro.js');
 load('workspace.js');
 load('preview.js');

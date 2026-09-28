@@ -6,6 +6,7 @@ import { attendanceRoutes } from './attendance.js';
 import { directoryRoutes, registrationStatus } from './directory.js';
 import { PRIVACY_VERSION, privacyAccepted, privacyRoutes } from './privacy.js';
 import { assertWritable, periodRoutes } from './periods.js';
+import { dashboardRoutes } from './dashboard.js';
 import { assertInTime, deadlineOf, gradeAttempt, publicQuestions, quizFields, quizInstance, sameQuestions } from './quizzes.js';
 import { gradingRoutes } from './grading.js';
 import { clearSessionCookie, identity, lastLogins, revokeAllStatements } from './auth.js';
@@ -63,7 +64,7 @@ export async function api(request, env) {
     }
     const ctx = { db: env.DB, env, user, url, request };
     const handler =
-      routes[route] || attendanceRoutes[route] || gradingRoutes[route] || directoryRoutes[route] || privacyRoutes[route] || periodRoutes[route];
+      routes[route] || attendanceRoutes[route] || gradingRoutes[route] || directoryRoutes[route] || privacyRoutes[route] || periodRoutes[route] || dashboardRoutes[route];
     if (handler) return await handler(ctx);
     if (request.method === 'GET' && url.pathname.startsWith('/api/file/')) return await downloadFile(ctx, url.pathname.slice(10));
     fail('Ruta no encontrada.', 404);

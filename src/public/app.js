@@ -136,7 +136,7 @@ function renderTask() {
     const s = subs.find(s => s.data.member === m.id);
     const ext = extensionOf(t.id, m.id);
     return `<tr><td>${esc(m.name)}${ext ? `<div class="table-subtext">Prórroga hasta ${esc(fmt(ext.data.due))}</div>` : ''}</td><td>${s ? s.data.manual ? 'Captura manual' : s.data.late ? 'Entrega tardía' : 'Entregado' : 'Sin entrega'}</td><td>${s?.data.grade ?? '—'}</td><td><button class="table-link" data-action="review" data-id="${t.id}" data-member="${m.id}">Evaluar →</button> <button class="text-btn" data-action="extension" data-id="${t.id}" data-member="${m.id}">${ext ? 'Cambiar prórroga' : 'Prórroga'}</button></td></tr>`;
-  }).join('') || '<tr><td colspan="4">Inscribe alumnos para revisar sus entregas.</td></tr>'}</tbody></table></div>` : `${own ? `<section class="panel"><h2>Tu entrega</h2><p class="deadline">${fmt(own.data.submitted)}</p>${richText(own.data.body)}${fileLinks(own.data.fileIds)}<p>Calificación: <b>${own.data.grade ?? 'Pendiente'}</b></p>${richText(own.data.feedback)}${rubricResultHtml(own.data.rubricScores)}</section>` : ''}<div class="toolbar">${button(own ? 'Actualizar entrega' : 'Realizar entrega', 'submit', t.id)}</div>`}`;
+  }).join('') || '<tr><td colspan="4">Inscribe alumnos para revisar sus entregas.</td></tr>'}</tbody></table></div>` : `${own ? `<section class="panel"><h2>Tu entrega</h2><p class="deadline">${fmt(own.data.submitted)}${own.data.submitted ? ` <button type="button" class="text-btn" data-receipt="${esc(own.id)}">Comprobante</button>` : ''}</p>${richText(own.data.body)}${fileLinks(own.data.fileIds)}<p>Calificación: <b>${own.data.grade ?? 'Pendiente'}</b></p>${richText(own.data.feedback)}${rubricResultHtml(own.data.rubricScores)}</section>` : ''}<div class="toolbar">${button(own ? 'Actualizar entrega' : 'Realizar entrega', 'submit', t.id)}</div>`}`;
 }
 function noticeCards() {
   return records('notice').map(n => `<article class="notice"><h3>${esc(n.data.title)}</h3><p class="deadline">${fmt(n.created)}</p>${richText(n.data.body)}${teaches() ? button('Editar', 'edit-notice', n.id, 'text-btn') : ''}</article>`).join('') || '<p class="muted">No hay noticias publicadas.</p>';
@@ -232,6 +232,7 @@ function renderReview() {
       <p class="deadline">${s?.data.submitted ? fmt(s.data.submitted) : 'Sin entrega registrada'}${s?.data.late ? ' · Tardía' : ''}</p>
       ${previewable.length ? '<div class="inline-preview" id="inlinePreview"></div>' : ''}
       ${s?.data.body || !s?.data.submitted ? `<p class="submitted-text">${esc(s?.data.body || 'Puedes registrar una calificación manual, por ejemplo, de un examen escrito.')}</p>` : ''}
+      ${s?.data.submitted ? `<p><button type="button" class="text-btn" data-receipt="${esc(s.id)}">Ver comprobante y folio</button></p>` : ''}
       ${fileLinks(files)}</section>
     <form class="review-panel real-form" id="reviewForm"><h2>Evaluación</h2>
       ${s && s.data.published === false ? '<p class="draft-note">Borrador: el alumno todavía no ve esta calificación.</p>' : ''}
@@ -811,6 +812,7 @@ async function init() {
     // Aviso de privacidad: antes de usar Enlace (y cada vez que cambie su versión).
     if (me.privacyAccepted === false)
       return renderPrivacyGate();
+    startNotices();
     if (new URLSearchParams(location.search).has('a')) {
       nav();
       return startCheckinFromLink();

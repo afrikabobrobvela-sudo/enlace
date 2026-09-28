@@ -1,0 +1,1 @@
+ALTER TABLE `aula_users` ADD `notices_seen_at` text;

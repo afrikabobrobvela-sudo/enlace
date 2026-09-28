@@ -9,6 +9,8 @@ export function openD1(file, { migrations = 'all' } = {}) {
   sqlite.exec('PRAGMA foreign_keys = ON');
   const counter = { queries: 0 };
   const statement = (sql) => {
+    // D1 limita un SELECT compuesto a 5 términos (SQLite local admite 500): se imita para detectarlo en las pruebas.
+    if ((sql.match(/\bUNION\b/gi) || []).length + 1 > 5) throw new Error('D1_ERROR: too many terms in compound SELECT');
     let args = [];
     return {
       sql,

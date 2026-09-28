@@ -21,6 +21,8 @@ export const users = sqliteTable(
     // Migración 0009: versión del aviso de privacidad aceptada y cuándo.
     privacyVersion: text('privacy_version'),
     privacyAcceptedAt: text('privacy_accepted_at'),
+    // Migración 0013: última vez que la persona revisó sus avisos (los avisos se calculan, no se guardan).
+    noticesSeenAt: text('notices_seen_at'),
   },
   (t) => [uniqueIndex('aula_users_email').on(t.email)],
 );

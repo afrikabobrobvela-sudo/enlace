@@ -618,3 +618,40 @@ article.course.is-archived { opacity: 0.92; }
 .quiz-number input { flex: 1 1 auto; width: auto !important; min-width: 140px; min-height: 44px; font-size: 16px; }
 #quizAttempt fieldset label { display: flex; align-items: center; gap: 10px; }
 #quizAttempt input[type='radio'] { width: 20px !important; height: 20px; flex: none; }
+
+/* ---- Mis pendientes, avisos y comprobante (pendientes.js) ------------------------------------- */
+.home-dashboard { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; margin: 0 0 22px; }
+.dash-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow-sm); padding: 16px 18px; }
+.dash-card h2 { font-size: 15px; margin: 0 0 8px; }
+.dash-card ul { list-style: none; margin: 0; padding: 0; }
+.dash-item { display: grid; gap: 2px; width: 100%; text-align: left; padding: 9px 10px; margin: 0 -10px; border: 0; background: none; border-radius: var(--radius-sm); cursor: pointer; }
+.dash-item:hover { background: #f1f6fa; }
+.dash-title { font-weight: 600; color: var(--ink); }
+.dash-meta { font-size: 13px; color: var(--ink-faint); }
+.dash-item.is-overdue .dash-meta { color: #b42318; }
+.header-tools { position: relative; }
+.bell { position: relative; display: grid; place-items: center; width: 38px; height: 38px; border: 0; border-radius: 50%; background: none; color: var(--ink-soft); cursor: pointer; }
+.bell:hover { background: #eef3f7; }
+.bell[hidden] { display: none; }
+.bell .badge-count { position: absolute; top: -2px; right: -4px; margin: 0; min-width: 18px; height: 18px; font-size: 11px; }
+.bell-panel { position: absolute; top: 48px; right: 0; z-index: 40; width: min(380px, 92vw); max-height: 70vh; overflow: auto; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow-lg); }
+.bell-panel[hidden] { display: none; }
+.bell-head { display: flex; justify-content: space-between; align-items: center; padding: 12px 14px; border-bottom: 1px solid var(--line); }
+.bell-panel ul { list-style: none; margin: 0; padding: 4px; }
+.bell-item { display: grid; gap: 2px; width: 100%; text-align: left; padding: 9px 10px; border: 0; background: none; border-radius: var(--radius-sm); cursor: pointer; }
+.bell-item:hover { background: #f1f6fa; }
+.bell-item.is-new { background: #eef8fb; }
+.bell-kind { font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--accent); }
+.bell-title { font-weight: 600; }
+.bell-meta { font-size: 12.5px; color: var(--ink-faint); }
+.bell-empty { padding: 14px; }
+.receipt dl { display: grid; grid-template-columns: max-content 1fr; gap: 6px 14px; }
+.receipt dt { font-weight: 600; color: var(--ink-soft); }
+.receipt dd { margin: 0; }
+.receipt-folio { font-size: 18px; }
+.receipt-folio strong { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: 0.06em; }
+@media print {
+  body > *:not(dialog) { display: none !important; }
+  dialog[open] { position: static; box-shadow: none; border: 0; }
+  dialog .dialog-head button, dialog [data-receipt-print], #formSave, dialog .form-actions { display: none !important; }
+}

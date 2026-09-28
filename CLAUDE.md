@@ -13,6 +13,7 @@ Producción: https://enlace.enlace-academia.workers.dev/ (cuenta de Cloudflare d
 - Nunca borrar ni reescribir tablas de D1 remoto sin respaldo y confirmación explícita. Las migraciones deben ser **no destructivas** (agregar tablas/columnas; copiar en vez de mover). `npm run db:migrate` y `npm run configurar` ya descargan un respaldo antes de migrar.
 - Probar en local (`wrangler dev` con D1 local) antes de proponer un despliegue; cambios pequeños y verificables, y explicar cada despliegue.
 - Secretos solo con `wrangler secret put` (`SESSION_SECRET`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, opcional `RESEND_API_KEY`); en local van en `.dev.vars` (ignorado por git). El repositorio es público.
+- D1 admite como máximo **5 términos por SELECT compuesto** (`UNION`); el adaptador de pruebas (`scripts/lib/d1-sqlite.mjs`) lo imita.
 - Plan gratuito de Cloudflare: máximo **50 consultas D1 por solicitud** (las pruebas lo vigilan con `store.counter.queries`), 100 parámetros por consulta (por eso las altas masivas usan `json_each(?)`), Worker ≤ 3 MB comprimido (`scripts/build.mjs` falla si se acerca), sin tiempo de CPU para procesar archivos grandes en el servidor (ZIP y compresión de fotos se hacen en el navegador).
 
 ## Comandos
