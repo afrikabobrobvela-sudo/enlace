@@ -21,6 +21,7 @@ function quizSettingsText(settings) {
   if (settings.opensAt || settings.closesAt)
     parts.push([settings.opensAt ? `abre ${fmt(settings.opensAt)}` : '', settings.closesAt ? `cierra ${fmt(settings.closesAt)}` : ''].filter(Boolean).join(', '));
   if (settings.timerMode === 'fixed') parts.push('el tiempo corre desde la hora de inicio');
+  if (settings.results?.releaseAt && Date.parse(settings.results.releaseAt) > Date.now()) parts.push(`resultados a partir del ${fmt(settings.results.releaseAt)}`);
   if (settings.exam?.enabled) parts.push(`modo examen${settings.exam.oneByOne ? (settings.exam.noBack ? ', una pregunta a la vez sin regresar' : ', una pregunta a la vez') : ''}`);
   return parts.join(' · ');
 }
@@ -49,6 +50,9 @@ function questionCountOf(data) {
   for (const { pool, count } of data.settings?.draw || []) n -= data.questions.filter((q) => q?.pool === pool).length - count;
   return n;
 }
+
+/** Mensaje para el alumno cuando aún no puede ver su calificación. */
+const pendingResultText = (data) => (data?.releaseAt ? `Verás tu resultado a partir del ${fmt(data.releaseAt)}` : 'Tu docente publicará la calificación.');
 
 const poolTag = (x) => (x.pool ? ` <span class="quiz-pool-tag">${esc(x.pool)}</span>` : '');
 
@@ -214,7 +218,9 @@ function quizModal(old) {
         <p class="muted">Antes del inicio no se puede empezar; en la fecha final termina todo lo que esté en curso y se califica lo que cada alumno dejó guardado.</p></fieldset>
       <fieldset class="quiz-settings"><legend>Qué ve el alumno al terminar</legend>
         <label class="check-label"><input type="checkbox" name="showScore" ${settings.results?.score !== false ? 'checked' : ''}> Su calificación (si lo desmarcas, ve «pendiente» hasta que lo actives)</label>
-        <label class="check-label"><input type="checkbox" name="showReview" ${settings.results?.review !== 'none' ? 'checked' : ''}> Qué preguntas acertó (✓ y ✗, sin mostrar las respuestas correctas)</label></fieldset>` +
+        <label class="check-label"><input type="checkbox" name="showReview" ${old && settings.results?.review !== 'none' ? 'checked' : ''}> Qué preguntas acertó (ve los enunciados que le tocaron con ✓ y ✗, sin las respuestas correctas)</label>
+        <label>Mostrar resultados a partir de (opcional)<input name="releaseAt" type="datetime-local" value="${esc(localDate(settings.results?.releaseAt))}"></label>
+        <p class="muted">Si otros grupos aún no presentan, desmarca «Qué preguntas acertó» o pon aquí la fecha y hora en que termina el último grupo: hasta entonces nadie ve su calificación ni sus aciertos, y después se muestran solos.</p></fieldset>` +
       examSettingsHtml(settings.exam) +
       quizGradeHtml(old?.data.grade) +
       visible(old?.data.visible ?? false, old?.data.publishAt || '') +
@@ -241,7 +247,7 @@ function quizModal(old) {
             opensAt: iso(f.get('opensAt')),
             closesAt: iso(f.get('closesAt')),
             timerMode: f.get('timerFixed') === 'on' ? 'fixed' : 'attempt',
-            results: { score: f.get('showScore') === 'on', review: f.get('showReview') === 'on' ? 'marks' : 'none' },
+            results: { score: f.get('showScore') === 'on', review: f.get('showReview') === 'on' ? 'marks' : 'none', releaseAt: iso(f.get('releaseAt')) },
             exam: readExamSettings(f),
           },
           questions: readQuizQuestions(),
@@ -441,14 +447,14 @@ function renderQuiz() {
   const best = shownScores.length ? Math.max(...shownScores) : null;
   const left = settings.attempts - attempts.length;
   const history = attempts.length
-    ? `<div class="quiz-result">${best === null ? '<p>Tu docente publicará la calificación.</p>' : `<p>Mejor calificación: <b>${best.toFixed(2)} / 10</b></p>`}<ul>${attempts
+    ? `<div class="quiz-result">${best === null ? `<p>${pendingResultText(attempts[0]?.data)}</p>` : `<p>Mejor calificación: <b>${best.toFixed(2)} / 10</b></p>`}<ul>${attempts
         .sort((a, b) => (a.data.attempt || 1) - (b.data.attempt || 1))
         .map((a) => `<li>Intento ${a.data.attempt || 1}: ${a.data.score === null || a.data.score === undefined ? 'enviado' : `${a.data.score.toFixed(2)} / 10 · ${a.data.correct} de ${a.data.total} correctas`} · ${fmt(a.created)}</li>`)
         .join('')}</ul></div>`
     : '';
   const last = quizLastResult?.quiz === q.id ? quizLastResult.result : null;
   const lastHtml = last?.data.hidden
-    ? '<div class="quiz-result is-new"><p><b>Tu evaluación se envió.</b> Tu docente publicará la calificación.</p></div>'
+    ? `<div class="quiz-result is-new"><p><b>Tu evaluación se envió.</b> ${pendingResultText(last.data)}</p></div>`
     : last
     ? `<div class="quiz-result is-new"><p>Resultado del intento ${last.data.attempt}: <b>${last.data.score.toFixed(2)} / 10</b> (${last.data.correct} de ${last.data.total} correctas)</p><ul class="quiz-detail">${(last.data.details || [])
         .map((d) => `<li class="${d.correct ? 'ok' : 'bad'}">${d.correct ? '✓' : '✗'} ${esc(quizLastResult.texts?.[d.index] ?? (q.data.questions[d.index]?.text || '').replace(/\{([A-Za-z_]\w*)\}/g, (m, name) => d.values?.[name] ?? m))}</li>`)
@@ -521,7 +527,7 @@ async function startQuizAttempt(quizId, extra = {}) {
     stopExam();
     // Los enunciados tal como los vio (con sus datos), para mostrar sus ✓ y ✗ al volver a dibujar la pantalla.
     quizLastResult = { quiz: quizId, result, texts: Object.fromEntries(data.questions.map((x) => [x.index, x.text])) };
-    return result.data.score === null || result.data.score === undefined ? 'Evaluación enviada. Tu docente publicará la calificación.' : `Evaluación enviada: ${result.data.score.toFixed(2)} / 10.`;
+    return result.data.score === null || result.data.score === undefined ? `Evaluación enviada. ${pendingResultText(result.data)}` : `Evaluación enviada: ${result.data.score.toFixed(2)} / 10.`;
   };
   if (exam) startExam(quizId, data, collect);
   bindForm('#quizAttempt', submit);

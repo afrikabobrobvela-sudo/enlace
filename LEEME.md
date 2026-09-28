@@ -1,9 +1,16 @@
-# Enlace · versión 12.17
+# Enlace · versión 12.17.1
 
 Plataforma académica independiente para docentes y alumnos de cualquier academia (nació en la Academia de Física de la BUAP), con interfaz inspirada en Brightspace.
 No es el código de D2L Brightspace ni una plataforma oficial de la BUAP.
 
 Esta versión se despliega en **tu propia cuenta de Cloudflare** (Workers + D1 + R2, plan gratuito) y ya no depende de ChatGPT Sites.
+
+## Novedades de la versión 12.17.1 (resultados de exámenes cuando hay varios grupos)
+
+No requiere migración: basta con publicar.
+
+- **«Qué preguntas acertó» viene desmarcado en las evaluaciones nuevas.** Con esa casilla marcada, el alumno ve los enunciados que le tocaron con ✓ y ✗, y podría pasárselos a un grupo que aún no presenta. Las evaluaciones que ya existen conservan lo que tenían.
+- **Nueva opción «Mostrar resultados a partir de»** (en «Qué ve el alumno al terminar»): pon la fecha y hora en que termina el último grupo. Hasta entonces nadie ve su calificación, sus aciertos ni los enunciados (dice «Verás tu resultado a partir del …»). Al llegar la fecha se muestra solo lo que indiquen las casillas, sin que tengas que regresar a activarlo. Tú siempre ves todo.
 
 ## Novedades de la versión 12.17 (banco de preguntas y preguntas al azar)
 

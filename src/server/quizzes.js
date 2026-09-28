@@ -210,7 +210,14 @@ export function quizFields(input) {
   const timerMode = input.settings?.timerMode === 'fixed' ? 'fixed' : 'attempt';
   if (timerMode === 'fixed' && (!opensAt || !timeLimit)) fail('Para que el tiempo empiece a la hora de inicio, indica la fecha de inicio y el tiempo límite.');
   // Qué ve el alumno al terminar: su calificación (o «pendiente») y si acertó cada pregunta.
-  const results = { score: input.settings?.results?.score !== false, review: input.settings?.results?.review === 'none' ? 'none' : 'marks' };
+  // `releaseAt`: hasta esa fecha el alumno no ve nada (ni calificación ni aciertos), por ejemplo mientras otros
+  // grupos aún no presentan; después, lo que indiquen las casillas.
+  const releaseAt = isoDate(input.settings?.results?.releaseAt || '');
+  const results = {
+    score: input.settings?.results?.score !== false,
+    review: input.settings?.results?.review === 'none' ? 'none' : 'marks',
+    ...(releaseAt ? { releaseAt } : {}),
+  };
   return {
     questions,
     settings: {
@@ -485,9 +492,13 @@ export function assertOpen(quiz, now = Date.now()) {
  * Lo que el alumno recibe de sus intentos según «qué ve al terminar»: sin calificación (pendiente de publicar) y/o
  * sin el detalle de qué preguntas acertó. El docente siempre recibe todo.
  */
-export function studentAttemptView(record, quiz) {
+export function studentAttemptView(record, quiz, now = Date.now()) {
   const results = quiz?.data.settings?.results || { score: true, review: 'marks' };
   const data = { ...record.data };
+  if (results.releaseAt && now < Date.parse(results.releaseAt)) {
+    Object.assign(data, { score: null, correct: null, hidden: true, releaseAt: results.releaseAt, details: null, answers: null });
+    return { ...record, data };
+  }
   if (results.score === false) Object.assign(data, { score: null, correct: null, hidden: true });
   if (results.review === 'none' || results.score === false) Object.assign(data, { details: null, answers: null });
   return { ...record, data };

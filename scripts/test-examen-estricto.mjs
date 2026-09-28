@@ -202,6 +202,22 @@ const visible = (await call('beto', '/api/course?id=' + otro)).records.find((r) 
 assert.deepEqual([visible.data.score, visible.data.details], [10, null], 'Calificación sí, detalle no');
 checks += 4;
 
+// Resultados a partir de una fecha (otros grupos aún no presentan): antes no ve calificación, aciertos ni enunciados.
+const diferida = await quiz({ results: { score: true, review: 'marks', releaseAt: iso(60 * min) } });
+const r2 = await call('beto', '/api/attempt', { course: otro, quiz: diferida.id, answers: { 0: 0, 1: 2 } }, 201);
+assert.deepEqual([r2.data.score, r2.data.details, r2.data.hidden, r2.data.releaseAt], [null, null, true, diferida.data.settings.results.releaseAt]);
+let enCurso = (await call('beto', '/api/course?id=' + otro)).records;
+assert.equal(enCurso.find((r) => r.kind === 'attempt' && r.data.quiz === diferida.id).data.score, null);
+assert(enCurso.find((r) => r.id === diferida.id).data.questions.every((x) => x === null), 'Sin enunciados antes de la fecha');
+assert.equal((await call('docente', '/api/course?id=' + otro)).records.find((r) => r.kind === 'attempt' && r.data.quiz === diferida.id).data.score, 10);
+// Llegó la fecha: ve calificación, aciertos y los enunciados que le tocaron.
+await call('docente', '/api/record', { course: otro, kind: 'quiz', id: diferida.id, revision: diferida.revision, data: { ...diferida.data, settings: { ...diferida.data.settings, results: { score: true, review: 'marks', releaseAt: iso(-min) } } } });
+enCurso = (await call('beto', '/api/course?id=' + otro)).records;
+const liberado = enCurso.find((r) => r.kind === 'attempt' && r.data.quiz === diferida.id).data;
+assert.deepEqual([liberado.score, liberado.details.length], [10, 2]);
+assert.equal(enCurso.find((r) => r.id === diferida.id).data.questions.filter(Boolean).length, 2);
+checks += 6;
+
 // Se acabó el tiempo sin enviar: se califica lo que dejó guardado (antes contaba 0).
 const guardada = await quiz({ timeLimit: 10, exam: { enabled: true } });
 const g = await call('ana', '/api/attempt/start', { course: otro, quiz: guardada.id });
