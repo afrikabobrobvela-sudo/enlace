@@ -37,12 +37,15 @@ function renderLogin(methods = { google: true, email: false }) {
   const microsoft = methods.microsoft
     ? `<a class="primary login-microsoft" href="/auth/microsoft/start?return_to=${returnTo}"><svg viewBox="0 0 21 21" aria-hidden="true" width="18" height="18"><rect width="10" height="10" fill="#f25022"/><rect x="11" width="10" height="10" fill="#7fba00"/><rect y="11" width="10" height="10" fill="#00a4ef"/><rect x="11" y="11" width="10" height="10" fill="#ffb900"/></svg>Continuar con Microsoft (correo BUAP)</a>`
     : '';
-  const google = methods.google
+  // Con Microsoft activo, la pantalla solo ofrece el correo institucional. Google sigue funcionando para quien
+  // lo necesite (por ejemplo, la cuenta de administración con Gmail) entrando por /?acceso=google.
+  const googleOnRequest = new URLSearchParams(globalThis.location?.search || '').get('acceso') === 'google';
+  const google = methods.google && (!methods.microsoft || googleOnRequest)
     ? `<a class="${methods.microsoft ? 'secondary' : 'primary'} login-google" href="/auth/google/start?return_to=${returnTo}">Continuar con Google</a>`
     : '';
   const email = methods.email
     ? `<form class="login-email" id="loginEmail" novalidate>
-         <label for="loginEmailInput">${methods.google ? 'O recibe un enlace de acceso en tu correo' : 'Recibe un enlace de acceso en tu correo'}</label>
+         <label for="loginEmailInput">${google || microsoft ? 'O recibe un enlace de acceso en tu correo' : 'Recibe un enlace de acceso en tu correo'}</label>
          <div class="login-email-row">
            <input id="loginEmailInput" name="email" type="email" autocomplete="email" required placeholder="nombre@alumno.buap.mx">
            <button type="submit" class="secondary">Enviar enlace</button>

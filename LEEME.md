@@ -313,6 +313,8 @@ npx wrangler secret put MICROSOFT_CLIENT_SECRET
 
 y en `[vars]` de `wrangler.toml` agrega `MICROSOFT_TENANT_ID = "el Directory (tenant) ID"`. Publica con `npm run deploy`. Por seguridad, Enlace no activa Microsoft si el tenant es `common` u `organizations`.
 
+**Pantalla de acceso con Microsoft activo:** solo aparece «Continuar con Microsoft (correo BUAP)». El acceso con Google sigue funcionando, pero ya no se ofrece en la pantalla: quien lo necesite (por ejemplo, la cuenta de administración si es de Gmail) entra por `https://enlace.enlace-academia.workers.dev/?acceso=google`. Una cuenta de Microsoft y una de Google con correos distintos son cuentas distintas en Enlace: si quieres administrar con tu correo BUAP, ponlo en `AULA_OWNER_EMAIL` o agrégalo como Administración en *Docentes*.
+
 ### Opcional: acceso con enlace por correo
 
 Requiere un dominio propio verificado en [Resend](https://resend.com). Con el dominio listo:
