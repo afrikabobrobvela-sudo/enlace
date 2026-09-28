@@ -9,6 +9,7 @@ const LOGIN_ERRORS = {
   link: 'Ese enlace ya se usó o venció. Pide uno nuevo.',
   google_disabled: 'El acceso con Google todavía no está configurado en este servidor. Avisa a la coordinación.',
   microsoft: 'Microsoft no confirmó tu identidad. Entra con tu cuenta institucional y vuelve a intentarlo.',
+  server: 'No se pudo completar el acceso por un error del servidor. Vuelve a intentarlo en un momento; si continúa, avisa a la administración.',
   microsoft_disabled: 'El acceso con Microsoft todavía no está configurado en este servidor. Avisa a la coordinación.',
 };
 

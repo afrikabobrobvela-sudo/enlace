@@ -141,10 +141,17 @@ assert.equal(noSecret.status, 503);
 assert.match((await noSecret.json()).error, /SESSION_SECRET/);
 checks++;
 
+// Un error inesperado de la base en el regreso de Google lleva a la pantalla de acceso con aviso, no a un JSON.
+const rota = { ...baseEnv, DB: { prepare: () => { throw new Error('no such table: aula_identities'); } } };
+const fallo = await googleLogin({ sub: 'g-rota', email: 'rota@example.test' }, { env: rota });
+assert.equal(fallo.status, 302);
+assert.equal(fallo.headers.get('location'), '/?login_error=server');
+checks++;
+
 // ---- Vigilancia ----
 const salud = await fetchWorker('/salud');
 assert.equal(salud.status, 200);
-assert.deepEqual(await salud.json(), { ok: true });
+assert.deepEqual(await salud.json(), { ok: true, migracion: null }); // el adaptador de pruebas no tiene d1_migrations
 const caida = await fetchWorker('/salud', {}, { ...baseEnv, DB: { prepare: () => ({ first: async () => { throw new Error('D1 caída'); } }) } });
 assert.equal(caida.status, 503);
 checks += 2;

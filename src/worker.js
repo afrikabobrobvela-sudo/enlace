@@ -36,8 +36,12 @@ export default {
     // Vigilancia: confirma que el Worker y la base responden. No expone datos.
     if (url.pathname === '/salud') {
       try {
-        await env.DB.prepare('SELECT 1').first();
-        return new Response(JSON.stringify({ ok: true }), { headers: { 'Content-Type': 'application/json', ...SECURITY_HEADERS } });
+        // Además de responder, la base debe tener las tablas: se informa la última migración aplicada.
+        const last = await env.DB.prepare('SELECT name FROM d1_migrations ORDER BY id DESC LIMIT 1')
+          .first()
+          .catch(() => null);
+        await env.DB.prepare('SELECT 1 FROM aula_users LIMIT 1').first();
+        return new Response(JSON.stringify({ ok: true, migracion: last?.name || null }), { headers: { 'Content-Type': 'application/json', ...SECURITY_HEADERS } });
       } catch (error) {
         console.error('aula-salud', error);
         return new Response(JSON.stringify({ ok: false }), { status: 503, headers: { 'Content-Type': 'application/json', ...SECURITY_HEADERS } });

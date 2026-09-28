@@ -105,7 +105,10 @@ export async function auth(request, env) {
         return json({ error: 'Ruta no encontrada.' }, 404);
     }
   } catch (error) {
-    if (!error.status) console.error('aula-auth', error);
+    if (!error.status) console.error('aula-auth', route, error?.message, error?.stack);
+    // En el regreso de Google o Microsoft la persona está navegando: se le muestra la pantalla de acceso con un aviso
+    // (y se borra la cookie temporal) en lugar de un JSON. El detalle queda en los registros (npx wrangler tail).
+    if (request.method === 'GET' && route.endsWith('/callback') && !error.status) return loginError('server', [cookie(OAUTH_COOKIE, '', 0)]);
     return json({ error: error.status ? error.message : 'No se pudo completar el acceso.' }, error.status || 500);
   }
 }
