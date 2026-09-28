@@ -5,10 +5,11 @@ let progressOnlyRisk = true;
 let lastRiskReport = [];
 
 /** Criterios: asistencia bajo el mínimo, 2 o más actividades vencidas sin entregar, promedio menor a 6. */
-function riskReport({ students, tasks, submissions, averages, attendance, now = Date.now() }) {
-  const overdue = tasks.filter((t) => t.data.visible !== false && t.data.due && Date.parse(t.data.due) < now);
+function riskReport({ students, tasks, submissions, averages, attendance, now = Date.now(), dueOf = (task) => task.data.due }) {
   return students
     .map((member) => {
+      // Vencidas para este alumno (con su prórroga, si la tiene).
+      const overdue = tasks.filter((t) => t.data.visible !== false && dueOf(t, member.id) && Date.parse(dueOf(t, member.id)) < now);
       const mine = submissions.filter((s) => s.data.member === member.id);
       const done = (task) => mine.some((s) => s.data.task === task.id && (s.data.submitted || (s.data.grade !== null && s.data.grade !== undefined)));
       const missing = overdue.filter((task) => !done(task));
@@ -55,6 +56,7 @@ async function renderProgress() {
       )
     : null;
   lastRiskReport = riskReport({
+    dueOf: (task, memberId) => dueFor(task, memberId),
     students,
     tasks,
     submissions: records('submission'),

@@ -586,3 +586,4 @@ article.course.is-archived { opacity: 0.92; }
 .coteachers { margin: 0 0 18px; }
 .coteacher-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 10px 0; border-top: 1px solid var(--line); }
 .coteacher-row .danger-link { margin-left: auto; }
+.extension-note { display: inline-block; margin: 4px 0 10px; padding: 6px 12px; border-radius: var(--radius-sm); background: #e8f5ef; color: var(--success); font-weight: 600; font-size: 14px; }

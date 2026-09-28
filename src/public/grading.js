@@ -18,12 +18,13 @@ function gradingSettings() {
  * Calificación de un alumno. Con final = true y la regla activa, las actividades vencidas sin calificar valen 0;
  * si no, se excluye lo no calificado y se normalizan los pesos restantes (como siempre en Enlace).
  */
-function computeGrade({ tasks, grades, settings, weights, attendancePercent = null, now = Date.now(), final = false }) {
+function computeGrade({ tasks, grades, settings, weights, attendancePercent = null, now = Date.now(), final = false, dueOf = (task) => task.data.due }) {
   const zeroMissing = final && settings.final.missingAsZero;
   const gradeFor = (task) => {
     const grade = grades.get(task.id);
     if (grade !== null && grade !== undefined) return grade;
-    const overdue = task.data.visible !== false && task.data.due && Date.parse(task.data.due) < now;
+    const due = dueOf(task);
+    const overdue = task.data.visible !== false && due && Date.parse(due) < now;
     return zeroMissing && overdue ? 0 : null;
   };
   let sum = 0;
@@ -107,6 +108,7 @@ function studentGrade(memberId, { final = false } = {}) {
     weights: records('weights')[0]?.data.weights,
     attendancePercent: attendancePercentFor(memberId),
     final,
+    dueOf: (task) => dueFor(task, memberId),
   });
 }
 

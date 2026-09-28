@@ -111,7 +111,17 @@ export async function loadTask(db, id, course) {
 
 /** Todo lo de calificaciones de un curso. Si se indica `userId`, solo lo que esa persona puede ver. */
 export async function courseGradebook(db, course, { teacher, userId }) {
-  const tasks = await all(db, 'SELECT * FROM aula_tasks WHERE course=? AND deleted_at IS NULL ORDER BY created', course);
+  // Para el alumno, su prórroga viene en la misma consulta (ext_due / ext_end): no suma consultas.
+  const tasks = teacher
+    ? await all(db, 'SELECT * FROM aula_tasks WHERE course=? AND deleted_at IS NULL ORDER BY created', course)
+    : await all(
+        db,
+        `SELECT t.*, e.due AS ext_due, e.end_at AS ext_end FROM aula_tasks t
+         LEFT JOIN aula_extensions e ON e.task=t.id AND e.member=(SELECT id FROM aula_members WHERE course=?1 AND user_id=?2)
+         WHERE t.course=?1 AND t.deleted_at IS NULL ORDER BY t.created`,
+        course,
+        userId,
+      );
   const settings = await one(db, 'SELECT * FROM aula_grade_settings WHERE course=?', course);
   // Las entregas de una actividad en la papelera se conservan, pero no se muestran ni cuentan.
   const active = 'AND s.task IN (SELECT id FROM aula_tasks WHERE course=s.course AND deleted_at IS NULL)';
@@ -126,13 +136,30 @@ export async function courseGradebook(db, course, { teacher, userId }) {
   const attempts = teacher
     ? await all(db, 'SELECT * FROM aula_attempts WHERE course=? ORDER BY created', course)
     : await all(db, 'SELECT * FROM aula_attempts WHERE course=? AND user_id=? ORDER BY created', course, userId);
+  // Prórrogas: el docente las ve todas; el alumno recibe sus actividades ya con sus fechas extendidas.
+  const extensions = teacher ? await all(db, 'SELECT e.* FROM aula_extensions e JOIN aula_tasks t ON t.id=e.task WHERE t.course=?', course) : [];
   const hideDraft = (record) => {
     if (teacher) return record;
     const { published, ...data } = record.data;
     return published ? { ...record, data } : { ...record, data: { ...data, grade: null, feedback: '', gradedAt: '', rubricScores: null } };
   };
   const records = [
-    ...tasks.filter((t) => teacher || t.visible === 1).map(taskRecord),
+    ...tasks
+      .filter((t) => teacher || t.visible === 1)
+      .map((t) => {
+        if (teacher) return taskRecord(t);
+        const extension = t.ext_due ? { due: t.ext_due, end_at: t.ext_end } : null;
+        const record = taskRecord(withExtension(t, extension));
+        return extension ? { ...record, data: { ...record.data, extended: true } } : record;
+      }),
+    ...(teacher
+      ? extensions.map((e) => ({
+          id: `extension:${e.task}:${e.member}`,
+          kind: 'extension',
+          revision: 1,
+          data: { task: e.task, member: e.member, due: e.due, end: e.end_at, reason: e.reason, created: e.created },
+        }))
+      : []),
     ...submissions.map(submissionRecord).map(hideDraft),
     ...attempts.map(attemptRecord),
   ];
@@ -285,6 +312,15 @@ export async function saveTask(db, { course, userId, id, revision, fields }) {
   return { record: taskRecord(await loadTask(db, newId, course)), created: true };
 }
 
+/**
+ * Fechas de la actividad para un alumno, con su prórroga si la tiene: nuevo vencimiento y, si la actividad
+ * tenía cierre, cierre en la nueva fecha (o en la que indicó el docente).
+ */
+export function withExtension(task, extension) {
+  if (!extension) return task;
+  return { ...task, due: extension.due || task.due, end_at: extension.end_at || (task.end_at ? extension.due || task.end_at : '') };
+}
+
 /** Lanza un error si la actividad está oculta o fuera de su periodo de entrega. */
 export function assertAvailable(task) {
   if (task.visible !== 1) fail('La actividad no está disponible.', 403);
@@ -348,9 +384,11 @@ export async function saveSubmission(db, { course, user, id, revision, input, va
   }
   if (previous && revision !== previous.revision) fail('Este elemento cambió. Recarga para obtener la versión actual.', 409);
 
-  const task = await loadTask(db, input.task, course);
-  assertAvailable(task);
+  const loaded = await loadTask(db, input.task, course);
   if (!member || member.role !== 'student') fail('Solo un alumno inscrito puede entregar esta actividad.', 403);
+  const extension = await one(db, 'SELECT due, end_at FROM aula_extensions WHERE task=? AND member=?', loaded.id, member.id);
+  const task = withExtension(loaded, extension);
+  assertAvailable(task);
 
   const existing = await one(db, 'SELECT * FROM aula_submissions WHERE task=? AND member=?', task.id, member.id);
   if (existing) {

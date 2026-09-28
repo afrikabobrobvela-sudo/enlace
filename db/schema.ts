@@ -501,3 +501,22 @@ export const attempts = sqliteTable(
     check('aula_attempts_score_check', sql`score >= 0 AND score <= 10`),
   ],
 );
+
+/** Migración 0011: prórroga de una actividad para un alumno (nueva fecha de vencimiento y de cierre). */
+export const extensions = sqliteTable(
+  'aula_extensions',
+  {
+    task: text('task')
+      .notNull()
+      .references(() => tasks.id),
+    member: text('member')
+      .notNull()
+      .references(() => members.id),
+    due: text('due').notNull().default(''),
+    endAt: text('end_at').notNull().default(''),
+    reason: text('reason').notNull().default(''),
+    createdBy: text('created_by').notNull(),
+    created: text('created').notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.task, t.member] })],
+);

@@ -1,4 +1,4 @@
-// Pruebas de co-docentes: el propietario comparte su curso con otros docentes registrados.
+// Pruebas de co-docentes (el propietario comparte su curso con otros docentes) y de prórrogas individuales.
 import assert from 'node:assert/strict';
 import { api } from '../src/server/api.js';
 import { completeLogin, sessionCookieForTests } from '../src/server/auth.js';
@@ -68,5 +68,30 @@ await call('titular', '/api/course/teachers', { course: c, id: ana }, 404, 'DELE
 await call('titular', '/api/course/teachers', { course: c, id: coId }, 200, 'DELETE');
 await call('adjunto', '/api/course?id=' + c, undefined, 403);
 
+// ---- Prórrogas individuales ----
+await call('titular', '/api/member', { course: c, name: 'Luis', email: 'luis@example.test' });
+const roster = (await call('titular', '/api/course?id=' + c)).members;
+const luis = roster.find((m) => m.email === 'luis@example.test').id;
+const vencida = await call('titular', '/api/record', { course: c, kind: 'task', data: { title: 'Reporte', visible: true, due: '2026-01-10T12:00:00Z', end: '2026-01-12T12:00:00Z' } }, 201);
+await call('ana', '/api/record', { course: c, kind: 'submission', data: { task: vencida.id, body: 'tarde' } }, 403); // ya cerró
+const futuro = new Date(Date.now() + 7 * 86400_000).toISOString();
+await call('ana', '/api/extension', { course: c, task: vencida.id, member: ana, due: futuro }, 403);
+await call('titular', '/api/extension', { course: c, task: vencida.id, member: ana }, 400); // falta la fecha
+await call('titular', '/api/extension', { course: c, task: vencida.id, member: ana, due: futuro, end: '2026-01-01T00:00:00Z' }, 400);
+await call('titular', '/api/extension', { course: c, task: vencida.id, member: 'otro', due: futuro }, 404);
+await call('titular', '/api/extension', { course: c, task: vencida.id, member: ana, due: futuro, reason: 'Justificante médico' });
+const deAna = (await call('ana', '/api/course?id=' + c)).records.find((r) => r.id === vencida.id);
+assert.deepEqual([deAna.data.due, deAna.data.end, deAna.data.extended], [futuro, futuro, true], 'Ana ve su nueva fecha');
+assert(!(await call('ana', '/api/course?id=' + c)).records.some((r) => r.kind === 'extension'), 'El alumno no recibe la lista de prórrogas');
+const entrega = await call('ana', '/api/record', { course: c, kind: 'submission', data: { task: vencida.id, body: 'a tiempo con prórroga' } }, 201);
+assert.equal(entrega.data.late, false, 'Dentro de su prórroga no es tardía');
+await call('luis', '/api/record', { course: c, kind: 'submission', data: { task: vencida.id, body: 'x' } }, 403); // Luis sigue cerrado
+assert.equal((await call('luis', '/api/course?id=' + c)).records.find((r) => r.id === vencida.id).data.due, '2026-01-10T12:00:00.000Z');
+const ext = (await call('titular', '/api/course?id=' + c)).records.find((r) => r.kind === 'extension');
+assert.deepEqual([ext.data.task, ext.data.member, ext.data.reason], [vencida.id, ana, 'Justificante médico']);
+await call('titular', '/api/extension', { course: c, task: vencida.id, member: ana }, 200, 'DELETE');
+await call('titular', '/api/extension', { course: c, task: vencida.id, member: ana }, 404, 'DELETE');
+checks += 6;
+
 assert.deepEqual(store.raw().prepare('PRAGMA foreign_key_check').all(), []);
-console.log(`PASS: ${checks} verificaciones de co-docentes — alta solo por el propietario, permisos de docente sin borrar el curso, y retiro.`);
+console.log(`PASS: ${checks} verificaciones de co-docentes — alta solo por el propietario, permisos de docente sin borrar el curso y retiro; prórrogas individuales.`);

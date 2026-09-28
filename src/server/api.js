@@ -25,6 +25,7 @@ import {
   all,
   email as validEmail,
   fail,
+  isoDate,
   json,
   nowIso,
   one,
@@ -647,6 +648,43 @@ const routes = {
       record.id,
     );
     return json({ visible: body.visible });
+  },
+
+  // ---- Prórrogas individuales ----
+
+  'POST /api/extension': async ({ db, user, request }) => {
+    const body = await readJson(request);
+    requireTeacher(await access(db, user, body.course));
+    const task = await loadTask(db, body.task, body.course);
+    const member = await one(db, "SELECT id FROM aula_members WHERE id=? AND course=? AND role='student'", String(body.member ?? ''), body.course);
+    if (!member) fail('Alumno no encontrado.', 404);
+    const due = isoDate(body.due);
+    const end = isoDate(body.end);
+    if (!due) fail('Indica la nueva fecha de vencimiento.');
+    if (end && end < due) fail('El cierre debe ser posterior al nuevo vencimiento.');
+    await run(
+      db,
+      `INSERT INTO aula_extensions (task,member,due,end_at,reason,created_by,created) VALUES (?,?,?,?,?,?,?)
+       ON CONFLICT(task,member) DO UPDATE SET due=excluded.due, end_at=excluded.end_at, reason=excluded.reason,
+         created_by=excluded.created_by, created=excluded.created`,
+      task.id,
+      member.id,
+      due,
+      end,
+      optionalText(body.reason, 300),
+      user.id,
+      nowIso(),
+    );
+    return json({ ok: true });
+  },
+
+  'DELETE /api/extension': async ({ db, user, request }) => {
+    const body = await readJson(request);
+    requireTeacher(await access(db, user, body.course));
+    const task = await loadTask(db, body.task, body.course);
+    const result = await run(db, 'DELETE FROM aula_extensions WHERE task=? AND member=?', task.id, String(body.member ?? ''));
+    if (!result.meta.changes) fail('Ese alumno no tiene prórroga en esta actividad.', 404);
+    return json({ ok: true });
   },
 
   // ---- Papelera ----
