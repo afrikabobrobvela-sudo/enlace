@@ -162,10 +162,12 @@ const routes = {
         : await all(
             db,
             `SELECT c.*,
-               CASE WHEN (?2 AND c.owner=?1) OR EXISTS (SELECT 1 FROM aula_members t WHERE t.course=c.id AND t.user_id=?1 AND t.role='teacher')
+               CASE WHEN ?2 AND (c.owner=?1 OR EXISTS (SELECT 1 FROM aula_members t WHERE t.course=c.id AND t.user_id=?1 AND t.role='teacher'))
                  THEN 1 ELSE 0 END AS can_teach
              FROM aula_courses c
-             WHERE ((?2 AND c.owner=?1) OR EXISTS (SELECT 1 FROM aula_members m WHERE m.course=c.id AND m.user_id=?1 AND m.role!='removed'))
+             WHERE ((?2 AND c.owner=?1)
+                    OR EXISTS (SELECT 1 FROM aula_members m WHERE m.course=c.id AND m.user_id=?1
+                               AND (m.role='student' OR (?2 AND m.role='teacher'))))
                AND ${notDeleted}
              ORDER BY c.created DESC`,
             user.id,
@@ -321,6 +323,45 @@ const routes = {
       ),
     );
     return json({ module: moduleId, count: sections.length }, 201);
+  },
+
+  // ---- Co-docentes: el propietario o la administración comparten el curso con otros docentes ----
+
+  'POST /api/course/teachers': async ({ db, env, user, request }) => {
+    const body = await readJson(request);
+    const a = await access(db, user, body.course);
+    if (user.role !== 'admin' && !ownsCourse(user, a.course)) fail('Solo el propietario o la administración agrega co-docentes.', 403);
+    const address = validEmail(body.email);
+    const isOwnerEmail = address === String(env.AULA_OWNER_EMAIL || '').toLowerCase();
+    const grant = await one(
+      db,
+      `SELECT g.name, u.id AS user_id, u.name AS user_name FROM (SELECT ?1 AS email) q
+       LEFT JOIN aula_teachers g ON g.email=q.email LEFT JOIN aula_users u ON u.email=q.email`,
+      address,
+    );
+    if (!grant.name && !isOwnerEmail) fail('Ese correo no es de un docente registrado en Enlace. Pídele que solicite acceso de docente.', 404);
+    const owner = await one(db, 'SELECT email FROM aula_users WHERE id=?', a.course.owner);
+    if (owner?.email === address) fail('Esa persona ya es la propietaria del curso.', 409);
+    await run(
+      db,
+      `INSERT INTO aula_members (id,course,email,user_id,name,matricula,role) VALUES (?,?,?,?,?,'','teacher')
+       ON CONFLICT(course,email) DO UPDATE SET role='teacher', user_id=coalesce(aula_members.user_id,excluded.user_id)`,
+      crypto.randomUUID(),
+      a.course.id,
+      address,
+      grant.user_id || null,
+      grant.name || grant.user_name || address,
+    );
+    return json({ ok: true }, 201);
+  },
+
+  'DELETE /api/course/teachers': async ({ db, user, request }) => {
+    const body = await readJson(request);
+    const a = await access(db, user, body.course);
+    if (user.role !== 'admin' && !ownsCourse(user, a.course)) fail('Solo el propietario o la administración retira co-docentes.', 403);
+    const result = await run(db, "UPDATE aula_members SET role='removed' WHERE id=? AND course=? AND role='teacher'", text(body.id, 200), a.course.id);
+    if (!result.meta.changes) fail('Co-docente no encontrado.', 404);
+    return json({ ok: true });
   },
 
   // ---- Inscripciones ----

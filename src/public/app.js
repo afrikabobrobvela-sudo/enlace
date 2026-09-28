@@ -306,7 +306,7 @@ function renderGroups() {
   return workspaceGroups();
 }
 function renderMembers() {
-  $('#main').innerHTML = `<h1>Listado de alumnos</h1><div class="toolbar">${teaches() ? button('Inscribir alumno', 'new-member') + button('Importar lista', 'bulk-members', '', 'secondary') : ''}<input data-search type="search" placeholder="Buscar…" aria-label="Buscar alumno"></div>${teaches() ? '<p class="real-status">La inscripción vincula el curso al correo del alumno: verá el curso cuando entre con ese mismo correo (su cuenta de Google). No se envían invitaciones.</p>' : ''}<div class="table-wrap"><table><thead><tr><th>Nombre</th>${teaches() ? '<th>Matrícula</th><th>Correo</th><th>Estado</th><th>Acción</th>' : ''}</tr></thead><tbody>${current.members.map(m => `<tr data-search-row><td>${esc(m.name)}</td>${teaches() ? `<td>${esc(m.matricula)}</td><td>${esc(m.email)}</td><td>${m.user_id ? 'Cuenta vinculada' : 'Pendiente de ingreso'}</td><td>${button('Retirar', 'remove-member', m.id, 'text-btn')}</td>` : ''}</tr>`).join('') || '<tr><td>No hay alumnos inscritos.</td></tr>'}</tbody></table></div>`;
+  $('#main').innerHTML = `<h1>Listado de alumnos</h1><div class="toolbar">${teaches() ? button('Inscribir alumno', 'new-member') + button('Importar lista', 'bulk-members', '', 'secondary') : ''}<input data-search type="search" placeholder="Buscar…" aria-label="Buscar alumno"></div>${teaches() ? '<p class="real-status">La inscripción vincula el curso al correo del alumno: verá el curso cuando entre con ese mismo correo (su cuenta de Microsoft o de Google). No se envían invitaciones.</p>' : ''}${coTeachersPanel()}<div class="table-wrap"><table><thead><tr><th>Nombre</th>${teaches() ? '<th>Matrícula</th><th>Correo</th><th>Estado</th><th>Acción</th>' : ''}</tr></thead><tbody>${current.members.filter(m => m.role === 'student').map(m => `<tr data-search-row><td>${esc(m.name)}</td>${teaches() ? `<td>${esc(m.matricula)}</td><td>${esc(m.email)}</td><td>${m.user_id ? 'Cuenta vinculada' : 'Pendiente de ingreso'}</td><td>${button('Retirar', 'remove-member', m.id, 'text-btn')}</td>` : ''}</tr>`).join('') || '<tr><td>No hay alumnos inscritos.</td></tr>'}</tbody></table></div>`;
 }
 function renderAdmin() {
   $('#main').innerHTML = `<h1>Administración del curso</h1><section class="admin-section"><h2>Configuración</h2><div class="admin-links">${button('Información del curso', 'edit-course', '', 'table-link')}${button('Copiar a un nuevo periodo', 'copy-course', '', 'table-link')}${current.canDelete ? button(current.course.archived_at ? 'Desarchivar curso' : 'Archivar curso', 'archive-course', '', 'table-link') : ''}${button('Exportar respaldo del curso', 'backup', '', 'table-link')}${current.canDelete ? button('Eliminar curso / grupo', 'delete-course', current.course.id, 'danger-link') : ''}</div></section><section class="admin-section"><h2>Administración de estudiantes</h2><div class="admin-links"><button class="table-link" data-section="members">Listado de alumnos</button><button class="table-link" data-section="groups">Equipos de trabajo</button><button class="table-link" data-section="progress">Progreso de la clase</button></div></section><section class="admin-section"><h2>Evaluación</h2><div class="admin-links"><button class="table-link" data-section="tasks">Actividades</button><button class="table-link" data-section="grades">Calificaciones</button><button class="table-link" data-section="quizzes">Evaluaciones</button></div></section><section class="admin-section"><h2>Papelera</h2><div class="admin-links"><button class="table-link" data-section="trash">Elementos eliminados</button></div><p class="muted">Lo que eliminas del curso se puede restaurar desde aquí con todo su contenido, entregas y calificaciones.</p></section><p class="real-status">El respaldo exporta registros y metadatos en JSON. Descarga los archivos adjuntos por separado. Conserva copias periódicas fuera de la plataforma.</p>`;
@@ -464,6 +464,13 @@ function courseModal(edit = false) {
     intro: f.get('intro')
   }));
 }
+/** Co-docentes del curso: los ve todo el curso; el propietario o la administración los agregan y retiran. */
+function coTeachersPanel() {
+  const list = current.members.filter(m => m.role === 'teacher');
+  if (!list.length && !current.canDelete)
+    return '';
+  return `<section class="panel coteachers"><div class="panel-head"><h2>Docentes del curso</h2>${current.canDelete ? button('＋ Agregar co-docente', 'add-coteacher', '', 'text-btn') : ''}</div>${list.map(m => `<div class="coteacher-row"><strong>${esc(m.name)}</strong>${m.email ? `<span class="muted">${esc(m.email)}</span>` : ''}${current.canDelete ? button('Retirar', 'remove-coteacher', m.id, 'danger-link') : ''}</div>`).join('') || '<p class="muted">Comparte el curso con otro docente (por ejemplo, titular y adjunto, o teoría y laboratorio): podrá editar el contenido, calificar y pasar lista, pero no borrar el curso.</p>'}</section>`;
+}
 /** Copia la estructura del curso actual a un curso nuevo (siguiente periodo) y lo abre. */
 function copyCourseModal() {
   const c = current.course;
@@ -570,6 +577,19 @@ document.addEventListener('click', async (e) => {
         break;
       case 'edit-course':
         courseModal(true);
+        break;
+      case 'add-coteacher':
+        modal('Agregar co-docente', field('Correo del docente', 'email', '', 'email', 'required') + '<p class="muted">Debe estar registrado como docente en Enlace. Verá el curso la próxima vez que entre.</p>', async f => {
+          await request('/api/course/teachers', { course: current.course.id, email: f.get('email') });
+          return 'Co-docente agregado.';
+        }, 'Agregar');
+        break;
+      case 'remove-coteacher':
+        if (!confirm('¿Retirar a este co-docente del curso? Su trabajo (calificaciones, contenido) se conserva.'))
+          return;
+        await request('/api/course/teachers', { course: current.course.id, id }, 'DELETE');
+        await reload();
+        toast('Co-docente retirado.');
         break;
       case 'copy-course':
         copyCourseModal();

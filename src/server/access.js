@@ -16,8 +16,13 @@ export async function access(db, user, courseId) {
   const { is_deleted: _deleted, member_role: memberRole, ...course } = row;
   const isAdmin = user.role === 'admin';
   const isOwner = ownsCourse(user, course);
-  if (!isAdmin && !isOwner && (!memberRole || memberRole === 'removed')) fail('No tienes acceso a este curso.', 403);
-  return { course, teach: isAdmin || isOwner || memberRole === 'teacher' };
+  // Un co-docente solo conserva el acceso mientras siga en la lista de docentes (igual que el propietario).
+  const staff = user.role === 'teacher' || isAdmin;
+  const coTeacher = memberRole === 'teacher' && staff;
+  if (!isAdmin && !isOwner && !coTeacher && (!memberRole || memberRole === 'removed' || memberRole === 'teacher')) {
+    fail('No tienes acceso a este curso.', 403);
+  }
+  return { course, teach: isAdmin || isOwner || coTeacher };
 }
 
 export function requireTeacher(access) {

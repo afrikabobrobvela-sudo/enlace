@@ -583,3 +583,6 @@ dialog:not(.viewer)::backdrop { background: rgba(12, 28, 42, 0.45); backdrop-fil
 article.course.is-archived .course-cover { filter: grayscale(0.85) brightness(1.05); }
 article.course.is-archived { opacity: 0.92; }
 #previewBar.is-archived { background: #eef2f6; border-bottom-color: #cfd9e2; color: #334a5c; }
+.coteachers { margin: 0 0 18px; }
+.coteacher-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 10px 0; border-top: 1px solid var(--line); }
+.coteacher-row .danger-link { margin-left: auto; }
