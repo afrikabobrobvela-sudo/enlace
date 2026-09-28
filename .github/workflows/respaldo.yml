@@ -1,0 +1,48 @@
+# Respaldo semanal de la base de datos de producción a un almacenamiento R2 privado.
+# El repositorio es público: el respaldo NUNCA se guarda como artefacto de GitHub (tiene datos de alumnos).
+#
+# Configuración (una sola vez, ver LEEME.md → "Respaldo automático"):
+#   Secrets del repositorio: CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID, D1_DATABASE_ID
+#   Bucket privado: npx wrangler r2 bucket create enlace-respaldos
+# Solo corre desde la rama principal del repositorio (GitHub ejecuta los horarios en la rama por omisión).
+name: Respaldo semanal
+on:
+  schedule:
+    - cron: '17 9 * * 0' # domingos 09:17 UTC (madrugada en México)
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency: respaldo
+jobs:
+  respaldo:
+    runs-on: ubuntu-latest
+    if: ${{ github.repository_owner == 'afrikabobrobvela-sudo' }}
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --no-audit --no-fund
+      - name: Revisar configuración
+        run: |
+          for v in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID; do
+            if [ -z "${!v}" ]; then echo "::error::Falta el secret $v (ver LEEME.md → Respaldo automático)"; exit 1; fi
+          done
+          if [ -z "${{ secrets.D1_DATABASE_ID }}" ]; then echo "::error::Falta el secret D1_DATABASE_ID"; exit 1; fi
+      - name: Usar la base de producción
+        run: sed -i 's/PEGA_AQUI_EL_ID_DE_TU_BASE/${{ secrets.D1_DATABASE_ID }}/' wrangler.toml
+      - name: Exportar la base
+        run: |
+          STAMP=$(date -u +%Y-%m-%d-%H%M)
+          echo "STAMP=$STAMP" >> "$GITHUB_ENV"
+          npx wrangler d1 export enlace-db --remote --output "respaldo.sql"
+          gzip -9 respaldo.sql
+          ls -la respaldo.sql.gz
+      - name: Guardar en R2 privado (enlace-respaldos)
+        run: npx wrangler r2 object put "enlace-respaldos/enlace-db-${STAMP}.sql.gz" --file respaldo.sql.gz --remote --content-type application/gzip
+      - name: Borrar la copia local
+        if: always()
+        run: rm -f respaldo.sql respaldo.sql.gz

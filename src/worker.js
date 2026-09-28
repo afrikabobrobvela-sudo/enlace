@@ -31,6 +31,16 @@ export default {
     const url = new URL(request.url);
     if (url.pathname.startsWith('/api/')) return api(request, env);
     if (url.pathname.startsWith('/auth/')) return auth(request, env);
+    // Vigilancia: confirma que el Worker y la base responden. No expone datos.
+    if (url.pathname === '/salud') {
+      try {
+        await env.DB.prepare('SELECT 1').first();
+        return new Response(JSON.stringify({ ok: true }), { headers: { 'Content-Type': 'application/json', ...SECURITY_HEADERS } });
+      } catch (error) {
+        console.error('aula-salud', error);
+        return new Response(JSON.stringify({ ok: false }), { status: 503, headers: { 'Content-Type': 'application/json', ...SECURITY_HEADERS } });
+      }
+    }
     if (request.method !== 'GET' && request.method !== 'HEAD') return new Response('Method not allowed', { status: 405 });
 
     let name = url.pathname === '/' ? 'index.html' : decodeURIComponent(url.pathname.slice(1));

@@ -123,6 +123,12 @@ Para generar un `SESSION_SECRET` aleatorio: `node -e "console.log(require('crypt
 
 - **Automáticos (D1 Time Travel).** Cloudflare guarda el historial de la base: puedes regresarla a cualquier minuto de los últimos 7 días en el plan gratuito. `npx wrangler d1 time-travel info enlace-db` muestra el estado actual y `npx wrangler d1 time-travel restore enlace-db --timestamp=2026-10-05T14:00:00Z` la regresa a ese momento (hora UTC). Todo lo posterior a ese momento se pierde, así que antes de restaurar descarga un respaldo.
 - **Copias descargadas.** `npm run respaldo` guarda la base completa (cursos, alumnos, calificaciones, asistencia y entregas) en `respaldos/enlace-db-FECHA.sql`. Hazlo cada semana y antes de cada actualización, fuera del horario de clases (en bases grandes, la exportación pausa las consultas unos segundos), y guarda una copia en Google Drive. Para restaurar una copia se crea una base nueva y se carga con `npx wrangler d1 execute NOMBRE --remote --file=respaldos/ARCHIVO.sql`.
+- **Respaldo automático semanal (GitHub Actions).** El flujo `.github/workflows/respaldo.yml` exporta la base cada domingo y la guarda comprimida en un almacenamiento R2 **privado** (`enlace-respaldos`); nunca como archivo de GitHub, porque el repositorio es público. Configuración única:
+  1. `npx wrangler r2 bucket create enlace-respaldos` y, para que los respaldos de más de 180 días se borren solos: `npx wrangler r2 bucket lifecycle add enlace-respaldos --expire-days 180` (acepta las opciones que pregunte).
+  2. En Cloudflare, *My Profile → API Tokens → Create Token* con permisos **D1: Edit** y **Workers R2 Storage: Edit** para tu cuenta.
+  3. En GitHub, *Settings → Secrets and variables → Actions → New repository secret*: `CLOUDFLARE_API_TOKEN` (el token), `CLOUDFLARE_ACCOUNT_ID` (panel de Cloudflare, columna derecha) y `D1_DATABASE_ID` (el `database_id` de tu `wrangler.toml`).
+  4. Pruébalo en *Actions → Respaldo semanal → Run workflow*. Para descargar un respaldo: `npx wrangler r2 object get enlace-respaldos/NOMBRE.sql.gz --file NOMBRE.sql.gz --remote`.
+- **Vigilancia.** `.github/workflows/vigilancia.yml` revisa cada hora `https://…/salud` (Worker y base de datos). Si Enlace deja de responder, GitHub te avisa por correo (*Settings → Notifications → Actions*). Los flujos con horario solo corren en la rama principal del repositorio.
 - Los archivos adjuntos viven en R2, que es almacenamiento redundante de Cloudflare; no se incluyen en la copia descargada.
 
 ## GitHub

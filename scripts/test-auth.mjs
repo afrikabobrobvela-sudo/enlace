@@ -141,6 +141,14 @@ assert.equal(noSecret.status, 503);
 assert.match((await noSecret.json()).error, /SESSION_SECRET/);
 checks++;
 
+// ---- Vigilancia ----
+const salud = await fetchWorker('/salud');
+assert.equal(salud.status, 200);
+assert.deepEqual(await salud.json(), { ok: true });
+const caida = await fetchWorker('/salud', {}, { ...baseEnv, DB: { prepare: () => ({ first: async () => { throw new Error('D1 caída'); } }) } });
+assert.equal(caida.status, 503);
+checks += 2;
+
 // ---- Aviso de privacidad ----
 const page = await fetchWorker('/privacidad');
 assert.equal(page.status, 200);

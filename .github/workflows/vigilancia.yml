@@ -1,0 +1,26 @@
+# Revisa cada hora que Enlace responda (Worker y base de datos). Si falla, GitHub avisa por correo
+# a quien administra el repositorio (Settings → Notifications → Actions: "Send notifications for failed workflows").
+# La dirección se cambia con la variable del repositorio SITE_URL (Settings → Secrets and variables → Actions → Variables).
+name: Vigilancia
+on:
+  schedule:
+    - cron: '41 * * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  salud:
+    runs-on: ubuntu-latest
+    if: ${{ github.repository_owner == 'afrikabobrobvela-sudo' }}
+    steps:
+      - name: Revisar /salud
+        env:
+          SITE_URL: ${{ vars.SITE_URL || 'https://enlace.enlace-academia.workers.dev' }}
+        run: |
+          for intento in 1 2 3; do
+            code=$(curl -s -o respuesta.json -w '%{http_code}' --max-time 20 "$SITE_URL/salud" || true)
+            if [ "$code" = "200" ] && grep -q '"ok":true' respuesta.json; then echo "Enlace responde bien."; exit 0; fi
+            echo "Intento $intento: código $code"; sleep 30
+          done
+          echo "::error::Enlace no responde en $SITE_URL/salud (código $code)."
+          exit 1
