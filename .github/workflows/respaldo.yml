@@ -38,7 +38,11 @@ jobs:
         run: |
           STAMP=$(date -u +%Y-%m-%d-%H%M)
           echo "STAMP=$STAMP" >> "$GITHUB_ENV"
-          npx wrangler d1 export enlace-db --remote --output "respaldo.sql"
+          # Por el binding (DB): funciona aunque la base se haya restaurado con otro nombre.
+          npx wrangler d1 export DB --remote --output "respaldo.sql"
+          # Se comprueba que se pueda restaurar (se carga completo en una base temporal). El repositorio es público:
+          # el registro solo dice si pasó, sin cifras.
+          node --input-type=module -e "import { readFileSync } from 'node:fs'; import { verifyDump } from './scripts/lib/dump.mjs'; await verifyDump(readFileSync('respaldo.sql', 'utf8')); console.log('Respaldo comprobado: se puede restaurar completo.');"
           gzip -9 respaldo.sql
           ls -la respaldo.sql.gz
       - name: Guardar en R2 privado (enlace-respaldos)

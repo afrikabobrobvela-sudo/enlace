@@ -731,3 +731,9 @@ button.my-grade-row:hover .my-grade-title { color: var(--link); }
 /* Ventana «Crear curso de ejemplo» */
 .demo-list { margin: 8px 0 12px; padding-left: 22px; }
 .demo-list li { margin: 4px 0; line-height: 1.45; }
+
+/* Respaldo de archivos (Reportes) */
+#backupAdmin progress { width: 100%; height: 10px; accent-color: var(--brand, #0b5c7a); }
+.backup-list { margin-top: 8px; }
+.backup-list ul { margin: 6px 0 0; padding-left: 20px; max-height: 240px; overflow: auto; }
+.backup-list li { margin: 3px 0; overflow-wrap: anywhere; }

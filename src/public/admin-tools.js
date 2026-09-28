@@ -204,6 +204,7 @@ async function renderReports() {
       <thead><tr><th>Academia</th><th>Unidad</th><th>Cursos</th><th>Docentes</th><th>Alumnos</th><th>Actividades</th><th>Entregas</th><th>Archivos</th></tr></thead>
       <tbody>${groupRows || '<tr><td colspan="8">Todavía no hay cursos.</td></tr>'}</tbody></table></div>
     <p class="real-status">La academia y unidad de cada curso son las de quien lo creó. ${courses.length} cursos en total; el CSV incluye el detalle de cada uno.</p>
+    ${backupPanel()}
     <section class="panel admin-block" id="storageAdmin">
       <h2>Archivos sin usar</h2>
       <p class="muted">Archivos subidos hace más de 7 días que ningún contenido, actividad o entrega enlaza (por ejemplo, de formularios que no se guardaron o de elementos que se reemplazaron). Lo que está en la papelera se conserva.</p>
@@ -242,7 +243,7 @@ async function scanOrphans() {
         .join('')}
       ${files.length > 100 ? `<tr><td colspan="5" class="muted">… y ${files.length - 100} más.</td></tr>` : ''}</tbody></table></div>
     <form class="real-form orphan-form" id="orphanForm">
-      <p class="warning-note">Esto no se puede deshacer. Antes, descarga un respaldo (<code>node scripts/respaldo.mjs</code>) y revisa la lista. Los archivos se vuelven a comprobar al borrarlos: si alguno se enlazó mientras tanto, se conserva.</p>
+      <p class="warning-note">Esto no se puede deshacer. Antes, descarga un respaldo de la base (<code>npm run respaldo</code>) y de los archivos (<em>Respaldar archivos</em>, arriba) y revisa la lista. Los archivos se vuelven a comprobar al borrarlos: si alguno se enlazó mientras tanto, se conserva.</p>
       <label>Escribe <strong>${esc(confirmation)}</strong> para confirmar<input name="confirm" autocomplete="off" required></label>
       <p class="form-error error" hidden></p>
       <button class="primary danger-button" type="submit">Borrar ${files.length === 1 ? 'el archivo' : `${files.length} archivos`}</button>
@@ -283,12 +284,259 @@ async function gradeHistoryModal(taskId, memberId) {
   );
 }
 
+// ---- Respaldo de archivos (R2) en una carpeta de la computadora -----------------------------------
+//
+// El respaldo de la base no incluye los archivos. Aquí se copian a una carpeta elegida por la administración
+// (showDirectoryPicker: Chrome o Edge en computadora): archivos/<llave> con el contenido tal cual, más indice.csv
+// con nombre, curso y fecha de cada uno. Solo se descargan los que aún no están (mismo nombre y tamaño).
+// Para restaurar, se preguntan al servidor cuáles faltan en R2 y solo esos se suben desde la carpeta.
+
+const BACKUP_DIR = 'archivos';
+const BACKUP_PARALLEL = 3;
+const BACKUP_LAST_KEY = 'enlace-ultimo-respaldo-archivos';
+let backupRunning = null; // AbortController del respaldo o restauración en curso
+
+function backupPanel() {
+  const supported = typeof globalThis.showDirectoryPicker === 'function';
+  let last = null;
+  try {
+    last = localStorage.getItem(BACKUP_LAST_KEY);
+  } catch {}
+  return `<section class="panel admin-block" id="backupAdmin">
+      <h2>Respaldo de archivos</h2>
+      <p class="muted">El respaldo de la base de datos no incluye tareas, presentaciones ni evidencias. Elige una carpeta de tu computadora (de preferencia una que se sincronice con Google Drive o una memoria USB): Enlace copia ahí solo los archivos que todavía no tiene. Hazlo cada semana, junto con <code>npm run respaldo</code>.</p>
+      ${last ? `<p class="real-status">Último respaldo desde este navegador: ${esc(fmt(last))}</p>` : ''}
+      ${supported ? '' : '<p class="warning-note">Para respaldar o restaurar archivos abre Enlace en Chrome o Edge en una computadora.</p>'}
+      <div class="action-row"><button class="primary" type="button" data-backup-files ${supported ? '' : 'disabled'}>Respaldar archivos…</button>
+        <button class="secondary" type="button" data-restore-files ${supported ? '' : 'disabled'}>Restaurar archivos que falten…</button></div>
+      <div id="backupResult" aria-live="polite"></div>
+    </section>`;
+}
+
+/** Todos los archivos que Enlace tiene registrados (una fila por objeto de R2), en páginas de 1000. */
+async function backupList() {
+  const files = [];
+  let after = '';
+  do {
+    const page = await request('/api/backup/files?after=' + encodeURIComponent(after));
+    files.push(...page.files);
+    after = page.next;
+  } while (after);
+  return files;
+}
+
+async function backupLocalSize(dir, key) {
+  try {
+    return (await (await dir.getFileHandle(key)).getFile()).size;
+  } catch {
+    return -1;
+  }
+}
+
+async function backupWriteText(root, name, text) {
+  const writable = await (await root.getFileHandle(name, { create: true })).createWritable();
+  await writable.write(new Blob([text], { type: 'text/plain' }));
+  await writable.close();
+}
+
+function backupIndexCsv(files, missing) {
+  const cell = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  const lost = new Set(missing.map((f) => f.key));
+  const head = ['Archivo en la carpeta', 'Nombre original', 'Curso', 'Tipo', 'Bytes', 'Subido', 'Estado'];
+  const rows = files.map((f) =>
+    [`${BACKUP_DIR}/${f.key}`, f.name, f.course_name || 'Curso eliminado', f.scope === 'submission' ? 'Entrega' : 'Material', f.size, f.created, lost.has(f.key) ? 'Falta en Enlace' : 'Respaldado']
+      .map(cell)
+      .join(','),
+  );
+  return '\ufeff' + [head.map(cell).join(','), ...rows].join('\r\n');
+}
+
+const BACKUP_README = `Respaldo de archivos de Enlace
+===============================
+
+archivos/     Cada archivo con su llave de almacenamiento como nombre (sin extensión).
+indice.csv    Nombre original, curso, tipo y fecha de cada archivo (se abre con Excel).
+
+Para devolverlos a Enlace: Reportes → Respaldo de archivos → «Restaurar archivos que falten…»
+y elige esta misma carpeta. Solo se suben los que falten; nunca se reemplaza uno que exista.
+Si se perdió también la base de datos, primero restáurala (LEEME.md → Respaldos) y después los archivos.
+
+Contiene trabajos de alumnos: guárdala en un lugar privado.
+`;
+
+/** Copia a `root` los archivos que aún no están. `onProgress` recibe el avance; `signal` permite cancelar. */
+async function backupFiles(root, { onProgress, signal } = {}) {
+  const dir = await root.getDirectoryHandle(BACKUP_DIR, { create: true });
+  const files = await backupList();
+  const result = { total: files.length, saved: 0, kept: 0, bytes: 0, missing: [], failed: [], pending: 0, done: 0, cancelled: false };
+  const queue = [];
+  for (const f of files) {
+    if ((await backupLocalSize(dir, f.key)) === f.size) result.kept++;
+    else queue.push(f);
+  }
+  result.pending = queue.length;
+  onProgress?.(result);
+  const worker = async () => {
+    while (queue.length && !signal?.aborted) {
+      const f = queue.shift();
+      try {
+        const r = await fetch('/api/backup/object?key=' + encodeURIComponent(f.key), { credentials: 'same-origin', signal });
+        if (r.status === 410) result.missing.push(f);
+        else if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || `Error ${r.status}`);
+        else {
+          const blob = await r.blob();
+          if (blob.size !== f.size) throw new Error('Se descargó incompleto.');
+          // createWritable escribe en un archivo temporal y lo reemplaza al cerrar: no quedan archivos a medias.
+          const writable = await (await dir.getFileHandle(f.key, { create: true })).createWritable();
+          try {
+            await writable.write(blob);
+            await writable.close();
+          } catch (error) {
+            await writable.abort?.().catch(() => {});
+            throw error;
+          }
+          result.saved++;
+          result.bytes += f.size;
+        }
+      } catch (error) {
+        if (signal?.aborted) break;
+        result.failed.push({ ...f, error: error.message });
+      }
+      result.done++;
+      onProgress?.(result);
+    }
+  };
+  await Promise.all(Array.from({ length: BACKUP_PARALLEL }, worker));
+  result.cancelled = Boolean(signal?.aborted);
+  await backupWriteText(root, 'indice.csv', backupIndexCsv(files, result.missing));
+  await backupWriteText(root, 'LEEME.txt', BACKUP_README);
+  return result;
+}
+
+/** Sube desde `root` los archivos que faltan en el almacenamiento de Enlace. */
+async function restoreFiles(root, { onProgress, signal } = {}) {
+  let dir;
+  try {
+    dir = await root.getDirectoryHandle(BACKUP_DIR);
+  } catch {
+    throw new Error('Esa carpeta no es un respaldo de Enlace: no tiene la carpeta «archivos».');
+  }
+  const files = await backupList();
+  const result = { total: files.length, checked: 0, missing: 0, restored: 0, unavailable: [], failed: [], cancelled: false };
+  const lost = [];
+  for (let i = 0; i < files.length && !signal?.aborted; i += 40) {
+    const batch = files.slice(i, i + 40);
+    const { missing } = await request('/api/backup/missing', { keys: batch.map((f) => f.key) });
+    lost.push(...batch.filter((f) => missing.includes(f.key)));
+    result.checked += batch.length;
+    result.missing = lost.length;
+    onProgress?.(result);
+  }
+  for (const f of lost) {
+    if (signal?.aborted) break;
+    let file = null;
+    try {
+      file = await (await dir.getFileHandle(f.key)).getFile();
+    } catch {}
+    if (!file || file.size !== f.size) {
+      result.unavailable.push(f);
+      continue;
+    }
+    try {
+      const r = await fetch('/api/backup/restore?key=' + encodeURIComponent(f.key), {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'X-Aula-Request': '1', 'Content-Type': 'application/octet-stream' },
+        body: file,
+        signal,
+      });
+      if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || `Error ${r.status}`);
+      result.restored++;
+    } catch (error) {
+      if (signal?.aborted) break;
+      result.failed.push({ ...f, error: error.message });
+    }
+    onProgress?.(result);
+  }
+  result.cancelled = Boolean(signal?.aborted);
+  return result;
+}
+
+const backupFileList = (list, label) =>
+  list.length
+    ? `<details class="backup-list"><summary>${label} (${list.length})</summary><ul>${list
+        .slice(0, 200)
+        .map((f) => `<li>${esc(f.name)} · ${esc(f.course_name || 'Curso eliminado')} · ${bytesText(f.size)}${f.error ? ` — ${esc(f.error)}` : ''}</li>`)
+        .join('')}${list.length > 200 ? `<li class="muted">… y ${list.length - 200} más (ver indice.csv).</li>` : ''}</ul></details>`
+    : '';
+
+async function runBackup(mode) {
+  if (backupRunning) return;
+  const box = $('#backupResult');
+  let root;
+  try {
+    root = await globalThis.showDirectoryPicker({ id: 'enlace-respaldo', mode: mode === 'backup' ? 'readwrite' : 'read' });
+  } catch (error) {
+    if (error?.name === 'AbortError') return; // cerró el selector sin elegir
+    throw error;
+  }
+  backupRunning = new AbortController();
+  const buttons = document.querySelectorAll('[data-backup-files],[data-restore-files]');
+  buttons.forEach((b) => (b.disabled = true));
+  const bar = (done, total) => `<progress max="${Math.max(total, 1)}" value="${done}"></progress>`;
+  const cancel = '<button class="text-btn" type="button" data-backup-cancel>Cancelar</button>';
+  box.innerHTML = `<p class="muted">Preparando… ${cancel}</p>`;
+  // Salir de la página a media copia la interrumpe: se pide confirmación.
+  const guard = (e) => {
+    e.preventDefault();
+    e.returnValue = '';
+  };
+  addEventListener('beforeunload', guard);
+  try {
+    if (mode === 'backup') {
+      const r = await backupFiles(root, {
+        signal: backupRunning.signal,
+        onProgress: (p) => {
+          box.innerHTML = `<p>${p.kept} de ${p.total} ya estaban en la carpeta. Descargando ${p.done} de ${p.pending} nuevos (${bytesText(p.bytes)})… ${cancel}</p>${bar(p.done, p.pending)}`;
+        },
+      });
+      try {
+        localStorage.setItem(BACKUP_LAST_KEY, new Date().toISOString());
+      } catch {}
+      box.innerHTML = `<p class="${r.failed.length || r.missing.length || r.cancelled ? 'warning-note' : 'success-note'}">${r.cancelled ? 'Respaldo cancelado. ' : 'Respaldo terminado. '}${r.saved} ${r.saved === 1 ? 'archivo nuevo' : 'archivos nuevos'} (${bytesText(r.bytes)}); ${r.kept} ya estaban. La carpeta tiene <code>indice.csv</code> con el nombre y curso de cada archivo.${r.failed.length ? ' Algunos no se pudieron descargar: vuelve a respaldar para reintentarlos.' : ''}</p>
+        ${backupFileList(r.missing, 'Registrados en Enlace pero ya no están en el almacenamiento')}${backupFileList(r.failed, 'No se pudieron descargar')}`;
+    } else {
+      const r = await restoreFiles(root, {
+        signal: backupRunning.signal,
+        onProgress: (p) => {
+          box.innerHTML =
+            p.checked < p.total
+              ? `<p>Revisando ${p.checked} de ${p.total} archivos… ${cancel}</p>${bar(p.checked, p.total)}`
+              : `<p>Faltan ${p.missing}. Subiendo desde la carpeta: ${p.restored} restaurados… ${cancel}</p>${bar(p.restored + p.unavailable.length + p.failed.length, p.missing)}`;
+        },
+      });
+      box.innerHTML = `<p class="${r.unavailable.length || r.failed.length || r.cancelled ? 'warning-note' : 'success-note'}">${
+        r.missing ? `${r.cancelled ? 'Restauración cancelada. ' : ''}Faltaban ${r.missing} de ${r.total} archivos; se restauraron ${r.restored}.` : `No falta ningún archivo: los ${r.total} están en el almacenamiento.`
+      }</p>${backupFileList(r.unavailable, 'Faltan y no están en esta carpeta')}${backupFileList(r.failed, 'No se pudieron restaurar')}`;
+    }
+  } catch (error) {
+    box.innerHTML = `<p class="warning-note">${esc(error.message)}</p>`;
+  } finally {
+    removeEventListener('beforeunload', guard);
+    backupRunning = null;
+    buttons.forEach((b) => (b.disabled = false));
+  }
+}
+
 document.addEventListener('click', async (e) => {
-  const target = e.target.closest('[data-report-csv],[data-orphans-scan],[data-grade-history]');
+  const target = e.target.closest('[data-report-csv],[data-orphans-scan],[data-grade-history],[data-backup-files],[data-restore-files],[data-backup-cancel]');
   if (!target) return;
   try {
     if (target.matches('[data-report-csv]')) return reportCsv();
     if (target.matches('[data-orphans-scan]')) return await scanOrphans();
+    if (target.matches('[data-backup-files]')) return await runBackup('backup');
+    if (target.matches('[data-restore-files]')) return await runBackup('restore');
+    if (target.matches('[data-backup-cancel]')) return backupRunning?.abort();
     if (target.matches('[data-grade-history]')) return await gradeHistoryModal(target.dataset.task, target.dataset.gradeHistory);
   } catch (error) {
     toast(error.message);

@@ -154,7 +154,11 @@ assert.equal(salud.status, 200);
 assert.deepEqual(await salud.json(), { ok: true, migracion: null }); // el adaptador de pruebas no tiene d1_migrations
 const caida = await fetchWorker('/salud', {}, { ...baseEnv, DB: { prepare: () => ({ first: async () => { throw new Error('D1 caída'); } }) } });
 assert.equal(caida.status, 503);
-checks += 2;
+// Publicado con el correo de ejemplo de wrangler.toml: la vigilancia debe avisar.
+const ejemplo = await fetchWorker('/salud', {}, { ...baseEnv, AULA_OWNER_EMAIL: 'tu-correo@gmail.com' });
+assert.equal(ejemplo.status, 503);
+assert.match((await ejemplo.json()).problema, /correo de ejemplo/);
+checks += 3;
 
 // ---- App instalable (PWA) ----
 const manifest = await fetchWorker('/manifest.webmanifest');

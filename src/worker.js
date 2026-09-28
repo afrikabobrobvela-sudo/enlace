@@ -41,6 +41,13 @@ export default {
           .first()
           .catch(() => null);
         await env.DB.prepare('SELECT 1 FROM aula_users LIMIT 1').first();
+        // Publicado con el correo de ejemplo de wrangler.toml: nadie tendría la cuenta de administración.
+        if (!env.AULA_OWNER_EMAIL || env.AULA_OWNER_EMAIL === 'tu-correo@gmail.com') {
+          return new Response(JSON.stringify({ ok: false, problema: 'AULA_OWNER_EMAIL tiene el correo de ejemplo. Publica con npm run configurar.' }), {
+            status: 503,
+            headers: { 'Content-Type': 'application/json', ...SECURITY_HEADERS },
+          });
+        }
         return new Response(JSON.stringify({ ok: true, migracion: last?.name || null }), { headers: { 'Content-Type': 'application/json', ...SECURITY_HEADERS } });
       } catch (error) {
         console.error('aula-salud', error);

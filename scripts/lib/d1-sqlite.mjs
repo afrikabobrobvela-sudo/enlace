@@ -85,6 +85,9 @@ export function memoryBucket() {
       }
       return { body: data, arrayBuffer: async () => data };
     },
+    async head(id) {
+      return blobs.has(id) ? { key: id, size: blobs.get(id).byteLength } : null;
+    },
     async delete(id) {
       // Como R2: acepta una llave o un arreglo de llaves.
       for (const key of [].concat(id)) blobs.delete(key);

@@ -1,9 +1,30 @@
-# Enlace · versión 12.10
+# Enlace · versión 12.11
 
 Plataforma académica independiente para docentes y alumnos de cualquier academia (nació en la Academia de Física de la BUAP), con interfaz inspirada en Brightspace.
 No es el código de D2L Brightspace ni una plataforma oficial de la BUAP.
 
 Esta versión se despliega en **tu propia cuenta de Cloudflare** (Workers + D1 + R2, plan gratuito) y ya no depende de ChatGPT Sites.
+
+## Novedades de la versión 12.11 (respaldos completos y publicación segura)
+
+No requiere migraciones.
+
+- **Respaldo de archivos.** *Reportes → Respaldo de archivos → «Respaldar archivos…»* copia tareas, presentaciones y evidencias (lo que vive en R2, que el respaldo de la base no incluía) a una carpeta de tu computadora. Elige una carpeta que se sincronice con Google Drive para escritorio o una memoria USB.
+  - La primera vez descarga todo; después, solo lo nuevo.
+  - La carpeta lleva `indice.csv` (nombre original, curso y fecha de cada archivo) y un `LEEME.txt`.
+  - Si un archivo registrado ya no está en el almacenamiento, te lo dice.
+  - Funciona en Chrome o Edge de computadora.
+- **Restaurar archivos.** *«Restaurar archivos que falten…»* con la misma carpeta: Enlace pregunta cuáles faltan y sube solo esos. Nunca reemplaza un archivo que existe, solo acepta archivos que la base tiene registrados y exige el tamaño exacto.
+- **Los respaldos de la base se comprueban.**
+  - **El problema:** la exportación de Cloudflare no se podía cargar tal cual en una base vacía (fallaba con «no such table: aula_units»). Las instrucciones anteriores de restauración **no funcionaban**.
+  - **Al respaldar:** `npm run respaldo` y el respaldo semanal de GitHub cargan el respaldo completo en una base temporal y confirman que se puede restaurar.
+  - **Para restaurar:** el comando nuevo `npm run restaurar -- respaldos/ARCHIVO.sql` lo carga en una base **nueva**, se niega a escribir en una base con datos y compara las filas al terminar (ver *Respaldos*).
+- **No se puede publicar con los valores de ejemplo.**
+  - **Atajos bloqueados:** `npm run deploy` y `npm run db:migrate` se detienen con un mensaje claro si `wrangler.toml` tiene el `database_id` o el correo de ejemplo del ZIP.
+  - **`npm run configurar` recuerda tus datos:** guarda tu base, tu correo y tu dirección en tu usuario de la computadora (carpeta `.enlace`). Una versión nueva descomprimida en otra carpeta ya no pregunta nada.
+  - **Correo verificado:** si escribes un correo que nunca ha entrado a Enlace, te avisa antes de publicar. Así no te quedas sin la cuenta de administración.
+  - **Vigilancia:** si de todos modos se publica con el correo de ejemplo, `/salud` responde con error y la vigilancia te avisa.
+- **Simulacro hecho:** en una copia local se borraron la base y los archivos, y se restauraron. Base con las mismas filas en todas las tablas, archivos idénticos byte por byte y la alumna volvió a descargar su entrega.
 
 ## Novedades de la versión 12.10 (curso de ejemplo)
 
@@ -177,10 +198,10 @@ La pantalla muestra en vivo cuántos se han registrado y quiénes acaban de hace
 ## Actualizar tu Enlace ya publicado
 
 1. Descarga la versión nueva en una carpeta **nueva** (no encima de la anterior), o `git pull` si trabajas desde GitHub.
-2. Haz un respaldo desde esa carpeta: `npm run respaldo` (ver *Respaldos*).
-3. Doble clic en `configurar.cmd` (Windows) o `configurar.command` (Mac), o `npm run configurar`. Encuentra tu base `enlace-db` y tu almacenamiento, te pide tu correo de administración y tu dirección `.workers.dev`, descarga un respaldo, aplica las migraciones pendientes (0003: asistencia y borradores; 0004: registro con QR; 0005: categorías, rúbricas y equipos; 0006: sesiones; 0007: papelera; 0008: registro de docentes; 0009: aviso de privacidad; 0010: periodos y archivo; 0011: prórrogas; 0012: intentos de evaluaciones; 0013: avisos; 0014: historial de calificaciones; 0015: asistencia con código; 0016: modo examen) y publica. No cambia tus claves. Al pasar a la versión 12.1 cada persona vuelve a entrar con Google una vez (las sesiones ahora se registran en el servidor).
+2. Haz un respaldo desde esa carpeta: `npm run respaldo`, y de los archivos desde Enlace (ver *Respaldos*).
+3. Doble clic en `configurar.cmd` (Windows) o `configurar.command` (Mac), o `npm run configurar`. Encuentra tu base `enlace-db` y tu almacenamiento, usa el correo de administración y la dirección `.workers.dev` de la vez anterior (desde la versión 12.11 los recuerda; la primera vez te los pregunta y revisa que el correo ya haya entrado a Enlace), descarga un respaldo, aplica las migraciones pendientes (0003: asistencia y borradores; 0004: registro con QR; 0005: categorías, rúbricas y equipos; 0006: sesiones; 0007: papelera; 0008: registro de docentes; 0009: aviso de privacidad; 0010: periodos y archivo; 0011: prórrogas; 0012: intentos de evaluaciones; 0013: avisos; 0014: historial de calificaciones; 0015: asistencia con código; 0016: modo examen) y publica. No cambia tus claves. Al pasar a la versión 12.1 cada persona vuelve a entrar con Google una vez (las sesiones ahora se registran en el servidor).
 
-Si prefieres hacerlo a mano: copia tu `database_id` y tu correo del `wrangler.toml` anterior al nuevo (y `ALLOWED_EMAIL_DOMAINS` si lo usabas) y ejecuta `npm install`, `npm run db:migrate` y `npm run deploy`, **en ese orden**: si publicas antes de migrar, Asistencia y Calificaciones fallarán hasta que apliques la migración.
+**No publiques con `npx wrangler deploy` directamente**: el `wrangler.toml` del ZIP trae valores de ejemplo y quedarías sin la cuenta de administración (`npm run deploy` y `npm run db:migrate` ya lo impiden). Si prefieres hacerlo a mano: copia tu `database_id` y tu correo del `wrangler.toml` anterior al nuevo (y `ALLOWED_EMAIL_DOMAINS` si lo usabas) y ejecuta `npm install`, `npm run db:migrate` y `npm run deploy`, **en ese orden**: si publicas antes de migrar, Asistencia y Calificaciones fallarán hasta que apliques la migración.
 
 ## Entorno de pruebas
 
@@ -201,14 +222,21 @@ Para generar un `SESSION_SECRET` aleatorio: `node -e "console.log(require('crypt
 ## Respaldos
 
 - **Automáticos (D1 Time Travel).** Cloudflare guarda el historial de la base: puedes regresarla a cualquier minuto de los últimos 7 días en el plan gratuito. `npx wrangler d1 time-travel info enlace-db` muestra el estado actual y `npx wrangler d1 time-travel restore enlace-db --timestamp=2026-10-05T14:00:00Z` la regresa a ese momento (hora UTC). Todo lo posterior a ese momento se pierde, así que antes de restaurar descarga un respaldo.
-- **Copias descargadas.** `npm run respaldo` guarda la base completa (cursos, alumnos, calificaciones, asistencia y entregas) en `respaldos/enlace-db-FECHA.sql`. Hazlo cada semana y antes de cada actualización, fuera del horario de clases (en bases grandes, la exportación pausa las consultas unos segundos), y guarda una copia en Google Drive. Para restaurar una copia se crea una base nueva y se carga con `npx wrangler d1 execute NOMBRE --remote --file=respaldos/ARCHIVO.sql`.
+- **Copias descargadas de la base.** `npm run respaldo` guarda la base completa (cursos, alumnos, calificaciones, asistencia y entregas) en `respaldos/enlace-db-FECHA.sql` y la comprueba: la carga completa en una base temporal de tu computadora y confirma que se puede restaurar. Hazlo cada semana y antes de cada actualización, fuera del horario de clases (en bases grandes, la exportación pausa las consultas unos segundos), y guarda una copia en Google Drive.
+- **Copias de los archivos.** En Enlace, *Reportes → Respaldo de archivos → «Respaldar archivos…»* y elige siempre la misma carpeta (Chrome o Edge en computadora). Solo descarga lo nuevo. Hazlo junto con el respaldo de la base.
+- **Restaurar la base desde una copia** (si la base se perdió o se dañó y ya pasaron los 7 días de Time Travel):
+  1. `npm run restaurar -- respaldos/enlace-db-FECHA.sql`. Comprueba el respaldo en tu computadora, crea la base nueva `enlace-db-restaurada`, la carga y compara todas las filas. Nunca escribe en una base que ya tenga datos. Para otro nombre: `--destino NOMBRE`.
+  2. En `wrangler.toml` (primera sección `[[d1_databases]]`) cambia `database_name` por `enlace-db-restaurada` y `database_id` por el id que muestra `npx wrangler d1 list`.
+  3. `npm run deploy`. Si usas el respaldo semanal de GitHub, actualiza también el secret `D1_DATABASE_ID`.
+  - La exportación de Cloudflare **no** se puede cargar tal cual con `wrangler d1 execute` en una base vacía (falla con «no such table»): usa siempre `npm run restaurar`, que la reordena. Para un simulacro en tu computadora: `npm run restaurar -- ARCHIVO.sql --local` con una base local vacía.
+- **Restaurar archivos.** *Reportes → Respaldo de archivos → «Restaurar archivos que falten…»* y elige la carpeta del respaldo. Sube solo lo que falta; si también restauraste la base, hazlo después.
 - **Respaldo automático semanal (GitHub Actions).** El flujo `.github/workflows/respaldo.yml` exporta la base cada domingo y la guarda comprimida en un almacenamiento R2 **privado** (`enlace-respaldos`); nunca como archivo de GitHub, porque el repositorio es público. Configuración única:
   1. `npx wrangler r2 bucket create enlace-respaldos` y, para que los respaldos de más de 180 días se borren solos: `npx wrangler r2 bucket lifecycle add enlace-respaldos --expire-days 180` (acepta las opciones que pregunte).
   2. En Cloudflare, *My Profile → API Tokens → Create Token* con permisos **D1: Edit** y **Workers R2 Storage: Edit** para tu cuenta.
   3. En GitHub, *Settings → Secrets and variables → Actions → New repository secret*: `CLOUDFLARE_API_TOKEN` (el token), `CLOUDFLARE_ACCOUNT_ID` (panel de Cloudflare, columna derecha) y `D1_DATABASE_ID` (el `database_id` de tu `wrangler.toml`).
-  4. Pruébalo en *Actions → Respaldo semanal → Run workflow*. Para descargar un respaldo: `npx wrangler r2 object get enlace-respaldos/NOMBRE.sql.gz --file NOMBRE.sql.gz --remote`.
-- **Vigilancia.** `.github/workflows/vigilancia.yml` revisa cada hora `https://…/salud` (Worker y base de datos). Si Enlace deja de responder, GitHub te avisa por correo (*Settings → Notifications → Actions*). Los flujos con horario solo corren en la rama principal del repositorio.
-- Los archivos adjuntos viven en R2, que es almacenamiento redundante de Cloudflare; no se incluyen en la copia descargada.
+  4. Pruébalo en *Actions → Respaldo semanal → Run workflow*. Cada respaldo se comprueba antes de guardarse. Para descargar uno: `npx wrangler r2 object get enlace-respaldos/NOMBRE.sql.gz --file NOMBRE.sql.gz --remote`, descomprímelo (7-Zip en Windows) y restáuralo con `npm run restaurar`.
+- **Vigilancia.** `.github/workflows/vigilancia.yml` revisa cada hora `https://…/salud` (Worker, base de datos y que el correo de administración no sea el de ejemplo). Si Enlace deja de responder, GitHub te avisa por correo (*Settings → Notifications → Actions*). Los flujos con horario solo corren en la rama principal del repositorio.
+- Los archivos adjuntos viven en R2, almacenamiento redundante de Cloudflare, pero eso no protege de un borrado por error: respáldalos desde Enlace como se indica arriba. La carpeta tiene trabajos de alumnos; guárdala en un lugar privado.
 
 ## GitHub
 
@@ -376,6 +404,10 @@ La cookie de sesión usa el prefijo `__Host-`, que exige conexión segura. Chrom
 - `test-reportes.mjs`: historial de calificaciones, reportes por academia y unidad y limpieza de archivos sin usar (incluidos los compartidos entre cursos copiados).
 - `test-asistencia-codigo.mjs`: registro con código (ubicación sin guardar coordenadas, red, por revisar, modo estricto, cambio de código y QR intacto).
 - `test-examen.mjs`: modo examen (contraseña con bloqueo, datos ocultos al alumno, ubicación, respuestas guardadas, sin regresar respetado por el servidor, salidas registradas y monitor).
+- `test-curso-ejemplo.mjs`: curso de ejemplo completo en una solicitud, alumnos ficticios, permisos y límite.
+- `test-configurar.mjs`: no se publica ni se migra con los valores de ejemplo; `configurar` verifica el correo contra la base y recuerda los datos entre versiones (con un wrangler simulado).
+- `test-respaldo-archivos.mjs`: respaldo de archivos solo para administración, incremental, con índice; restauración solo de lo que falta y con el tamaño exacto.
+- `test-restaurar.mjs`: la exportación de D1 se reordena y comprueba con el esquema real; `npm run restaurar` solo escribe en bases vacías.
 - `test-qr.mjs`: generador de QR. Sus huellas corresponden a códigos que se decodificaron con OpenCV; si una cambia, hay que volver a verificarlo.
 - `test-auth-ui.mjs`, `test-admin-ui.mjs`, `test-teacher-files.mjs`, `test-workspace-ui.mjs`, `test-fase1-ui.mjs`, `test-fase2-ui.mjs`, `test-fase2b-ui.mjs`: interfaz (incluye las reglas del porcentaje de asistencia, el reparto de equipos, la revisión en secuencia, la exportación a Excel sin fórmulas inyectadas, que la firma del QR del navegador sea la que acepta el servidor, el ZIP verificado por un lector independiente, las reglas de riesgo, el cálculo por categorías y puntos, el redondeo de la calificación final y la evaluación con rúbrica).
 

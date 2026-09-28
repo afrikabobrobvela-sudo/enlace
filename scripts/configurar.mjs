@@ -7,8 +7,11 @@
 
 import { spawnSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
 import readline from 'node:readline';
+import { configProblems } from './revisar-config.mjs';
 
 const DB_NAME = 'enlace-db';
 const BUCKET = 'enlace-archivos';
@@ -17,6 +20,10 @@ const URL_FILE = '.enlace-url';
 const PLACEHOLDER_EMAIL = 'tu-correo@gmail.com';
 const PLACEHOLDER_DB = 'PEGA_AQUI_EL_ID_DE_TU_BASE';
 const isWindows = process.platform === 'win32';
+// Lo que ya se sabe de tu instalación se guarda fuera de la carpeta de Enlace (en tu usuario de la computadora),
+// así una versión nueva descomprimida en otra carpeta no vuelve a preguntar ni se publica con valores de ejemplo.
+const MEMORY_DIR = process.env.ENLACE_CONFIG_DIR || join(homedir(), '.enlace');
+const MEMORY_FILE = join(MEMORY_DIR, 'configuracion.json');
 // Para pruebas: ENLACE_WRANGLER permite usar un wrangler simulado; ENLACE_RESPUESTAS, respuestas fijas.
 const WRANGLER = (process.env.ENLACE_WRANGLER || 'npx wrangler').split(' ');
 const scripted = process.env.ENLACE_RESPUESTAS ? JSON.parse(process.env.ENLACE_RESPUESTAS) : null;
@@ -34,7 +41,7 @@ function wrangler(args, { capture = false, input } = {}) {
   const [command, ...prefix] = WRANGLER;
   const stdio = input !== undefined ? ['pipe', 'inherit', 'inherit'] : capture ? ['ignore', 'pipe', 'pipe'] : 'inherit';
   const result = spawnSync(command, [...prefix, ...args], { shell: isWindows, encoding: 'utf8', stdio, input });
-  return { status: result.status, output: `${result.stdout || ''}\n${result.stderr || ''}` };
+  return { status: result.status, stdout: result.stdout || '', output: `${result.stdout || ''}\n${result.stderr || ''}` };
 }
 
 function runNode(script) {
@@ -67,6 +74,41 @@ async function ask(question, validate, { hidden = false } = {}) {
   }
 }
 
+function readMemory() {
+  try {
+    return JSON.parse(readFileSync(MEMORY_FILE, 'utf8'));
+  } catch {
+    return {};
+  }
+}
+function remember(values) {
+  try {
+    mkdirSync(MEMORY_DIR, { recursive: true });
+    writeFileSync(MEMORY_FILE, JSON.stringify({ ...readMemory(), ...values }, null, 2) + '\n');
+  } catch {
+    // Sin permiso para escribir: la próxima vez se vuelve a preguntar.
+  }
+}
+const memory = readMemory();
+const validEmail = (a) => /^[^\s@"']+@[^\s@"']+\.[^\s@"']+$/.test(a);
+
+/**
+ * ¿Ese correo ya entró a Enlace en esta base? Devuelve null si no se pudo consultar (base nueva o sin conexión).
+ * Sirve para no publicar con un correo mal escrito y quedarte sin la cuenta de administración.
+ */
+function emailKnown(email) {
+  // El correo ya pasó por validEmail (sin comillas). En Windows la orden pasa por cmd.exe: va entre comillas dobles.
+  const sql = `SELECT count(*) AS users, sum(lower(email)='${email.toLowerCase()}') AS found FROM aula_users`;
+  const { status, stdout } = wrangler(['d1', 'execute', 'DB', '--remote', '--json', '--command', isWindows ? `"${sql}"` : sql], { capture: true });
+  if (status !== 0) return null;
+  try {
+    const row = JSON.parse(stdout.slice(stdout.indexOf('['), stdout.lastIndexOf(']') + 1))[0].results[0];
+    return row.users ? row.found > 0 : null;
+  } catch {
+    return null;
+  }
+}
+
 const readToml = () => readFileSync(TOML, 'utf8');
 const tomlValue = (text, key) => text.match(new RegExp(`^\\s*${key}\\s*=\\s*"([^"]*)"`, 'm'))?.[1];
 
@@ -83,10 +125,11 @@ function patchToml({ databaseId, owner }) {
 
 /** Busca la base por nombre. Devuelve su id o null. */
 function findDatabase() {
-  const { status, output } = wrangler(['d1', 'list', '--json'], { capture: true });
+  const { status, stdout } = wrangler(['d1', 'list', '--json'], { capture: true });
   if (status !== 0) return null;
   try {
-    const list = JSON.parse(output.slice(output.indexOf('['), output.lastIndexOf(']') + 1));
+    // Solo la salida estándar: los avisos de wrangler (salida de errores) también llevan corchetes.
+    const list = JSON.parse(stdout.slice(stdout.indexOf('['), stdout.lastIndexOf(']') + 1));
     const db = list.find((d) => d.name === DB_NAME);
     return db ? db.uuid || db.database_id || db.id : null;
   } catch {
@@ -159,18 +202,28 @@ ok(BUCKET);
 step('Cuenta de administración');
 const previous = readToml();
 let owner = tomlValue(previous, 'AULA_OWNER_EMAIL');
+if ((!owner || owner === PLACEHOLDER_EMAIL) && memory.owner && memory.databaseId === databaseId) {
+  owner = memory.owner;
+  ok(`Se usa el correo de la vez anterior: ${owner}`);
+}
 if (!owner || owner === PLACEHOLDER_EMAIL) {
-  owner = (
-    await ask('Correo de tu cuenta de Google (con él entrarás como administración):', (a) =>
-      /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(a) ? '' : 'Escribe un correo válido.',
-    )
-  ).toLowerCase();
+  for (;;) {
+    owner = (
+      await ask('Correo con el que entras como administración (el mismo de siempre):', (a) => (validEmail(a) ? '' : 'Escribe un correo válido.'))
+    ).toLowerCase();
+    // En una base con usuarios, el correo debe ser de alguien que ya entró; si no, se pide confirmación.
+    if (createdDatabase || emailKnown(owner) !== false) break;
+    console.log(`   ⚠ ${owner} nunca ha entrado a Enlace en esta base. Si lo publicas así, tu cuenta actual dejará de ser administración.`);
+    const again = await ask('Escribe "sí" para usarlo de todos modos, o "no" para escribirlo otra vez:', (a) => (/^(s[ií]|no)$/i.test(a) ? '' : 'Responde "sí" o "no".'));
+    if (/^s/i.test(again)) break;
+  }
 }
 patchToml({ databaseId, owner });
+remember({ databaseId, owner });
 ok(`${owner} (guardado en wrangler.toml)`);
 
 step('Tablas de la base de datos');
-const pending = wrangler(['d1', 'migrations', 'list', DB_NAME, '--remote'], { capture: true });
+const pending = wrangler(['d1', 'migrations', 'list', 'DB', '--remote'], { capture: true });
 if (pending.status === 0 && /No migrations to apply/i.test(pending.output)) {
   ok('Tablas al día (no hay migraciones pendientes)');
 } else {
@@ -180,15 +233,17 @@ if (pending.status === 0 && /No migrations to apply/i.test(pending.output)) {
     if (!runNode('scripts/respaldo.mjs')) stop('No se pudo descargar el respaldo, así que no se modificó la base.');
   }
   console.log('   Si pregunta si deseas continuar, responde que sí (y).');
-  if (wrangler(['d1', 'migrations', 'apply', DB_NAME, '--remote']).status !== 0) stop('No se pudieron crear las tablas.');
+  if (wrangler(['d1', 'migrations', 'apply', 'DB', '--remote']).status !== 0) stop('No se pudieron crear las tablas.');
   ok('Tablas al día');
 }
 
 step('Publicación');
+const problems = configProblems(readToml());
+if (problems.length) stop(`wrangler.toml todavía tiene valores de ejemplo:\n   · ${problems.join('\n   · ')}`);
 if (!runNode('scripts/build.mjs')) stop('Falló la compilación de la interfaz.');
 console.log('   Si es tu primera publicación, Cloudflare te pedirá elegir un subdominio (por ejemplo, fisica-buap).');
 if (wrangler(['deploy']).status !== 0) stop('No se pudo publicar.');
-let siteUrl = existsSync(URL_FILE) ? readFileSync(URL_FILE, 'utf8').trim() : '';
+let siteUrl = existsSync(URL_FILE) ? readFileSync(URL_FILE, 'utf8').trim() : memory.url || '';
 if (!siteUrl) {
   siteUrl = (
     await ask('Copia aquí la dirección que termina en .workers.dev (aparece arriba):', (a) =>
@@ -197,6 +252,7 @@ if (!siteUrl) {
   ).replace(/\/$/, '');
   writeFileSync(URL_FILE, siteUrl + '\n');
 }
+remember({ url: siteUrl });
 ok(`Publicado en ${siteUrl}`);
 
 step('Claves');
