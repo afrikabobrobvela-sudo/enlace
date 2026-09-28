@@ -615,6 +615,13 @@ export const attemptStarts = sqliteTable(
     events: text('events').notNull().default('[]'),
     flag: text('flag').notNull().default(''),
     distance: integer('distance'),
+    // Migración 0020 (bloqueo al salir): desde cuándo está fuera de la página, si quedó bloqueado, el código que el
+    // docente ve en su monitor para dejarlo continuar, códigos equivocados y cuántas veces se bloqueó.
+    awaySince: text('away_since'),
+    lockedAt: text('locked_at'),
+    unlockCode: text('unlock_code'),
+    unlockFailures: integer('unlock_failures').notNull().default(0),
+    locks: integer('locks').notNull().default(0),
   },
   (t) => [primaryKey({ columns: [t.quiz, t.userId, t.attempt] })],
 );

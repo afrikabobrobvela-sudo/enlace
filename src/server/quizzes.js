@@ -164,6 +164,9 @@ export function quizFields(input) {
 // ---- Modo examen ---------------------------------------------------------------------------------
 
 export const EXAM_RADII = [100, 150, 300, 500];
+// Bloqueo al salir: segundos fuera de la página que se toleran (una notificación, un toque sin querer).
+export const LOCK_GRACES = [0, 5, 15, 30];
+export const MAX_UNLOCK_FAILURES = 5;
 export const MAX_PASSWORD_FAILURES = 10;
 const EVENT_KINDS = ['left', 'fullscreen', 'copy'];
 const MAX_EVENTS = 200;
@@ -184,7 +187,9 @@ function examFields(input) {
     place = { lat, lng, accuracy, radius };
   }
   const oneByOne = input.oneByOne === true;
-  return { enabled: true, password, oneByOne, noBack: oneByOne && input.noBack === true, place };
+  const lockOnLeave = input.lockOnLeave === true;
+  const lockGrace = LOCK_GRACES.includes(Number(input.lockGrace)) ? Number(input.lockGrace) : 5;
+  return { enabled: true, password, oneByOne, noBack: oneByOne && input.noBack === true, place, lockOnLeave, lockGrace: lockOnLeave ? lockGrace : 0 };
 }
 
 /** Lo que el alumno sabe del modo examen: si pide contraseña o ubicación, pero no cuáles son. */
@@ -240,6 +245,7 @@ export function integritySummary(start) {
     awaySeconds: left.reduce((n, e) => n + (e.seconds || 0), 0),
     fullscreenExits: events.filter((e) => e.kind === 'fullscreen').length,
     copyAttempts: events.filter((e) => e.kind === 'copy').length,
+    locks: events.filter((e) => e.kind === 'locked').length,
     flag: start.flag || '',
     distance: start.distance ?? null,
     events: events.slice(-50),

@@ -50,7 +50,7 @@ await call('docente', '/api/record', examen({ enabled: true, password: 'abc' }),
 await call('docente', '/api/record', examen({ enabled: true, place: { ...salon, radius: 77 } }), 400);
 await call('docente', '/api/record', examen({ enabled: true, place: { lat: 200, lng: 0, radius: 150 } }), 400);
 const q = await call('docente', '/api/record', examen({ enabled: true, password: 'gauss', oneByOne: true, noBack: true, place: { ...salon, radius: 150 } }), 201);
-assert.deepEqual(q.data.settings.exam, { enabled: true, password: 'gauss', oneByOne: true, noBack: true, place: { ...salon, radius: 150 } });
+assert.deepEqual(q.data.settings.exam, { enabled: true, password: 'gauss', oneByOne: true, noBack: true, place: { ...salon, radius: 150 }, lockOnLeave: false, lockGrace: 0 });
 // "Sin regresar" sin "una pregunta a la vez" no tiene sentido: se desactiva.
 const suelto = await call('docente', '/api/record', examen({ enabled: true, noBack: true }), 201);
 assert.equal(suelto.data.settings.exam.noBack, false);
@@ -58,7 +58,7 @@ checks += 2;
 
 // ---- El alumno no recibe la contraseña ni la ubicación del salón ----
 const visto = (await call('ana', '/api/course?id=' + c)).records.find((r) => r.id === q.id);
-assert.deepEqual(visto.data.settings.exam, { enabled: true, oneByOne: true, noBack: true, needsPassword: true, checksLocation: true });
+assert.deepEqual(visto.data.settings.exam, { enabled: true, oneByOne: true, noBack: true, needsPassword: true, checksLocation: true, lockOnLeave: false, lockGrace: 0 });
 assert(!JSON.stringify(visto).includes('gauss') && !JSON.stringify(visto).includes('98.2016'));
 const vistaPrevia = (await call('docente', `/api/course?id=${c}&as=student`)).records.find((r) => r.id === q.id);
 assert(!JSON.stringify(vistaPrevia).includes('gauss'));

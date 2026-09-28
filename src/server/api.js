@@ -15,6 +15,7 @@ import { isPublished, publishAtField, publishedSql, SCHEDULABLE_KINDS } from './
 import {
   MAX_EXAM_EVENTS,
   MAX_PASSWORD_FAILURES,
+  MAX_UNLOCK_FAILURES,
   assertInTime,
   deadlineOf,
   examPlaceCheck,
@@ -166,6 +167,75 @@ function sameSecret(a, b) {
 }
 
 /** Intento en curso (empezado y sin enviar) de un alumno. */
+// ---- Bloqueo al salir (modo examen) ----------------------------------------------------------------
+// Si el alumno sale de la página más de la tolerancia, el intento queda bloqueado hasta que escriba el código que su
+// docente ve en el monitor (uno distinto por alumno y por bloqueo). Mientras tanto no se guarda ni se envía nada.
+
+const lockCode = () => String(crypto.getRandomValues(new Uint32Array(1))[0] % 1_000_000).padStart(6, '0');
+const lockEnabled = (quiz) => Boolean(quiz.data.settings?.exam?.lockOnLeave);
+
+/** Bloquea el intento (si no lo estaba) y deja constancia en sus eventos. */
+async function lockAttempt(db, start, seconds) {
+  let events = [];
+  try {
+    events = JSON.parse(start.events || '[]');
+  } catch {
+    events = [];
+  }
+  events.push({ kind: 'locked', seconds: Math.max(0, Math.round(seconds)), at: nowIso() });
+  await run(
+    db,
+    `UPDATE aula_attempt_starts SET locked_at=?, unlock_code=?, unlock_failures=0, locks=locks+1, away_since=NULL, events=?
+     WHERE quiz=? AND user_id=? AND attempt=? AND locked_at IS NULL`,
+    nowIso(),
+    lockCode(),
+    JSON.stringify(events.slice(-MAX_EXAM_EVENTS)),
+    start.quiz,
+    start.user_id,
+    start.attempt,
+  );
+}
+
+/**
+ * ¿Debe quedar bloqueado? Si salió (away_since) y ya pasó la tolerancia, se bloquea. Sirve al volver a la página y
+ * al retomar tras cerrar el navegador. Devuelve true si el intento está bloqueado.
+ */
+async function applyLock(db, quiz, start, seconds = null) {
+  if (!lockEnabled(quiz) || !start) return false;
+  if (start.locked_at) return true;
+  if (!start.away_since) return false;
+  const grace = quiz.data.settings.exam.lockGrace ?? 5;
+  const away = seconds ?? (Date.now() - Date.parse(start.away_since)) / 1000;
+  if (away > grace) {
+    await lockAttempt(db, start, away);
+    return true;
+  }
+  await run(db, 'UPDATE aula_attempt_starts SET away_since=NULL WHERE quiz=? AND user_id=? AND attempt=?', start.quiz, start.user_id, start.attempt);
+  return false;
+}
+
+/** Quita el bloqueo (con el código o porque el docente lo permitió) y lo anota en los eventos. */
+async function unlockAttempt(db, start, by) {
+  let events = [];
+  try {
+    events = JSON.parse(start.events || '[]');
+  } catch {
+    events = [];
+  }
+  events.push({ kind: 'unlocked', seconds: Math.round((Date.now() - Date.parse(start.locked_at)) / 1000), by, at: nowIso() });
+  await run(
+    db,
+    `UPDATE aula_attempt_starts SET locked_at=NULL, unlock_code=NULL, unlock_failures=0, away_since=NULL, events=?
+     WHERE quiz=? AND user_id=? AND attempt=?`,
+    JSON.stringify(events.slice(-MAX_EXAM_EVENTS)),
+    start.quiz,
+    start.user_id,
+    start.attempt,
+  );
+}
+
+const LOCKED_MESSAGE = 'Tu examen está bloqueado porque saliste de la página. Pide a tu docente el código para continuar.';
+
 async function openStart(db, quiz, userId) {
   return one(
     db,
@@ -985,6 +1055,8 @@ const routes = {
         );
         continue;
       }
+      // Retomar después de salir (por ejemplo, cerró el navegador): si pasó la tolerancia, queda bloqueado.
+      const locked = exam ? await applyLock(db, quiz, start) : false;
       const questions = quizInstance(quiz, user.id, attempt).map(({ values: _v, ...q }) => q);
       // Al retomar un examen se devuelven las respuestas guardadas y la pregunta en la que iba.
       let saved = {};
@@ -995,7 +1067,9 @@ const routes = {
       }
       return json({
         attempt, started, deadline, attemptsLeft: max - done.n, serverNow: Date.now(), questions,
-        exam: exam ? { oneByOne: exam.oneByOne, noBack: exam.noBack, position: start.position, answers: saved, flagged: Boolean(start.flag) } : null,
+        exam: exam
+          ? { oneByOne: exam.oneByOne, noBack: exam.noBack, position: start.position, answers: saved, flagged: Boolean(start.flag), lockOnLeave: Boolean(exam.lockOnLeave), lockGrace: exam.lockGrace ?? 0, locked }
+          : null,
       });
     }
   },
@@ -1008,6 +1082,7 @@ const routes = {
     const start = await openStart(db, quiz, user.id);
     if (!start || start.attempt !== Number(body.attempt)) fail('Este intento ya no está en curso. Recarga la página.', 409);
     assertInTime(quiz, start.started);
+    if (start.locked_at) fail(LOCKED_MESSAGE, 423, { locked: true });
     const events = validEvents(body.events);
     const noBack = quiz.data.settings.exam.noBack;
     const position = Number.isInteger(body.position) ? Math.min(Math.max(body.position, 0), quiz.data.questions.length) : start.position;
@@ -1061,6 +1136,7 @@ const routes = {
     const exam = quiz.data.settings?.exam || null;
     if ((quiz.data.settings?.timeLimit || exam) && !start) fail('Comienza el intento antes de enviarlo.', 409);
     if (start) assertInTime(quiz, start.started);
+    if (exam && (await applyLock(db, quiz, start))) fail(LOCKED_MESSAGE, 423, { locked: true });
     const instance = quizInstance(quiz, user.id, attempt);
     const graded = gradeAttempt(quiz, instance, finalAnswers(quiz, instance, start, body.answers));
     const id = attemptId(quiz.id, user.id, attempt);
@@ -1089,6 +1165,68 @@ const routes = {
     return json(attemptRecord(await one(db, 'SELECT * FROM aula_attempts WHERE id=?', id)), 201);
   },
 
+  // El navegador avisa que el alumno salió de la página (se envía al ocultarse, con keepalive).
+  'POST /api/attempt/away': async ({ db, user, request }) => {
+    const body = await readJson(request);
+    const { quiz } = await attemptContext(db, user, body);
+    if (!lockEnabled(quiz)) return json({ ok: true });
+    const start = await openStart(db, quiz, user.id);
+    if (!start || start.attempt !== Number(body.attempt)) fail('Este intento ya no está en curso.', 409);
+    await run(
+      db,
+      'UPDATE aula_attempt_starts SET away_since=coalesce(away_since, ?) WHERE quiz=? AND user_id=? AND attempt=? AND locked_at IS NULL',
+      nowIso(),
+      quiz.id,
+      user.id,
+      start.attempt,
+    );
+    return json({ ok: true });
+  },
+
+  // Volvió a la página: si estuvo fuera más que la tolerancia, se bloquea. `seconds` es lo que midió el navegador;
+  // cuenta lo mayor entre eso y lo que midió el servidor (si el aviso de salida llegó).
+  'POST /api/attempt/back': async ({ db, user, request }) => {
+    const body = await readJson(request);
+    const { quiz } = await attemptContext(db, user, body);
+    if (!lockEnabled(quiz)) return json({ locked: false });
+    const start = await openStart(db, quiz, user.id);
+    if (!start || start.attempt !== Number(body.attempt)) fail('Este intento ya no está en curso.', 409);
+    if (start.locked_at) return json({ locked: true });
+    const reported = Math.min(Math.max(Number(body.seconds) || 0, 0), 86_400);
+    const measured = start.away_since ? (Date.now() - Date.parse(start.away_since)) / 1000 : 0;
+    const locked = await applyLock(db, quiz, { ...start, away_since: start.away_since || nowIso() }, Math.max(reported, measured));
+    return json({ locked });
+  },
+
+  // El alumno escribe el código que le dio su docente. A los 5 errores solo el docente puede desbloquear.
+  'POST /api/attempt/unlock': async ({ db, user, request }) => {
+    const body = await readJson(request);
+    const { quiz } = await attemptContext(db, user, body);
+    const start = await openStart(db, quiz, user.id);
+    if (!start || start.attempt !== Number(body.attempt)) fail('Este intento ya no está en curso.', 409);
+    if (!start.locked_at) return json({ locked: false });
+    if (start.unlock_failures >= MAX_UNLOCK_FAILURES) fail('Demasiados códigos equivocados. Tu docente puede desbloquearte desde su monitor.', 429);
+    const code = String(body.code ?? '').replace(/\D/g, '');
+    if (!sameSecret(code, start.unlock_code || '')) {
+      await run(db, 'UPDATE aula_attempt_starts SET unlock_failures=unlock_failures+1 WHERE quiz=? AND user_id=? AND attempt=?', quiz.id, user.id, start.attempt);
+      const left = MAX_UNLOCK_FAILURES - start.unlock_failures - 1;
+      fail(left > 0 ? `Código incorrecto. Te ${left === 1 ? 'queda 1 intento' : `quedan ${left} intentos`}.` : 'Demasiados códigos equivocados. Tu docente puede desbloquearte desde su monitor.', left > 0 ? 400 : 429);
+    }
+    await unlockAttempt(db, start, 'code');
+    return json({ locked: false });
+  },
+
+  // El docente deja continuar a un alumno bloqueado sin dictarle el código (o tras 5 códigos equivocados).
+  'POST /api/exam/resume': async ({ db, user, request }) => {
+    const body = await readJson(request);
+    requireTeacher(await access(db, user, body.course));
+    const quiz = await contentRecord(db, body.quiz, body.course, 'quiz');
+    const start = await openStart(db, quiz, String(body.user || ''));
+    if (!start?.locked_at) fail('Ese alumno no está bloqueado.', 409);
+    await unlockAttempt(db, start, 'teacher');
+    return json({ ok: true });
+  },
+
   // Examen en curso (docente): quién está contestando, sus salidas y quién quedó bloqueado por la contraseña.
   'GET /api/exam/monitor': async ({ db, user, url }) => {
     const course = url.searchParams.get('course');
@@ -1115,7 +1253,21 @@ const routes = {
       ),
     ]);
     return json({
-      running: running.map((s) => ({ name: s.name, attempt: s.attempt, started: s.started, deadline: deadlineOf(quiz, s.started), answered: Object.keys(JSON.parse(s.progress || '{}')).length, ...integritySummary(s) })),
+      running: running.map((s) => ({
+        user: s.user_id,
+        name: s.name,
+        attempt: s.attempt,
+        started: s.started,
+        deadline: deadlineOf(quiz, s.started),
+        answered: Object.keys(JSON.parse(s.progress || '{}')).length,
+        ...integritySummary(s),
+        // Bloqueado al salir: el código solo lo ve quien enseña (para dictárselo en persona).
+        locked: Boolean(s.locked_at),
+        lockedAt: s.locked_at || null,
+        unlockCode: s.locked_at ? s.unlock_code : null,
+        unlockFailures: s.unlock_failures || 0,
+        away: Boolean(s.away_since),
+      })),
       blocked: blocked.map((b) => ({ user: b.user_id, name: b.name })),
       total: quiz.data.questions.length,
     });

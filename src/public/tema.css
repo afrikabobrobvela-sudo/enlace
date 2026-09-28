@@ -817,3 +817,16 @@ button.my-grade-row:hover .my-grade-title { color: var(--link); }
 .material-entry > .material-progress { flex: 1 0 100%; display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; padding: 0 16px 14px 72px; }
 @media (max-width: 720px) { .material-entry > .material-progress { padding-left: 16px; } }
 .material-progress-count { font-size: .82rem; color: var(--ink-soft); }
+
+/* Examen bloqueado al salir de la página */
+.exam-lock { position: fixed; inset: 0; z-index: 2000; background: rgba(12, 28, 44, .92); display: grid; place-items: center; padding: 16px; }
+.exam-lock-card { background: #fff; border-radius: 16px; padding: 24px 20px; max-width: 420px; width: 100%; text-align: center; box-shadow: 0 20px 60px rgba(0,0,0,.35); }
+.exam-lock-icon { font-size: 40px; margin: 0; }
+.exam-lock-card h2 { margin: 6px 0 10px; }
+.exam-lock-card form { text-align: left; margin-top: 14px; }
+.exam-lock-card input[name=code] { font-size: 28px; letter-spacing: .3em; text-align: center; font-variant-numeric: tabular-nums; }
+.exam-lock-card .primary { width: 100%; }
+.exam-locked-list { list-style: none; padding: 0; margin: 8px 0 14px; }
+.exam-locked-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; padding: 10px 12px; margin-bottom: 8px; border-radius: 10px; background: #fff4e5; border: 1px solid #f3c98b; }
+.exam-locked-row > div { flex: 1 1 200px; }
+.exam-unlock-code { font-size: 1.6rem; font-weight: 700; letter-spacing: .15em; font-variant-numeric: tabular-nums; color: #8a4b00; }

@@ -4,6 +4,7 @@
 let quizDraft = null; // preguntas del editor abierto
 let quizTimer = null; // cronómetro del intento en curso
 let quizLastResult = null; // resultado del último intento enviado (se muestra al volver a dibujar la pantalla)
+let examMonitorTimer = null;
 let examState = null; // examen en curso: posición, respuestas, salidas de la pantalla por enviar
 
 const QUIZ_LETTERS = 'ABCDEF';
@@ -174,6 +175,10 @@ function examSettingsHtml(exam) {
       <label>Contraseña para empezar (opcional; la dictas en el salón)<input name="examPassword" value="${esc(exam?.password || '')}" maxlength="30" autocomplete="off" placeholder="Por ejemplo: gauss"></label>
       <label class="check-label"><input type="checkbox" name="oneByOne" ${exam?.oneByOne ? 'checked' : ''}> Una pregunta a la vez</label>
       <label class="check-label"><input type="checkbox" name="noBack" ${exam?.noBack ? 'checked' : ''}> Sin regresar a preguntas anteriores (requiere "una pregunta a la vez")</label>
+      <label class="check-label"><input type="checkbox" name="lockOnLeave" ${exam?.lockOnLeave ? 'checked' : ''}> Bloquear si sale de la página: para continuar necesita un código que tú le das (aparece en tu monitor del examen)</label>
+      <label>Tolerancia antes de bloquear<select name="lockGrace">${[0, 5, 15, 30]
+        .map((g) => `<option value="${g}" ${(exam?.lockOnLeave ? exam.lockGrace : 5) === g ? 'selected' : ''}>${g ? `${g} segundos (por ejemplo, una notificación)` : 'Ninguna: se bloquea al salir'}</option>`)
+        .join('')}</select></label>
       <label>Revisar que estén en el salón<select name="examRadius"><option value="0">No revisar la ubicación</option>${EXAM_RADII.map((r) => `<option value="${r}" ${place?.radius === r ? 'selected' : ''}>A menos de ${r} m del salón</option>`).join('')}</select></label>
       <p class="exam-place-row"><button type="button" class="secondary" data-exam-place>Usar mi ubicación actual como salón</button>
         <span class="muted" id="examPlaceStatus">${place ? 'Ubicación del salón guardada.' : 'Sin ubicación del salón.'}</span></p>
@@ -196,7 +201,8 @@ function readExamSettings(f) {
     place = { ...place, radius };
   }
   const oneByOne = f.get('oneByOne') === 'on';
-  return { enabled: true, password: String(f.get('examPassword') || '').trim(), oneByOne, noBack: oneByOne && f.get('noBack') === 'on', place };
+  const lockOnLeave = f.get('lockOnLeave') === 'on';
+  return { enabled: true, password: String(f.get('examPassword') || '').trim(), oneByOne, noBack: oneByOne && f.get('noBack') === 'on', place, lockOnLeave, lockGrace: Number(f.get('lockGrace') || 5) };
 }
 
 async function captureExamPlace() {
@@ -288,7 +294,15 @@ function renderQuiz() {
           )
           .join('') || `<tr><td colspan="${exam ? 5 : 4}">No hay intentos registrados.</td></tr>`
       }</tbody></table></div>`;
-    if (exam) loadExamMonitor(q.id);
+    if (exam) {
+      loadExamMonitor(q.id);
+      // El monitor se actualiza solo cada 10 s mientras está en pantalla (así aparecen los bloqueados y su código).
+      clearInterval(examMonitorTimer);
+      examMonitorTimer = setInterval(() => {
+        if (section !== 'quiz' || detail !== q.id || !document.getElementById('examMonitor')) return clearInterval(examMonitorTimer);
+        loadExamMonitor(q.id);
+      }, 10_000);
+    }
     return;
   }
   const best = attempts.length ? Math.max(...attempts.map((a) => a.data.score)) : null;
@@ -352,7 +366,13 @@ async function startQuizAttempt(quizId, extra = {}) {
   const submit = async () => {
     if (exam) await saveExamProgress(true).catch(() => {});
     const answers = collect();
-    const result = await request('/api/attempt', { course: current.course.id, quiz: quizId, answers });
+    let result;
+    try {
+      result = await request('/api/attempt', { course: current.course.id, quiz: quizId, answers });
+    } catch (error) {
+      if (error.status === 423) showExamLock();
+      throw error;
+    }
     clearInterval(quizTimer);
     stopExam();
     quizLastResult = { quiz: quizId, result };
@@ -394,6 +414,7 @@ function integrityText(i) {
   const parts = [];
   if (i.exits) parts.push(`salió ${i.exits} ${i.exits === 1 ? 'vez' : 'veces'} (${secondsText(i.awaySeconds)})`);
   if (i.fullscreenExits) parts.push(`dejó pantalla completa ${i.fullscreenExits} ${i.fullscreenExits === 1 ? 'vez' : 'veces'}`);
+  if (i.locks) parts.push(`se bloqueó ${i.locks} ${i.locks === 1 ? 'vez' : 'veces'}`);
   if (i.copyAttempts) parts.push(`intentó copiar o pegar ${i.copyAttempts} ${i.copyAttempts === 1 ? 'vez' : 'veces'}`);
   if (i.flag) parts.push(i.flag);
   return parts.join(' · ');
@@ -410,7 +431,7 @@ function integrityModal(author) {
   const attempts = records('attempt')
     .filter((a) => a.data.quiz === q.id && a.author === author && a.data.integrity)
     .sort((a, b) => (a.data.attempt || 1) - (b.data.attempt || 1));
-  const labels = { left: 'Salió de la página', fullscreen: 'Dejó pantalla completa', copy: 'Intentó copiar o pegar' };
+  const labels = { left: 'Salió de la página', fullscreen: 'Dejó pantalla completa', copy: 'Intentó copiar o pegar', locked: 'Examen bloqueado', unlocked: 'Desbloqueado' };
   modal(
     `Integridad: ${attempts[0]?.data.name || ''}`, // modal() usa textContent para el título
     attempts
@@ -437,7 +458,15 @@ async function loadExamMonitor(quizId) {
     return;
   }
   if (!document.getElementById('examMonitor') || detail !== quizId) return;
+  // Bloqueados al salir: arriba, con el código grande para dictárselo en persona.
+  const locked = data.running
+    .filter((r) => r.locked)
+    .map((r) => `<li class="exam-locked-row"><div><strong>${esc(r.name)}</strong> <span class="muted">bloqueado desde las ${esc(new Date(r.lockedAt).toLocaleTimeString('es-MX', { timeStyle: 'short' }))}${
+      r.unlockFailures ? ` · ${r.unlockFailures} ${r.unlockFailures === 1 ? 'código equivocado' : 'códigos equivocados'}` : ''
+    }</span></div><span class="exam-unlock-code" aria-label="Código para continuar">${esc(r.unlockCode || '')}</span><button type="button" class="table-link" data-exam-resume="${esc(r.user)}">Permitir continuar</button></li>`)
+    .join('');
   const running = data.running
+    .filter((r) => !r.locked)
     .map((r) => `<li><strong>${esc(r.name)}</strong> <span class="muted">intento ${r.attempt} · ${r.answered} de ${data.total} contestadas · desde ${esc(new Date(r.started).toLocaleTimeString('es-MX', { timeStyle: 'short' }))}</span>${
       integrityText(r) ? ` <span class="integrity-warn">${esc(integrityText(r))}</span>` : ''
     }</li>`)
@@ -446,14 +475,21 @@ async function loadExamMonitor(quizId) {
     .map((b) => `<li><strong>${esc(b.name)}</strong> <span class="muted">se equivocó 10 veces de contraseña</span> <button type="button" class="table-link" data-exam-unlock="${esc(b.user)}">Desbloquear</button></li>`)
     .join('');
   box.innerHTML = `<div class="exam-monitor-head"><h2>Examen en curso</h2><button type="button" class="secondary" data-exam-refresh>Actualizar</button></div>
-    ${running ? `<ul>${running}</ul>` : '<p class="muted">Nadie está contestando en este momento.</p>'}
+    ${locked ? `<h3>Bloqueados por salir de la página</h3><p class="muted">Dile a cada alumno su código (en persona) o pulsa «Permitir continuar».</p><ul class="exam-locked-list">${locked}</ul>` : ''}
+    ${running ? `<ul>${running}</ul>` : locked ? '' : '<p class="muted">Nadie está contestando en este momento.</p>'}
     ${blocked ? `<h3>Bloqueados</h3><ul>${blocked}</ul>` : ''}`;
 }
 
 document.addEventListener('click', async (e) => {
   const detailBtn = e.target.closest('[data-integrity]');
   const unlock = e.target.closest('[data-exam-unlock]');
+  const resume = e.target.closest('[data-exam-resume]');
   try {
+    if (resume) {
+      await request('/api/exam/resume', { course: current.course.id, quiz: detail, user: resume.dataset.examResume });
+      toast('Listo: puede continuar su examen.');
+      await loadExamMonitor(detail);
+    }
     if (detailBtn) integrityModal(detailBtn.dataset.integrity);
     if (e.target.closest('[data-exam-refresh]')) await loadExamMonitor(detail);
     if (unlock) {
@@ -474,6 +510,7 @@ function examIntroHtml(exam, used) {
     <li>${fullscreen ? 'Se abre en pantalla completa. ' : ''}Si sales de la página, cambias de aplicación o de pestaña, queda registrado con la hora y la duración, y tu docente lo verá.</li>
     <li>No se puede copiar, pegar ni usar el menú del botón derecho.</li>
     ${exam.oneByOne ? `<li>Verás una pregunta a la vez${exam.noBack ? ' y <strong>no podrás regresar</strong> a las anteriores' : ''}.</li>` : ''}
+    ${exam.lockOnLeave ? `<li><strong>Si sales de la página${exam.lockGrace ? ` más de ${exam.lockGrace} segundos` : ''} (otra aplicación, WhatsApp, bloquear el teléfono), el examen se bloquea</strong> y necesitarás un código de tu docente para continuar. El tiempo sigue corriendo. Silencia las notificaciones antes de empezar.</li>` : ''}
     ${exam.checksLocation ? '<li>Se pedirá tu ubicación para confirmar que estás en el salón (solo se guarda la distancia).</li>' : ''}
     <li>Tus respuestas se guardan mientras contestas: si se cierra la página, vuelve a entrar y continúa donde ibas.</li></ul>
     <form id="examStart" class="real-form">
@@ -509,6 +546,7 @@ function startExam(quizId, data, collect) {
     else input.value = value;
   }
   showExamQuestion();
+  if (exam.locked) showExamLock();
   const form = $('#quizAttempt');
   form.addEventListener('input', () => queueExamSave());
   form.addEventListener('change', () => queueExamSave());
@@ -532,6 +570,7 @@ function stopExam() {
   window.removeEventListener('beforeunload', examBeforeUnload);
   document.body.classList.remove('exam-running');
   document.getElementById('examFullscreenBar')?.remove();
+  hideExamLock();
   examState = null;
   if (isFullscreen()) (document.exitFullscreen || document.webkitExitFullscreen)?.call(document)?.catch?.(() => {});
 }
@@ -554,15 +593,112 @@ function examBlockCopy(e) {
 function examAwayCheck() {
   if (!examState || examState.ignoreBlur) return;
   const away = document.visibilityState === 'hidden' || !document.hasFocus();
-  if (away && !examState.awaySince) examState.awaySince = Date.now();
+  if (away && !examState.awaySince) {
+    examState.awaySince = Date.now();
+    // Bloqueo al salir: el servidor anota la salida en ese momento (keepalive: llega aunque se cierre la página).
+    if (examState.exam.lockOnLeave && !examState.locked) examState.awayRequest = examLockCall('away', {}, true);
+  }
   if (!away && examState.awaySince) {
     const seconds = Math.round((Date.now() - examState.awaySince) / 1000);
     examState.awaySince = null;
     examState.events.push({ kind: 'left', seconds });
+    if (examState.exam.lockOnLeave && !examState.locked) {
+      const state = examState;
+      // Primero se espera el aviso de salida (para que el servidor no lo reciba después del regreso).
+      Promise.resolve(state.awayRequest)
+        .catch(() => {})
+        .then(() => examLockCall('back', { seconds }))
+        .then((r) => {
+          if (r?.locked && examState === state) showExamLock();
+          else if (examState === state) toast(`Saliste del examen ${seconds} s. Quedó registrado.`);
+          saveExamProgress(true).catch(() => {});
+        })
+        .catch(() => saveExamProgress(true).catch(() => {}));
+      return;
+    }
     toast(`Saliste del examen ${seconds} s. Quedó registrado.`);
     saveExamProgress(true).catch(() => {});
   }
 }
+
+/** Llamadas del bloqueo al salir. `keepalive` deja que el aviso de salida llegue aunque la página se cierre. */
+async function examLockCall(action, extra = {}, keepalive = false) {
+  const state = examState;
+  if (!state) return null;
+  const body = JSON.stringify({ course: current.course.id, quiz: state.quizId, attempt: state.attempt, ...extra });
+  const r = await fetch('/api/attempt/' + action, { method: 'POST', credentials: 'same-origin', keepalive, headers: { 'Content-Type': 'application/json', 'X-Aula-Request': '1' }, body });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw Object.assign(new Error(data.error || 'No se pudo completar la operación.'), { status: r.status });
+  return data;
+}
+
+// ---- Pantalla de bloqueo: tapa el examen hasta que se escriba el código del docente -----------------
+
+let examLockPoll = null;
+
+function showExamLock() {
+  if (!examState) return;
+  examState.locked = true;
+  clearTimeout(examState.saveTimer);
+  if (document.getElementById('examLock')) return;
+  document.body.insertAdjacentHTML(
+    'beforeend',
+    `<div id="examLock" class="exam-lock" role="alertdialog" aria-modal="true" aria-labelledby="examLockTitle">
+      <div class="exam-lock-card">
+        <p class="exam-lock-icon" aria-hidden="true">🔒</p>
+        <h2 id="examLockTitle">Examen bloqueado</h2>
+        <p>Saliste de la página del examen. Para continuar, <strong>pide a tu docente el código</strong> que aparece junto a tu nombre en su monitor.</p>
+        <p class="muted">Tus respuestas están guardadas. El tiempo sigue corriendo.</p>
+        <form id="examUnlockForm" class="real-form">
+          <label>Código de tu docente<input name="code" inputmode="numeric" pattern="[0-9 ]*" maxlength="7" autocomplete="off" required></label>
+          <p class="form-error error" hidden></p>
+          <button class="primary">Continuar el examen</button>
+        </form>
+      </div></div>`,
+  );
+  document.getElementById('examUnlockForm').code.focus();
+  // Si el docente lo desbloquea desde su monitor, se nota solo.
+  clearInterval(examLockPoll);
+  examLockPoll = setInterval(async () => {
+    try {
+      const r = await examLockCall('back', { seconds: 0 });
+      if (r && !r.locked) examUnlocked();
+    } catch {}
+  }, 10_000);
+}
+
+function hideExamLock() {
+  clearInterval(examLockPoll);
+  document.getElementById('examLock')?.remove();
+}
+
+function examUnlocked() {
+  if (examState) {
+    examState.locked = false;
+    examState.awaySince = null;
+  }
+  hideExamLock();
+  toast('Puedes continuar el examen.');
+  saveExamProgress(true).catch(() => {});
+}
+
+document.addEventListener('submit', async (e) => {
+  if (e.target.id !== 'examUnlockForm') return;
+  e.preventDefault();
+  const error = e.target.querySelector('.form-error');
+  const button = e.target.querySelector('button');
+  button.disabled = true;
+  try {
+    const r = await examLockCall('unlock', { code: e.target.code.value });
+    if (!r.locked) examUnlocked();
+  } catch (err) {
+    error.textContent = err.message;
+    error.hidden = false;
+    e.target.code.value = '';
+  } finally {
+    button.disabled = false;
+  }
+});
 
 function examFullscreenCheck() {
   if (!examState) return;
@@ -593,6 +729,7 @@ async function saveExamProgress() {
     await request('/api/attempt/progress', { course: current.course.id, quiz: state.quizId, attempt: state.attempt, answers: state.collect(), position: state.position, events });
   } catch (error) {
     state.events.unshift(...events); // se reintenta en el siguiente guardado
+    if (error.status === 423) showExamLock();
     throw error;
   }
 }
