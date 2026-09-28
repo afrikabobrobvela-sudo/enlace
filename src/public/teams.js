@@ -140,7 +140,7 @@ function teamNames(group) {
 }
 
 function teamBannerHtml(task) {
-  const mine = current.members.find((m) => m.user_id === me.id);
+  const mine = myMember();
   const team = mine && teamFor(task, mine.id);
   return team
     ? `<p class="team-banner">Entrega por equipo: <strong>${esc(team.data.title)}</strong> (${esc(teamNames(team))}). Lo que entregue cualquier integrante cuenta para todos.</p>`

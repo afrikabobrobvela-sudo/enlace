@@ -23,8 +23,30 @@ export const users = sqliteTable(
     privacyAcceptedAt: text('privacy_accepted_at'),
     // Migración 0013: última vez que la persona revisó sus avisos (los avisos se calculan, no se guardan).
     noticesSeenAt: text('notices_seen_at'),
+    // Migración 0017: acceso suspendido por la administración (NULL = activo). Se conservan cursos y datos.
+    suspendedAt: text('suspended_at'),
+    suspendedBy: text('suspended_by'),
+    suspendedReason: text('suspended_reason'),
   },
   (t) => [uniqueIndex('aula_users_email').on(t.email)],
+);
+
+/**
+ * Migración 0017: registro de acciones delicadas de la administración y del personal docente
+ * (consultar lo que ve un alumno concreto, suspender o reactivar un acceso, transferir un curso).
+ */
+export const audit = sqliteTable(
+  'aula_audit',
+  {
+    id: text('id').primaryKey(),
+    actor: text('actor').notNull(), // aula_users.id de quien lo hizo
+    action: text('action').notNull(), // ver_alumno | suspender | reactivar | transferir_curso
+    targetUser: text('target_user'),
+    course: text('course'),
+    detail: text('detail').notNull().default(''),
+    created: text('created').notNull(),
+  },
+  (t) => [index('aula_audit_target').on(t.targetUser, t.created), index('aula_audit_created').on(t.created)],
 );
 
 /** Lista de docentes y administración. Es la fuente de verdad de los roles. */

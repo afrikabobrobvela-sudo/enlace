@@ -8,7 +8,12 @@ const $ = s => document.querySelector(s), esc = s => String(s ?? '').replace(/[&
 let homeView = 'courses';
 /** Vista como alumno: el docente ve el curso con los filtros de un alumno (solo lectura). */
 let previewAsStudent = false;
-const viewSuffix = () => (previewAsStudent ? '&as=student' : '');
+// Vista de un alumno concreto (id de su inscripción): lo que ve esa persona, en solo lectura y con registro.
+let previewMember = null;
+const viewSuffix = () => (previewMember ? '&as=m:' + encodeURIComponent(previewMember) : previewAsStudent ? '&as=student' : '');
+/** Quién es "el alumno" en las pantallas de alumno: la persona que entró o, en la vista de un alumno, ese alumno. */
+const viewerKey = () => (current?.viewing ? current.viewing.key : me?.id);
+const myMember = () => (current?.viewing ? current.members.find((m) => m.id === current.viewing.id) : current?.members.find((m) => m.user_id === me?.id));
 const PREVIEW_READONLY = 'Estás en la vista de alumno: aquí no se guardan cambios. Vuelve a la vista de docente para editar.';
 let me = null, courses = [], current = null, section = 'hub', detail = null, moduleId = null, gradeTab = 'entry', busy = false, dirty = false;
 const records = kind => current?.records.filter(r => r.kind === kind) || [], find = id => current?.records.find(r => r.id === id), teaches = () => !!current?.canTeach;
@@ -61,9 +66,12 @@ async function reload() {
     courses = await request('/api/courses');
   render();
 }
-async function openCourse(id) {
-  if (current?.course.id !== id)
-    previewAsStudent = false;
+async function openCourse(id, member = null) {
+  // Al cambiar de curso se sale de la vista de alumno; `member` abre directamente la vista de ese alumno.
+  if (current?.course.id !== id || member) {
+    previewMember = member;
+    previewAsStudent = Boolean(member);
+  }
   const next = await request('/api/course?id=' + encodeURIComponent(id) + viewSuffix());
   current = next;
   section = 'hub';
@@ -82,7 +90,7 @@ function render() {
   richAttachments = null;
   nav();
   if (!current)
-    return me?.role === 'admin' && homeView === 'teachers' ? renderTeachers() : me?.role === 'admin' && homeView === 'reports' ? renderReports() : renderHome();
+    return me?.role === 'admin' && homeView === 'teachers' ? renderTeachers() : me?.role === 'admin' && homeView === 'reports' ? renderReports() : me?.role === 'admin' && homeView === 'users' ? renderUsers() : renderHome();
   const routes = {
     hub: renderHub,
     content: renderContent,
@@ -131,7 +139,7 @@ function renderTask() {
   const t = find(detail);
   if (!t)
     return renderTasks();
-  const subs = records('submission').filter(s => s.data.task === t.id), own = subs.find(s => s.data.member === current.members.find(m => m.user_id === me.id)?.id) || subs.find(s => s.author === me.id);
+  const subs = records('submission').filter(s => s.data.task === t.id), own = subs.find(s => s.data.member === myMember()?.id) || subs.find(s => s.author === viewerKey());
   $('#main').innerHTML = `<div class="crumbs"><button data-section="tasks">Actividades</button><span>›</span><span>${teaches() ? 'Envíos en carpeta' : 'Entrega'}</span></div><h1>${esc(t.data.title)}</h1><p class="deadline">Vence: ${fmt(t.data.due)}</p>${t.data.extended ? '<p class="extension-note">Tienes una prórroga: esta es tu nueva fecha de entrega.</p>' : ''}${!teaches() && t.data.groupCategory ? teamBannerHtml(t) : ''}${richText(t.data.body, t.data.fileIds)}<section class="task-materials"><div class="panel-head"><h2>Material del docente</h2>${teaches() ? button('＋ Subir archivos o presentaciones', 'task-files', t.id) : ''}</div>${fileLinks(t.data.fileIds)}${!t.data.fileIds?.length ? '<p class="muted">No hay archivos adjuntos a esta actividad.</p>' : ''}</section>${teaches() ? `<div class="toolbar">${button('Editar actividad', 'edit-task', t.id, 'secondary')}${button('Descargar entregas (ZIP)', 'zip-task', t.id, 'secondary')}</div><div class="table-wrap"><table><thead><tr><th>Alumno</th><th>Estado</th><th>Calificación</th><th>Acción</th></tr></thead><tbody>${current.members.filter(m => m.role === 'student').map(m => {
     const s = subs.find(s => s.data.member === m.id);
     const ext = extensionOf(t.id, m.id);
@@ -151,7 +159,7 @@ function renderForum() {
   const f = find(detail);
   if (!f)
     return renderForums();
-  $('#main').innerHTML = `<button class="back" data-section="forums">❮ Lista de foros</button><h1>${esc(f.data.title)}</h1>${richText(f.data.body)}<div class="toolbar">${button('Publicar mensaje', 'new-post', f.id)}</div>${records('post').filter(p => p.data.forum === f.id).map(p => `<article class="forum-post"><h2>${esc(p.data.title)}</h2><p class="muted">${esc(p.data.name)} · ${fmt(p.created)}</p>${richText(p.data.body)}${teaches() || p.author === me.id ? trashButton('post', p.id) : ''}</article>`).join('') || '<p class="empty">Todavía no hay publicaciones.</p>'}`;
+  $('#main').innerHTML = `<button class="back" data-section="forums">❮ Lista de foros</button><h1>${esc(f.data.title)}</h1>${richText(f.data.body)}<div class="toolbar">${button('Publicar mensaje', 'new-post', f.id)}</div>${records('post').filter(p => p.data.forum === f.id).map(p => `<article class="forum-post"><h2>${esc(p.data.title)}</h2><p class="muted">${esc(p.data.name)} · ${fmt(p.created)}</p>${richText(p.data.body)}${teaches() || p.author === viewerKey() ? trashButton('post', p.id) : ''}</article>`).join('') || '<p class="empty">Todavía no hay publicaciones.</p>'}`;
 }
 function renderQuizzes() {
   $('#main').innerHTML = `<h1>Evaluaciones</h1><div class="home-tabs"><button class="active">${teaches() ? 'Administrar evaluaciones' : 'Mis evaluaciones'}</button></div><div class="toolbar">${teaches() ? button('Nueva evaluación', 'new-quiz') : ''}</div><div class="table-wrap"><table><thead><tr><th>Evaluación</th><th>Preguntas</th><th>Estado</th></tr></thead><tbody>${records('quiz').map(q => `<tr><td>${button(esc(q.data.title), 'quiz', q.id, 'table-link')}</td><td>${q.data.questions.length}</td><td>${teaches() ? (q.data.visible ? 'Publicada' : 'Oculta') : esc(quizStudentStatus(q))}</td></tr>`).join('') || '<tr><td colspan="3">No hay evaluaciones.</td></tr>'}</tbody></table></div>`;
@@ -163,7 +171,7 @@ function average(member) {
   return studentGrade(member).value;
 }
 function renderGrades() {
-  const ts = records('task'), members = teaches() ? current.members.filter(m => m.role === 'student') : current.members.filter(m => m.user_id === me.id), w = records('weights')[0];
+  const ts = records('task'), members = teaches() ? current.members.filter(m => m.role === 'student') : [myMember()].filter(Boolean), w = records('weights')[0];
   const grading = gradingSettings(), cats = grading.scheme === 'categories' ? grading.categories : [];
   ensureAttendanceForGrades();
   if (!teaches()) {
@@ -303,7 +311,7 @@ function renderGroups() {
   return workspaceGroups();
 }
 function renderMembers() {
-  $('#main').innerHTML = `<h1>Listado de alumnos</h1><div class="toolbar">${teaches() ? button('Inscribir alumno', 'new-member') + button('Importar lista', 'bulk-members', '', 'secondary') : ''}<input data-search type="search" placeholder="Buscar…" aria-label="Buscar alumno"></div>${teaches() ? '<p class="real-status">La inscripción vincula el curso al correo del alumno: verá el curso cuando entre con ese mismo correo (su cuenta de Microsoft o de Google). No se envían invitaciones.</p>' : ''}${coTeachersPanel()}<div class="table-wrap"><table><thead><tr><th>Nombre</th>${teaches() ? '<th>Matrícula</th><th>Correo</th><th>Estado</th><th>Acción</th>' : ''}</tr></thead><tbody>${current.members.filter(m => m.role === 'student').map(m => `<tr data-search-row><td>${esc(m.name)}</td>${teaches() ? `<td>${esc(m.matricula)}</td><td>${esc(m.email)}</td><td>${m.user_id ? 'Cuenta vinculada' : 'Pendiente de ingreso'}</td><td>${button('Retirar', 'remove-member', m.id, 'text-btn')}</td>` : ''}</tr>`).join('') || '<tr><td>No hay alumnos inscritos.</td></tr>'}</tbody></table></div>`;
+  $('#main').innerHTML = `<h1>Listado de alumnos</h1><div class="toolbar">${teaches() ? button('Inscribir alumno', 'new-member') + button('Importar lista', 'bulk-members', '', 'secondary') : ''}<input data-search type="search" placeholder="Buscar…" aria-label="Buscar alumno"></div>${teaches() ? '<p class="real-status">La inscripción vincula el curso al correo del alumno: verá el curso cuando entre con ese mismo correo (su cuenta de Microsoft o de Google). No se envían invitaciones. «Ver lo que ve» muestra el curso exactamente como lo ve ese alumno (solo lectura; la consulta queda registrada).</p>' : ''}${coTeachersPanel()}<div class="table-wrap"><table><thead><tr><th>Nombre</th>${teaches() ? '<th>Matrícula</th><th>Correo</th><th>Estado</th><th>Acción</th>' : ''}</tr></thead><tbody>${current.members.filter(m => m.role === 'student').map(m => `<tr data-search-row><td>${esc(m.name)}</td>${teaches() ? `<td>${esc(m.matricula)}</td><td>${esc(m.email)}</td><td>${m.user_id ? 'Cuenta vinculada' : 'Pendiente de ingreso'}</td><td><div class="row-actions">${button('Ver lo que ve', 'view-member', m.id, 'text-btn')}${button('Retirar', 'remove-member', m.id, 'text-btn')}</div></td>` : ''}</tr>`).join('') || '<tr><td>No hay alumnos inscritos.</td></tr>'}</tbody></table></div>`;
 }
 function renderAdmin() {
   $('#main').innerHTML = `<h1>Administración del curso</h1><section class="admin-section"><h2>Configuración</h2><div class="admin-links">${button('Información del curso', 'edit-course', '', 'table-link')}${button('Copiar a un nuevo periodo', 'copy-course', '', 'table-link')}${current.canDelete ? button(current.course.archived_at ? 'Desarchivar curso' : 'Archivar curso', 'archive-course', '', 'table-link') : ''}${button('Exportar respaldo del curso', 'backup', '', 'table-link')}${current.canDelete ? button('Eliminar curso / grupo', 'delete-course', current.course.id, 'danger-link') : ''}</div></section><section class="admin-section"><h2>Administración de estudiantes</h2><div class="admin-links"><button class="table-link" data-section="members">Listado de alumnos</button><button class="table-link" data-section="groups">Equipos de trabajo</button><button class="table-link" data-section="progress">Progreso de la clase</button></div></section><section class="admin-section"><h2>Evaluación</h2><div class="admin-links"><button class="table-link" data-section="tasks">Actividades</button><button class="table-link" data-section="grades">Calificaciones</button><button class="table-link" data-section="quizzes">Evaluaciones</button></div></section><section class="admin-section"><h2>Papelera</h2><div class="admin-links"><button class="table-link" data-section="trash">Elementos eliminados</button></div><p class="muted">Lo que eliminas del curso se puede restaurar desde aquí con todo su contenido, entregas y calificaciones.</p></section><p class="real-status">El respaldo exporta registros y metadatos en JSON. Descarga los archivos adjuntos por separado. Conserva copias periódicas fuera de la plataforma.</p>`;
@@ -493,7 +501,7 @@ document.addEventListener('click', async (e) => {
   if (!b || busy)
     return;
   try {
-    if (b.dataset.section || ['home', 'teachers', 'reports', 'course', 'hub', 'task', 'edit-task', 'new-task', 'review'].includes(b.dataset.action)) {
+    if (b.dataset.section || ['home', 'teachers', 'reports', 'users', 'course', 'hub', 'task', 'edit-task', 'new-task', 'review'].includes(b.dataset.action)) {
       if (dirty && !confirm('Hay cambios sin guardar. ¿Quieres salir de esta pantalla?'))
         return;
       dirty = false;
@@ -531,6 +539,7 @@ document.addEventListener('click', async (e) => {
       case 'home':
         current = null;
         previewAsStudent = false;
+        previewMember = null;
         homeView = 'courses';
         courses = await request('/api/courses');
         render();
@@ -706,6 +715,7 @@ document.addEventListener('click', async (e) => {
         break;
       case 'teachers':
       case 'reports':
+      case 'users':
         current = null;
         homeView = b.dataset.action;
         render();
@@ -728,9 +738,17 @@ document.addEventListener('click', async (e) => {
         toast(published === 1 ? 'Se publicó 1 calificación.' : `Se publicaron ${published} calificaciones.`);
         break;
       }
+      case 'view-member':
       case 'toggle-preview': {
         // Mismos datos que recibe un alumno, filtrados por el servidor. Las pantallas solo de docente vuelven al inicio.
-        previewAsStudent = !previewAsStudent;
+        // «Ver lo que ve» (view-member) muestra a un alumno concreto; salir de cualquier vista regresa a la de docente.
+        if (b.dataset.action === 'view-member') {
+          previewMember = id;
+          previewAsStudent = true;
+        } else {
+          previewAsStudent = !previewAsStudent && !previewMember;
+          previewMember = null;
+        }
         attendanceData = null;
         current = await request('/api/course?id=' + encodeURIComponent(current.course.id) + viewSuffix());
         if (['progress', 'admin', 'trash', 'editor', 'review'].includes(section)) {
@@ -739,7 +757,7 @@ document.addEventListener('click', async (e) => {
         }
         render();
         window.scrollTo?.(0, 0);
-        toast(previewAsStudent ? 'Vista de alumno: así ven el curso tus alumnos.' : 'De vuelta en la vista de docente.');
+        toast(current.viewing ? `Ves lo mismo que ${current.viewing.name}. La consulta queda registrada.` : previewAsStudent ? 'Vista de alumno: así ven el curso tus alumnos.' : 'De vuelta en la vista de docente.');
         break;
       }
       case 'toggle-visible': {

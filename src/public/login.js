@@ -10,6 +10,7 @@ const LOGIN_ERRORS = {
   google_disabled: 'El acceso con Google todavía no está configurado en este servidor. Avisa a la coordinación.',
   microsoft: 'Microsoft no confirmó tu identidad. Entra con tu cuenta institucional y vuelve a intentarlo.',
   server: 'No se pudo completar el acceso por un error del servidor. Vuelve a intentarlo en un momento; si continúa, avisa a la administración.',
+  suspended: 'Tu acceso a Enlace está suspendido. Si crees que es un error, comunícate con la administración de tu academia.',
   microsoft_disabled: 'El acceso con Microsoft todavía no está configurado en este servidor. Avisa a la coordinación.',
 };
 

@@ -61,11 +61,11 @@ function activeSection() {
 function tasksBadge() {
   const subs = records('submission');
   if (teaches()) return subs.filter((s) => !s.data.manual && s.data.submitted && (s.data.grade === null || s.data.grade === undefined)).length;
-  const mine = current.members.find((m) => m.user_id === me?.id)?.id;
+  const mine = myMember()?.id;
   const now = Date.now();
   return records('task').filter((t) => {
     if (t.data.end && Date.parse(t.data.end) < now) return false;
-    return !subs.some((s) => s.data.task === t.id && !s.data.manual && (s.data.member === mine || s.author === me?.id));
+    return !subs.some((s) => s.data.task === t.id && !s.data.manual && (s.data.member === mine || s.author === viewerKey()));
   }).length;
 }
 

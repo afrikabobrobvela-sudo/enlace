@@ -1,7 +1,7 @@
 // API de Enlace: cursos, contenido, inscripciones, actividades, entregas, calificaciones y archivos.
 // Las rutas y las respuestas son compatibles con la interfaz de la versión 8.
 
-import { access, ownsCourse, requireAdmin, requireTeacher, viewAs } from './access.js';
+import { access, ownsCourse, requireAdmin, requireTeacher, viewAs, viewAudit } from './access.js';
 import { attendanceRoutes } from './attendance.js';
 import { directoryRoutes, registrationStatus } from './directory.js';
 import { PRIVACY_VERSION, privacyAccepted, privacyRoutes } from './privacy.js';
@@ -10,6 +10,7 @@ import { dashboardRoutes } from './dashboard.js';
 import { reportRoutes } from './reports.js';
 import { demoRoutes } from './demo.js';
 import { backupRoutes } from './backup.js';
+import { userRoutes } from './users.js';
 import {
   MAX_EXAM_EVENTS,
   MAX_PASSWORD_FAILURES,
@@ -82,7 +83,7 @@ export async function api(request, env) {
     }
     const ctx = { db: env.DB, env, user, url, request };
     const handler =
-      routes[route] || attendanceRoutes[route] || gradingRoutes[route] || directoryRoutes[route] || privacyRoutes[route] || periodRoutes[route] || dashboardRoutes[route] || reportRoutes[route] || demoRoutes[route] || backupRoutes[route];
+      routes[route] || attendanceRoutes[route] || gradingRoutes[route] || directoryRoutes[route] || privacyRoutes[route] || periodRoutes[route] || dashboardRoutes[route] || reportRoutes[route] || demoRoutes[route] || backupRoutes[route] || userRoutes[route];
     if (handler) return await handler(ctx);
     if (request.method === 'GET' && url.pathname.startsWith('/api/file/')) return await downloadFile(ctx, url.pathname.slice(10));
     fail('Ruta no encontrada.', 404);
@@ -259,7 +260,8 @@ const routes = {
   'GET /api/course': async ({ db, user, url }) => {
     const courseId = url.searchParams.get('id');
     const a = await access(db, user, courseId);
-    const { teach, preview, viewer } = viewAs(a, user, url);
+    const { teach, preview, viewer, member: viewing, attemptUser } = await viewAs(db, a, user, url);
+    if (viewing) await viewAudit(db, user, courseId, viewing);
     const rows = (
       await all(
         db,
@@ -284,7 +286,7 @@ const routes = {
             // Del modo examen tampoco recibe la contraseña ni la ubicación del salón.
             r.kind === 'quiz' ? { ...r, data: { ...r.data, questions: publicQuestions(r.data.questions), settings: publicSettings(r.data.settings) } } : r,
           );
-    const records = [...content, ...(await courseGradebook(db, courseId, { teacher: teach, userId: viewer }))];
+    const records = [...content, ...(await courseGradebook(db, courseId, { teacher: teach, userId: viewer, memberId: viewing?.id, attemptUser }))];
 
     const memberRows = await all(db, "SELECT * FROM aula_members WHERE course=? AND role!='removed' ORDER BY name", courseId);
     const members = teach
@@ -302,6 +304,8 @@ const routes = {
       // canPreview: quien enseña puede alternar entre su vista y la de alumno.
       canPreview: a.teach,
       preview,
+      // Vista de un alumno concreto: a quién se está viendo (la interfaz lo usa en lugar de la persona que consulta).
+      viewing: viewing ? { id: viewing.id, name: viewing.name, user_id: viewing.user_id, key: attemptUser } : null,
       canDelete: !preview && (user.role === 'admin' || ownsCourse(user, a.course)),
       records,
       members,

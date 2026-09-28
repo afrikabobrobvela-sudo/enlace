@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { fakeBrowser } from './lib/fake-dom.mjs';
 
 const browser = fakeBrowser({ fetch: async () => ({ ok: true, status: 200, json: async () => [] }) });
-browser.load('registro.js', 'admin-tools.js');
+browser.load('registro.js', 'admin-tools.js', 'usuarios.js');
 const { context } = browser;
 
 // ---- parseRoster: Excel (tabuladores), CSV y encabezados ----

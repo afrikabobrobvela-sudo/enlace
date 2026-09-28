@@ -177,7 +177,7 @@ export const attendanceRoutes = {
   'GET /api/attendance': async ({ db, user, url }) => {
     const course = url.searchParams.get('course');
     const a = await access(db, user, course);
-    const { teach, viewer } = viewAs(a, user, url);
+    const { teach, viewer, member } = await viewAs(db, a, user, url);
     const settings =
       (await one(db, 'SELECT min_percent, lates_per_absence, excused_counts FROM aula_attendance_settings WHERE course=?', course)) ||
       DEFAULT_SETTINGS;
@@ -192,9 +192,10 @@ export const attendanceRoutes = {
           db,
           `SELECT a.session, a.member, a.status, a.note FROM aula_attendance a
            JOIN aula_sessions s ON s.id=a.session JOIN aula_members m ON m.id=a.member
-           WHERE s.course=? AND m.user_id=?`,
+           WHERE s.course=?1 AND (m.id=?3 OR (?3 IS NULL AND m.user_id=?2))`,
           course,
           viewer,
+          member?.id ?? null,
         );
     return json({ settings, sessions, records, canTeach: teach });
   },

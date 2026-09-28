@@ -148,6 +148,14 @@ assert.equal(fallo.status, 302);
 assert.equal(fallo.headers.get('location'), '/?login_error=server');
 checks++;
 
+// ---- Cuenta suspendida: Google la reconoce, pero Enlace no abre sesión ----
+assert.equal((await googleLogin({ sub: 'g-suspendida', email: 'suspendida@example.test' })).status, 302);
+store.raw().prepare("UPDATE aula_users SET suspended_at='2026-01-01T00:00:00Z' WHERE email='suspendida@example.test'").run();
+const suspendida = await googleLogin({ sub: 'g-suspendida', email: 'suspendida@example.test' });
+assert.equal(suspendida.headers.get('location'), '/?login_error=suspended');
+assert(!/enlace_session=[^;]/.test(suspendida.headers.get('set-cookie') || ''), 'Sin cookie de sesión');
+checks += 2;
+
 // ---- Vigilancia ----
 const salud = await fetchWorker('/salud');
 assert.equal(salud.status, 200);

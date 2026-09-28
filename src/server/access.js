@@ -42,10 +42,32 @@ export function ownsCourse(user, course) {
 }
 
 /**
- * Vista como alumno: con `?as=student`, quien enseña en el curso recibe los datos exactamente como un alumno
- * inscrito sin entregas (mismos filtros del servidor). Solo aplica a lecturas; `viewer` es null en esa vista.
+ * Vista como alumno (solo lecturas; la interfaz bloquea cualquier escritura mientras está activa):
+ * - `?as=student`: quien enseña recibe los datos como un alumno inscrito sin entregas (`viewer` null).
+ * - `?as=m:<id de inscripción>`: lo que ve ESE alumno, con sus entregas, calificaciones publicadas, intentos,
+ *   prórrogas y asistencia (`member`). Cada consulta queda en el registro (aula_audit).
+ * `viewer` es el usuario cuyos archivos y datos se muestran; `attemptUser`, con quién se guardan sus intentos
+ * (los alumnos ficticios del curso de ejemplo no tienen cuenta: sus intentos usan `demo:<inscripción>`).
  */
-export function viewAs(a, user, url) {
-  const preview = a.teach && url.searchParams.get('as') === 'student';
-  return { teach: a.teach && !preview, preview, viewer: preview ? null : user.id };
+export async function viewAs(db, a, user, url) {
+  const as = url.searchParams.get('as') || '';
+  if (!a.teach || !as) return { teach: a.teach, preview: false, viewer: user.id, member: null, attemptUser: user.id };
+  if (as === 'student') return { teach: false, preview: true, viewer: null, member: null, attemptUser: null };
+  const memberId = as.startsWith('m:') ? as.slice(2, 202) : '';
+  const member = memberId && (await one(db, "SELECT id, user_id, name FROM aula_members WHERE id=? AND course=? AND role='student'", memberId, a.course.id));
+  if (!member) fail('Ese alumno no está inscrito en este curso.', 404);
+  return { teach: false, preview: true, viewer: member.user_id, member, attemptUser: member.user_id || `demo:${member.id}` };
+}
+
+/** Registra que alguien consultó lo que ve un alumno (una vez cada 30 minutos por alumno y curso). */
+export function viewAudit(db, user, course, member) {
+  const since = new Date(Date.now() - 30 * 60_000).toISOString();
+  return db
+    .prepare(
+      `INSERT INTO aula_audit (id,actor,action,target_user,course,detail,created)
+       SELECT ?1,?2,'ver_alumno',?3,?4,?5,?6 WHERE NOT EXISTS (
+         SELECT 1 FROM aula_audit WHERE actor=?2 AND action='ver_alumno' AND course=?4 AND detail=?5 AND created>?7)`,
+    )
+    .bind(crypto.randomUUID(), user.id, member.user_id, course, `Consultó la vista de ${member.name} (${member.id})`, new Date().toISOString(), since)
+    .run();
 }

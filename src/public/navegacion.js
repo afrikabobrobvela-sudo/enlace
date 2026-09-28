@@ -82,6 +82,7 @@ async function applyRoute(route) {
       if (current) {
         current = null;
         previewAsStudent = false;
+        previewMember = null;
         courses = await request('/api/courses');
       }
       homeView = route.h && me?.role === 'admin' ? route.h : 'courses';

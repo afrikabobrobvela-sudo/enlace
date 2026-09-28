@@ -737,3 +737,13 @@ button.my-grade-row:hover .my-grade-title { color: var(--link); }
 .backup-list { margin-top: 8px; }
 .backup-list ul { margin: 6px 0 0; padding-left: 20px; max-height: 240px; overflow: auto; }
 .backup-list li { margin: 3px 0; overflow-wrap: anywhere; }
+
+/* Usuarios (administración) */
+.suspended-pill { background: #fdecea; color: #9b1c1c; }
+.user-detail h3 { margin: 18px 0 6px; font-size: 1rem; }
+.user-list { list-style: none; margin: 0; padding: 0; }
+.user-list li { display: flex; gap: 12px; align-items: center; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--line, #e3e8ef); overflow-wrap: anywhere; }
+.user-list li:last-child { border-bottom: 0; }
+.user-list li > button { flex: none; }
+.users-filters .search-control { flex: 1 1 260px; }
+.user-list.user-log li { display: block; }

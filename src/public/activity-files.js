@@ -224,7 +224,7 @@ function renderEditor() {
   fillRubricPicker($('#rubricPicker'), d.rubric);
 }
 function submissionModal(t) {
-  const s = records('submission').find(s => s.data.task === t.id && s.author === me.id), d = t.data;
+  const s = records('submission').find(s => s.data.task === t.id && (s.author === viewerKey() || s.data.member === myMember()?.id)), d = t.data;
   if (s && !s.data.manual && d.allowResubmit === false)
     return toast('Esta actividad permite una sola entrega.');
   let manager;

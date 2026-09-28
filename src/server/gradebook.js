@@ -113,17 +113,19 @@ export async function loadTask(db, id, course) {
 }
 
 /** Todo lo de calificaciones de un curso. Si se indica `userId`, solo lo que esa persona puede ver. */
-export async function courseGradebook(db, course, { teacher, userId }) {
+export async function courseGradebook(db, course, { teacher, userId, memberId = null, attemptUser = userId }) {
+  // `memberId`: vista de un alumno concreto (puede no tener cuenta); si no, el alumno se busca por su cuenta (`userId`).
   // Para el alumno, su prórroga viene en la misma consulta (ext_due / ext_end): no suma consultas.
   const tasks = teacher
     ? await all(db, 'SELECT * FROM aula_tasks WHERE course=? AND deleted_at IS NULL ORDER BY created', course)
     : await all(
         db,
         `SELECT t.*, e.due AS ext_due, e.end_at AS ext_end FROM aula_tasks t
-         LEFT JOIN aula_extensions e ON e.task=t.id AND e.member=(SELECT id FROM aula_members WHERE course=?1 AND user_id=?2)
+         LEFT JOIN aula_extensions e ON e.task=t.id AND e.member=coalesce(?3, (SELECT id FROM aula_members WHERE course=?1 AND user_id=?2))
          WHERE t.course=?1 AND t.deleted_at IS NULL ORDER BY t.created`,
         course,
         userId,
+        memberId,
       );
   const settings = await one(db, 'SELECT * FROM aula_grade_settings WHERE course=?', course);
   // Las entregas de una actividad en la papelera se conservan, pero no se muestran ni cuentan.
@@ -132,13 +134,15 @@ export async function courseGradebook(db, course, { teacher, userId }) {
     ? await all(db, `SELECT s.* FROM aula_submissions s WHERE s.course=? ${active} ORDER BY s.created`, course)
     : await all(
         db,
-        `SELECT s.* FROM aula_submissions s JOIN aula_members m ON m.id=s.member WHERE s.course=? AND m.user_id=? ${active} ORDER BY s.created`,
+        `SELECT s.* FROM aula_submissions s JOIN aula_members m ON m.id=s.member
+         WHERE s.course=?1 AND (m.id=?3 OR (?3 IS NULL AND m.user_id=?2)) ${active} ORDER BY s.created`,
         course,
         userId,
+        memberId,
       );
   const attempts = teacher
     ? await all(db, 'SELECT * FROM aula_attempts WHERE course=? ORDER BY created', course)
-    : await all(db, 'SELECT * FROM aula_attempts WHERE course=? AND user_id=? ORDER BY created', course, userId);
+    : await all(db, 'SELECT * FROM aula_attempts WHERE course=? AND user_id=? ORDER BY created', course, attemptUser);
   // Prórrogas: el docente las ve todas; el alumno recibe sus actividades ya con sus fechas extendidas.
   const extensions = teacher ? await all(db, 'SELECT e.* FROM aula_extensions e JOIN aula_tasks t ON t.id=e.task WHERE t.course=?', course) : [];
   const hideDraft = (record) => {

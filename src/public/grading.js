@@ -119,7 +119,7 @@ const formatGrade = (value, decimals = 2) => (value === null || value === undefi
  * comentarios del docente, y los resultados de las evaluaciones. Se lee bien en el teléfono (sin tabla ancha).
  */
 function myGradesHtml() {
-  const member = current.members.find((m) => m.user_id === me.id);
+  const member = myMember();
   if (!member) {
     return `<h1>Mis calificaciones</h1><p class="real-status">${
       previewAsStudent ? 'En la vista de alumno no hay un alumno en particular: aquí cada alumno ve sus calificaciones y los comentarios que les dejes.' : 'No apareces como alumno en este curso.'

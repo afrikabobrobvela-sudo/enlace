@@ -153,7 +153,10 @@ const quinta = (await call('docente', '/api/attendance/session', { course: c, da
 const qr = await call('docente', '/api/attendance/checkin/open', { course: c, session: quinta, minutes: 10 });
 assert.equal(qr.mode, 'qr');
 assert.match(qr.pin, /^\d{4}$/);
-await call('ana', '/api/attendance/checkin/code', { code: qr.code.toUpperCase().padEnd(6, 'A').slice(0, 6), device: 'tel-ana-0001' }, 404);
+// El código del QR es aleatorio (puede tener - y _): para probar solo el modo, se le da la forma de un código de
+// pizarrón. Aun así, escrito a mano no se acepta, porque la sesión es de QR.
+store.raw().prepare("UPDATE aula_sessions SET checkin_code='QRQRQR' WHERE id=?").run(quinta);
+await call('ana', '/api/attendance/checkin/code', { code: 'qrqrqr', device: 'tel-ana-0001' }, 404);
 checks += 2;
 
 assert.deepEqual(store.raw().prepare('PRAGMA foreign_key_check').all(), []);

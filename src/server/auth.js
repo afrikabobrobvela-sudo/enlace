@@ -56,6 +56,8 @@ function microsoftTenant(env) {
 }
 
 /** Usuario de la sesión actual. Lanza 401 (con los métodos de acceso disponibles) si no hay sesión válida. */
+export const SUSPENDED_MESSAGE = 'Tu acceso a Enlace está suspendido. Si crees que es un error, comunícate con la administración de tu academia.';
+
 export async function identity(request, env) {
   const db = env.DB;
   if (!db) fail('El servicio de datos no está disponible.', 503);
@@ -74,6 +76,8 @@ export async function identity(request, env) {
   if (!user || user.session_version !== session.ver) {
     fail('Inicia sesión para continuar.', 401, { login: providers(env) });
   }
+  // Suspender también cierra sus sesiones; esto cubre una sesión que siguiera abierta.
+  if (user.suspended_at) fail(SUSPENDED_MESSAGE, 403, { suspended: true });
   return user;
 }
 
@@ -173,6 +177,7 @@ async function googleCallback(request, env) {
   const address = claims.email.toLowerCase();
   if (!emailAllowed(env, address)) return loginError('domain', [clearOauth]);
   const user = await completeLogin(env, { provider: 'google', subject: claims.sub, email: address, name: claims.name });
+  if (user.suspended_at) return loginError('suspended', [clearOauth]);
   return redirect(pending.returnTo, [clearOauth, await sessionCookie(user, env)]);
 }
 
@@ -243,6 +248,7 @@ async function microsoftCallback(request, env) {
   if (!microsoftDomainAllowed(env, address)) return loginError('domain', [clearOauth]);
   if (!emailAllowed(env, address)) return loginError('domain', [clearOauth]);
   const user = await completeLogin(env, { provider: 'microsoft', subject: `${tenantId}:${claims.oid}`, email: address, name: claims.name });
+  if (user.suspended_at) return loginError('suspended', [clearOauth]);
   return redirect(pending.returnTo, [clearOauth, await sessionCookie(user, env)]);
 }
 
@@ -335,6 +341,7 @@ async function emailVerify(request, env) {
     .run();
   if (!claimed.meta.changes) return loginError('link');
   const user = await completeLogin(env, { provider: 'email', subject: row.email, email: row.email, name: '' });
+  if (user.suspended_at) return loginError('suspended');
   return redirect(row.return_to, [await sessionCookie(user, env)]);
 }
 

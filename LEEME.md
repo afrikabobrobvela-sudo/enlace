@@ -1,9 +1,31 @@
-# Enlace · versión 12.11
+# Enlace · versión 12.12
 
 Plataforma académica independiente para docentes y alumnos de cualquier academia (nació en la Academia de Física de la BUAP), con interfaz inspirada en Brightspace.
 No es el código de D2L Brightspace ni una plataforma oficial de la BUAP.
 
 Esta versión se despliega en **tu propia cuenta de Cloudflare** (Workers + D1 + R2, plan gratuito) y ya no depende de ChatGPT Sites.
+
+## Novedades de la versión 12.12 (usuarios y vista de un alumno concreto)
+
+Requiere la migración **0017** (solo agrega una tabla y tres columnas; no modifica datos). `npm run configurar` descarga un respaldo y la aplica.
+
+- **Usuarios** (botón nuevo en Mis cursos, solo administración): busca a cualquier persona que haya entrado a Enlace por nombre o correo y filtra por rol o por estado. La **ficha** muestra:
+  - las cuentas con las que entra (Google, Microsoft o correo) y su último acceso;
+  - las sesiones abiertas;
+  - los cursos que imparte y en los que está inscrita;
+  - su registro de acciones.
+- **Suspender acceso.** Cierra todas sus sesiones y le impide entrar hasta que la reactives; al intentar entrar ve «Tu acceso a Enlace está suspendido». No se borra nada: cursos, entregas, calificaciones y asistencia se conservan. No se puede suspender la cuenta principal ni la propia. El motivo queda registrado.
+- **Transferir un curso** (desde la ficha del docente, «Transferir…»): cambia la persona propietaria, por ejemplo cuando otro profesor toma el grupo.
+  - Alumnos, contenido, entregas y calificaciones no cambian.
+  - Quien lo tenía puede quedarse como co-docente (casilla marcada por omisión).
+  - Solo a docentes que ya entraron a Enlace; también funciona con cursos archivados.
+- **Ver lo que ve un alumno concreto.** En *Alumnos* de cada curso («Ver lo que ve») o en la ficha de la persona.
+  - Muestra el curso exactamente como lo ve ese alumno: sus entregas, calificaciones publicadas (no los borradores), intentos, prórrogas y asistencia. Las pruebas comprueban que es idéntico a lo que el alumno recibe al entrar.
+  - Es de solo lectura: el aviso naranja arriba indica a quién estás viendo y cualquier intento de guardar se rechaza.
+  - La usan quienes imparten el curso y la administración.
+  - Cada consulta queda registrada, una vez cada 30 minutos por alumno.
+- **Registro de acciones** (*Usuarios → Registro de acciones*): quién consultó la vista de qué alumno, quién suspendió o reactivó un acceso y quién transfirió qué curso, con fecha.
+- Se corrigió una prueba automática que fallaba al azar (≈1 de cada 4 veces) por un error de la propia prueba, no de Enlace.
 
 ## Novedades de la versión 12.11 (respaldos completos y publicación segura)
 
@@ -199,7 +221,7 @@ La pantalla muestra en vivo cuántos se han registrado y quiénes acaban de hace
 
 1. Descarga la versión nueva en una carpeta **nueva** (no encima de la anterior), o `git pull` si trabajas desde GitHub.
 2. Haz un respaldo desde esa carpeta: `npm run respaldo`, y de los archivos desde Enlace (ver *Respaldos*).
-3. Doble clic en `configurar.cmd` (Windows) o `configurar.command` (Mac), o `npm run configurar`. Encuentra tu base `enlace-db` y tu almacenamiento, usa el correo de administración y la dirección `.workers.dev` de la vez anterior (desde la versión 12.11 los recuerda; la primera vez te los pregunta y revisa que el correo ya haya entrado a Enlace), descarga un respaldo, aplica las migraciones pendientes (0003: asistencia y borradores; 0004: registro con QR; 0005: categorías, rúbricas y equipos; 0006: sesiones; 0007: papelera; 0008: registro de docentes; 0009: aviso de privacidad; 0010: periodos y archivo; 0011: prórrogas; 0012: intentos de evaluaciones; 0013: avisos; 0014: historial de calificaciones; 0015: asistencia con código; 0016: modo examen) y publica. No cambia tus claves. Al pasar a la versión 12.1 cada persona vuelve a entrar con Google una vez (las sesiones ahora se registran en el servidor).
+3. Doble clic en `configurar.cmd` (Windows) o `configurar.command` (Mac), o `npm run configurar`. Encuentra tu base `enlace-db` y tu almacenamiento, usa el correo de administración y la dirección `.workers.dev` de la vez anterior (desde la versión 12.11 los recuerda; la primera vez te los pregunta y revisa que el correo ya haya entrado a Enlace), descarga un respaldo, aplica las migraciones pendientes (0003: asistencia y borradores; 0004: registro con QR; 0005: categorías, rúbricas y equipos; 0006: sesiones; 0007: papelera; 0008: registro de docentes; 0009: aviso de privacidad; 0010: periodos y archivo; 0011: prórrogas; 0012: intentos de evaluaciones; 0013: avisos; 0014: historial de calificaciones; 0015: asistencia con código; 0016: modo examen; 0017: usuarios y registro de acciones) y publica. No cambia tus claves. Al pasar a la versión 12.1 cada persona vuelve a entrar con Google una vez (las sesiones ahora se registran en el servidor).
 
 **No publiques con `npx wrangler deploy` directamente**: el `wrangler.toml` del ZIP trae valores de ejemplo y quedarías sin la cuenta de administración (`npm run deploy` y `npm run db:migrate` ya lo impiden). Si prefieres hacerlo a mano: copia tu `database_id` y tu correo del `wrangler.toml` anterior al nuevo (y `ALLOWED_EMAIL_DOMAINS` si lo usabas) y ejecuta `npm install`, `npm run db:migrate` y `npm run deploy`, **en ese orden**: si publicas antes de migrar, Asistencia y Calificaciones fallarán hasta que apliques la migración.
 
@@ -408,6 +430,7 @@ La cookie de sesión usa el prefijo `__Host-`, que exige conexión segura. Chrom
 - `test-configurar.mjs`: no se publica ni se migra con los valores de ejemplo; `configurar` verifica el correo contra la base y recuerda los datos entre versiones (con un wrangler simulado).
 - `test-respaldo-archivos.mjs`: respaldo de archivos solo para administración, incremental, con índice; restauración solo de lo que falta y con el tamaño exacto.
 - `test-restaurar.mjs`: la exportación de D1 se reordena y comprueba con el esquema real; `npm run restaurar` solo escribe en bases vacías.
+- `test-usuarios.mjs`: la vista de un alumno es idéntica a la suya y queda registrada; directorio, suspender y reactivar sin perder datos, transferir cursos.
 - `test-qr.mjs`: generador de QR. Sus huellas corresponden a códigos que se decodificaron con OpenCV; si una cambia, hay que volver a verificarlo.
 - `test-auth-ui.mjs`, `test-admin-ui.mjs`, `test-teacher-files.mjs`, `test-workspace-ui.mjs`, `test-fase1-ui.mjs`, `test-fase2-ui.mjs`, `test-fase2b-ui.mjs`: interfaz (incluye las reglas del porcentaje de asistencia, el reparto de equipos, la revisión en secuencia, la exportación a Excel sin fórmulas inyectadas, que la firma del QR del navegador sea la que acepta el servidor, el ZIP verificado por un lector independiente, las reglas de riesgo, el cálculo por categorías y puntos, el redondeo de la calificación final y la evaluación con rúbrica).
 
