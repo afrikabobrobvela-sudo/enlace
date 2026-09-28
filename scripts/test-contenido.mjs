@@ -90,7 +90,7 @@ assert.deepEqual([normal.canTeach, normal.canPreview, normal.preview], [true, tr
 const ids = (r) => r.records.filter((x) => x.kind !== 'grading').map((x) => x.id).sort();
 assert.deepEqual(ids(vista), ids(real), 'Mismos elementos que un alumno (sin ocultos ni eliminados)');
 assert(ids(normal).length > ids(vista).length, 'El docente normalmente ve más');
-assert(vista.records.filter((r) => r.kind === 'quiz').every((q) => q.data.questions.every((x) => !('correct' in x))), 'Sin respuestas correctas');
+assert(vista.records.filter((r) => r.kind === 'quiz').every((q) => q.data.questions.every((x) => x === null)), 'Sin preguntas antes de contestar (ni respuestas correctas)');
 assert(vista.members.every((m) => !('email' in m) && !('matricula' in m)), 'Sin correos ni matrículas');
 assert.deepEqual(vista.files.map((f) => f.id).sort(), real.files.map((f) => f.id).sort(), 'Mismos archivos visibles');
 assert(!vista.records.some((r) => r.kind === 'submission' || r.kind === 'attempt'), 'Sin entregas propias ni ajenas');

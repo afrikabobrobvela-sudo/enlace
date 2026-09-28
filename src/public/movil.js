@@ -52,7 +52,7 @@ const moreSections = () =>
 function activeSection() {
   if (['task', 'editor', 'review'].includes(section)) return 'tasks';
   if (section === 'forum') return 'forums';
-  if (section === 'quiz') return 'quizzes';
+  if (section === 'quiz' || section === 'bank') return 'quizzes';
   if (section === 'trash') return 'admin';
   return section;
 }

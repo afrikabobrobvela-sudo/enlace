@@ -3,7 +3,8 @@
 import { distanceMeters } from './attendance.js';
 import { fail, isoDate, text } from './http.js';
 
-export const MAX_QUESTIONS = 50;
+export const MAX_QUESTIONS = 100;
+const MAX_POOL_NAME = 80;
 const TIME_GRACE_MS = 60_000; // margen para la conexión al enviar
 const VARIABLE = /^[A-Za-z_][A-Za-z0-9_]{0,15}$/;
 
@@ -124,38 +125,79 @@ function validVariables(input) {
   });
 }
 
+/**
+ * Valida y normaliza una pregunta (de una evaluación o del banco). `pool` es el grupo del que se sortean preguntas
+ * («tomar 3 de las 10 de Cinemática»); en el banco no se guarda (ahí el tema hace ese papel).
+ */
+export function questionFields(q, label) {
+  if (!q || typeof q !== 'object') fail(`${label}: pregunta no válida.`);
+  const type = q.type === 'numeric' ? 'numeric' : 'choice';
+  const prompt = text(q.text, 3000);
+  // Imagen de la pregunta (archivo del docente en el curso; el servidor comprueba que exista al guardar).
+  const image = typeof q.image === 'string' && /^[A-Za-z0-9-]{1,64}$/.test(q.image) ? { image: q.image } : {};
+  const poolName = String(q.pool ?? '').trim().replace(/\s+/g, ' ').slice(0, MAX_POOL_NAME);
+  const pool = poolName ? { pool: poolName } : {};
+  if (type === 'choice') {
+    const validOptions =
+      Array.isArray(q.options) && q.options.length >= 2 && q.options.length <= 6 && Number.isInteger(q.correct) && q.correct >= 0 && q.correct < q.options.length;
+    if (!validOptions) fail(`${label}: agrega de 2 a 6 opciones y marca la correcta.`);
+    return { type, text: prompt, options: q.options.map((o) => text(o, 1500)), correct: q.correct, ...image, ...pool };
+  }
+  const variables = validVariables(q.variables);
+  const answer = text(String(q.answer ?? ''), 300);
+  const tolerance = Number(q.tolerance ?? 1);
+  if (!Number.isFinite(tolerance) || tolerance < 0 || tolerance > 50) fail(`${label}: la tolerancia va de 0 a 50 %.`);
+  // La fórmula debe dar un número en los extremos del rango de las variables.
+  for (const pick of ['min', 'max']) {
+    const vars = Object.fromEntries(variables.map((v) => [v.name, v[pick]]));
+    try {
+      evaluate(answer, vars);
+    } catch (error) {
+      fail(`${label}: la respuesta no se puede calcular (${error.message}).`);
+    }
+  }
+  return { type, text: prompt, answer, tolerance, unit: String(q.unit ?? '').trim().slice(0, 30), variables, ...image, ...pool };
+}
+
+/**
+ * Preguntas al azar: de cada grupo, cada alumno recibe `count` preguntas (distintas para cada alumno e intento).
+ * Solo se guardan los grupos que existen y en los que se toman menos de las que hay.
+ */
+function drawFields(input, questions) {
+  if (input === undefined || input === null) return [];
+  if (!Array.isArray(input) || input.length > 20) fail('Revisa las preguntas al azar.');
+  const sizes = new Map();
+  for (const q of questions) if (q.pool) sizes.set(q.pool, (sizes.get(q.pool) || 0) + 1);
+  const seen = new Set();
+  const draw = [];
+  for (const entry of input) {
+    const pool = String(entry?.pool ?? '').trim().replace(/\s+/g, ' ').slice(0, MAX_POOL_NAME);
+    const count = Number(entry?.count);
+    if (!pool || seen.has(pool)) continue;
+    seen.add(pool);
+    const size = sizes.get(pool);
+    if (!size) fail(`No hay preguntas en el grupo «${pool}».`);
+    if (!Number.isInteger(count) || count < 1) fail(`Grupo «${pool}»: toma al menos una pregunta.`);
+    if (count < size) draw.push({ pool, count });
+  }
+  return draw;
+}
+
+/** Cuántas preguntas recibe cada alumno (con preguntas al azar, menos que las de la evaluación). */
+export function questionCount(data) {
+  const questions = data?.questions || [];
+  let n = questions.length;
+  for (const { pool, count } of data?.settings?.draw || []) n -= questions.filter((q) => q.pool === pool).length - count;
+  return n;
+}
+
 /** Valida y normaliza las preguntas y la configuración de una evaluación. */
 export function quizFields(input) {
   if (!Array.isArray(input.questions) || !input.questions.length || input.questions.length > MAX_QUESTIONS) {
     fail(`Agrega de una a ${MAX_QUESTIONS} preguntas.`);
   }
-  const questions = input.questions.map((q, n) => {
-    const label = `Pregunta ${n + 1}`;
-    const type = q.type === 'numeric' ? 'numeric' : 'choice';
-    const prompt = text(q.text, 3000);
-    // Imagen de la pregunta (archivo del docente en el curso; el servidor comprueba que exista al guardar).
-    const image = typeof q.image === 'string' && /^[A-Za-z0-9-]{1,64}$/.test(q.image) ? { image: q.image } : {};
-    if (type === 'choice') {
-      const validOptions =
-        Array.isArray(q.options) && q.options.length >= 2 && q.options.length <= 6 && Number.isInteger(q.correct) && q.correct >= 0 && q.correct < q.options.length;
-      if (!validOptions) fail(`${label}: agrega de 2 a 6 opciones y marca la correcta.`);
-      return { type, text: prompt, options: q.options.map((o) => text(o, 1500)), correct: q.correct, ...image };
-    }
-    const variables = validVariables(q.variables);
-    const answer = text(String(q.answer ?? ''), 300);
-    const tolerance = Number(q.tolerance ?? 1);
-    if (!Number.isFinite(tolerance) || tolerance < 0 || tolerance > 50) fail(`${label}: la tolerancia va de 0 a 50 %.`);
-    // La fórmula debe dar un número en los extremos del rango de las variables.
-    for (const pick of ['min', 'max']) {
-      const vars = Object.fromEntries(variables.map((v) => [v.name, v[pick]]));
-      try {
-        evaluate(answer, vars);
-      } catch (error) {
-        fail(`${label}: la respuesta no se puede calcular (${error.message}).`);
-      }
-    }
-    return { type, text: prompt, answer, tolerance, unit: String(q.unit ?? '').trim().slice(0, 30), variables, ...image };
-  });
+  const questions = input.questions.map((q, n) => questionFields(q, `Pregunta ${n + 1}`));
+  const draw = drawFields(input.settings?.draw, questions);
   const attempts = Number(input.settings?.attempts ?? 1);
   const timeLimit = Number(input.settings?.timeLimit ?? 0);
   if (!Number.isInteger(attempts) || attempts < 1 || attempts > 10) fail('Los intentos van de 1 a 10.');
@@ -177,6 +219,7 @@ export function quizFields(input) {
       shuffle: input.settings?.shuffle === true,
       // Cada alumno ve las opciones de cada pregunta en otro orden (se califica con el orden original).
       shuffleOptions: input.settings?.shuffleOptions === true,
+      ...(draw.length ? { draw } : {}),
       ...(opensAt ? { opensAt } : {}),
       ...(closesAt ? { closesAt } : {}),
       timerMode,
@@ -300,13 +343,25 @@ export function finalAnswers(quiz, instance, start, submitted) {
 }
 
 /** Forma canónica de una pregunta (las de versiones anteriores no tienen `type`: son de opción múltiple). */
-const canonical = (q) =>
-  q.type === 'numeric'
+const canonical = (q) => ({
+  ...(q.type === 'numeric'
     ? { type: 'numeric', text: q.text, answer: q.answer, tolerance: q.tolerance, unit: q.unit, variables: q.variables }
-    : { type: 'choice', text: q.text, options: q.options, correct: q.correct };
+    : { type: 'choice', text: q.text, options: q.options, correct: q.correct }),
+  ...(q.pool ? { pool: q.pool } : {}),
+});
 
 /** ¿Son las mismas preguntas? (con intentos registrados no se permite cambiarlas). */
 export const sameQuestions = (a, b) => JSON.stringify((a || []).map(canonical)) === JSON.stringify((b || []).map(canonical));
+
+/** ¿Se sortean igual? (con intentos registrados tampoco se permite cambiar cuántas se toman de cada grupo). */
+export const sameDraw = (a, b) => JSON.stringify(a?.draw || []) === JSON.stringify(b?.draw || []);
+
+/** Huella de una pregunta del banco (sin imagen ni grupo): la misma pregunta no se guarda dos veces. */
+export const questionFingerprint = async (q) => {
+  const { pool: _pool, ...rest } = canonical(q);
+  const bytes = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(rest))));
+  return [...bytes].map((b) => b.toString(16).padStart(2, '0')).join('');
+};
 
 /** Lo que el alumno ve de las preguntas antes de empezar (sin respuestas ni fórmulas). */
 export function publicQuestions(questions) {
@@ -346,6 +401,21 @@ export function quizInstance(quiz, userId, attempt) {
       item.perm = perm;
       item.options = perm.map((i) => item.options[i]);
     }
+  }
+  // Preguntas al azar: de cada grupo se quedan `count` (se sortea al final, así las evaluaciones sin grupos
+  // conservan exactamente sus instancias anteriores). Las que quedan mantienen su orden.
+  const draw = quiz.data.settings?.draw || [];
+  if (draw.length) {
+    const drop = new Set();
+    for (const { pool, count } of draw) {
+      const members = questions.filter((item) => quiz.data.questions[item.index].pool === pool).map((item) => item.index);
+      for (let i = members.length - 1; i > 0; i--) {
+        const j = Math.floor(random() * (i + 1));
+        [members[i], members[j]] = [members[j], members[i]];
+      }
+      for (const index of members.slice(count)) drop.add(index);
+    }
+    return questions.filter((item) => !drop.has(item.index));
   }
   return questions;
 }
@@ -387,7 +457,8 @@ export function gradeAttempt(quiz, instance, answers) {
     if (ok) correct++;
     return { index: item.index, answer: value, correct: ok, values: item.values };
   });
-  return { correct, total: questions.length, score: (correct / questions.length) * 10, details };
+  // Con preguntas al azar, el total es lo que recibió el alumno (no todas las de la evaluación).
+  return { correct, total: instance.length, score: (correct / instance.length) * 10, details };
 }
 
 /** ¿Sigue abierto el intento? Con tiempo límite, hasta el inicio + límite (+1 min de margen). */

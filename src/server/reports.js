@@ -10,13 +10,17 @@ export const CLEANUP_CONFIRMATION = 'BORRAR ARCHIVOS';
 
 /**
  * Archivos que nada enlaza: ni unidades/materiales/noticias/foros (aunque estén en la papelera, porque se pueden
- * restaurar), ni actividades (también en papelera) ni entregas. Por eso aquí NO se filtra deleted_at.
- * D1 admite hasta 5 términos por SELECT compuesto: aquí son 3.
+ * restaurar), ni actividades (también en papelera), ni entregas, ni imágenes de preguntas de evaluaciones o del
+ * banco de preguntas. Por eso aquí NO se filtra deleted_at.
+ * D1 admite hasta 5 términos por SELECT compuesto: aquí son 5 (el máximo).
  */
 const ORPHANS = `WITH refs(id) AS (
     SELECT j.value FROM aula_records r, json_each(r.data,'$.fileIds') j WHERE json_valid(r.data)
     UNION SELECT j.value FROM aula_tasks t, json_each(t.file_ids) j
-    UNION SELECT j.value FROM aula_submissions s, json_each(s.file_ids) j)
+    UNION SELECT j.value FROM aula_submissions s, json_each(s.file_ids) j
+    UNION SELECT json_extract(q.value,'$.image') FROM aula_records r, json_each(r.data,'$.questions') q
+      WHERE r.kind='quiz' AND json_valid(r.data)
+    UNION SELECT json_extract(b.question,'$.image') FROM aula_question_bank b)
   SELECT f.id, f.course, f.name, f.size, f.scope, f.created, coalesce(f.r2_key, f.id) AS r2_key, c.name AS course_name
   FROM aula_files f LEFT JOIN aula_courses c ON c.id=f.course
   WHERE f.created < ?1 AND f.id NOT IN (SELECT id FROM refs WHERE id IS NOT NULL)`;

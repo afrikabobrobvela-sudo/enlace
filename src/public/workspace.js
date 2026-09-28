@@ -10,7 +10,7 @@ function workspaceNav() {
   $('#crumb').textContent = c ? c.name : 'Mis cursos';
   $('#profile').textContent = (me?.name || '').split(/\s+/).filter(Boolean).slice(0, 2).map(x => x[0]).join('').toUpperCase();
   $('#roleLabel').textContent = me?.role === 'admin' ? 'Administrador' : me?.role === 'teacher' ? 'Docente' : 'Alumno';
-  const active = section === 'task' || section === 'editor' || section === 'review' ? 'tasks' : section === 'forum' ? 'forums' : section === 'quiz' ? 'quizzes' : section;
+  const active = section === 'task' || section === 'editor' || section === 'review' ? 'tasks' : section === 'forum' ? 'forums' : section === 'quiz' || section === 'bank' ? 'quizzes' : section;
   const item = ([id, label]) => `<button data-section="${id}" class="${active === id ? 'active' : ''}" ${active === id ? 'aria-current="page"' : ''}>${label}</button>`;
   $('#topnav').innerHTML = c ? [['hub', 'Inicio'], ['content', 'Contenido'], ['tasks', 'Actividades'], ['forums', 'Foros'], ['quizzes', 'Evaluaciones'], ['grades', 'Calificaciones']].map(item).join('') + `<details class="more-menu"><summary>Más</summary><div class="menu-panel">${[['groups', 'Grupos'], ['members', 'Alumnos'], ['attendance', 'Asistencia'], ['notices', 'Noticias'], ...(teaches() ? [['progress', 'Progreso'], ['admin', 'Administración del curso']] : [])].map(item).join('')}</div></details>` : '';
   // Vista como alumno: el docente alterna entre su vista y la que reciben sus alumnos.

@@ -659,3 +659,26 @@ export const gradeHistory = sqliteTable(
   },
   (t) => [index('aula_grade_history_lookup').on(t.course, t.task, t.member)],
 );
+
+/**
+ * Migración 0022: banco de preguntas. Cada docente guarda preguntas (con la misma forma que en una evaluación) por
+ * tema, para reutilizarlas en cualquier curso y semestre; `shared` las muestra a los docentes de su misma academia.
+ * Una evaluación guarda su propia copia: cambiar o borrar una pregunta del banco no altera evaluaciones ni intentos.
+ * `fingerprint` (SHA-256 de la pregunta sin imagen) evita guardar dos veces la misma pregunta.
+ */
+export const questionBank = sqliteTable(
+  'aula_question_bank',
+  {
+    id: text('id').primaryKey(),
+    ownerId: text('owner_id')
+      .notNull()
+      .references(() => users.id),
+    topic: text('topic').notNull().default(''),
+    question: text('question').notNull(),
+    fingerprint: text('fingerprint').notNull(),
+    shared: integer('shared').notNull().default(0),
+    created: text('created').notNull(),
+    updated: text('updated').notNull(),
+  },
+  (t) => [index('aula_question_bank_owner').on(t.ownerId, t.topic), index('aula_question_bank_fingerprint').on(t.ownerId, t.fingerprint), index('aula_question_bank_shared').on(t.shared, t.ownerId)],
+);

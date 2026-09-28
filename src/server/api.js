@@ -27,10 +27,13 @@ import {
   publicQuestions,
   publicSettings,
   quizFields,
+  questionCount,
   quizInstance,
+  sameDraw,
   sameQuestions,
   validEvents,
 } from './quizzes.js';
+import { bankImageVisible, bankRoutes } from './bank.js';
 import { gradingRoutes } from './grading.js';
 import { clearSessionCookie, identity, lastLogins, revokeAllStatements } from './auth.js';
 import {
@@ -111,7 +114,7 @@ export async function api(request, env) {
     if (user.activeExam) assertExamRoute(route, url, user);
     const ctx = { db: env.DB, env, user, url, request };
     const handler =
-      routes[route] || attendanceRoutes[route] || gradingRoutes[route] || directoryRoutes[route] || privacyRoutes[route] || periodRoutes[route] || dashboardRoutes[route] || reportRoutes[route] || demoRoutes[route] || backupRoutes[route] || userRoutes[route];
+      routes[route] || attendanceRoutes[route] || gradingRoutes[route] || directoryRoutes[route] || privacyRoutes[route] || periodRoutes[route] || dashboardRoutes[route] || reportRoutes[route] || demoRoutes[route] || backupRoutes[route] || userRoutes[route] || bankRoutes[route];
     if (handler) return await handler(ctx);
     if (request.method === 'GET' && url.pathname.startsWith('/api/file/')) return await downloadFile(ctx, url.pathname.slice(10));
     fail('Ruta no encontrada.', 404);
@@ -422,13 +425,26 @@ const routes = {
           .map((r) =>
             // El alumno nunca recibe respuestas correctas, fórmulas ni rangos de las variables.
             // Del modo examen tampoco recibe la contraseña ni la ubicación del salón.
-            r.kind === 'quiz' ? { ...r, data: { ...r.data, questions: publicQuestions(r.data.questions), settings: publicSettings(r.data.settings) } } : r,
+            r.kind === 'quiz'
+              ? { ...r, data: { ...r.data, questions: publicQuestions(r.data.questions), questionCount: questionCount(r.data), settings: publicSettings(r.data.settings) } }
+              : r,
           );
     const quizzesById = new Map(rows.filter((r) => r.kind === 'quiz').map((r) => [r.id, r]));
     // El alumno ve de sus intentos lo que permita cada evaluación («qué ve al terminar»).
     const records = [...content, ...(await courseGradebook(db, courseId, { teacher: teach, userId: viewer, memberId: viewing?.id, attemptUser }))].map((r) =>
       !teach && r.kind === 'attempt' ? studentAttemptView(r, quizzesById.get(r.data.quiz)) : r,
     );
+    // El alumno no recibe las preguntas antes de contestarlas (llegan al empezar el intento, solo las que le tocan):
+    // solo las que ya contestó, para ver en qué acertó. Las demás quedan en null.
+    if (!teach) {
+      const seen = new Map();
+      for (const r of records) {
+        if (r.kind !== 'attempt') continue;
+        if (!seen.has(r.data.quiz)) seen.set(r.data.quiz, new Set());
+        for (const d of r.data.details || []) seen.get(r.data.quiz).add(d.index);
+      }
+      for (const r of records) if (r.kind === 'quiz') r.data.questions = r.data.questions.map((q, i) => (seen.get(r.id)?.has(i) ? q : null));
+    }
 
     const memberRows = await all(db, "SELECT * FROM aula_members WHERE course=? AND role!='removed' ORDER BY name", courseId);
     const members = teach
@@ -455,7 +471,7 @@ const routes = {
     if (user.activeExam && !teach) {
       const quizId = user.activeExam.quiz;
       const quiz = records.find((r) => r.id === quizId);
-      const images = new Set((quiz?.data.questions || []).map((q) => q.image).filter(Boolean));
+      const images = new Set((quiz?.data.questions || []).map((q) => q?.image).filter(Boolean));
       return json({
         course: a.course,
         canTeach: false,
@@ -871,6 +887,9 @@ const routes = {
         if (previous && !sameQuestions(previous.data.questions, data.questions) && (await quizHasAttempts(db, body.course, previous.id))) {
           fail('Una evaluación con intentos no permite cambiar sus preguntas. Crea una nueva.');
         }
+        if (previous && !sameDraw(previous.data.settings, data.settings) && (await quizHasAttempts(db, body.course, previous.id))) {
+          fail('Una evaluación con intentos no permite cambiar las preguntas al azar. Crea una nueva.');
+        }
       }
       if (kind === 'group') {
         data.members = Array.isArray(input.members) ? [...new Set(input.members)] : [];
@@ -1142,7 +1161,7 @@ const routes = {
           saved = null;
         }
         const instance = quizInstance(quiz, user.id, attempt);
-        let graded = { correct: 0, total: quiz.data.questions.length, score: 0, details: null };
+        let graded = { correct: 0, total: instance.length, score: 0, details: null };
         if (saved && Object.keys(saved).length) {
           try {
             graded = gradeAttempt(quiz, instance, finalAnswers(quiz, instance, start, saved));
@@ -1207,7 +1226,7 @@ const routes = {
     if (start.locked_at) fail(LOCKED_MESSAGE, 423, { locked: true });
     const events = validEvents(body.events);
     const noBack = quiz.data.settings.exam.noBack;
-    const position = Number.isInteger(body.position) ? Math.min(Math.max(body.position, 0), quiz.data.questions.length) : start.position;
+    const position = Number.isInteger(body.position) ? Math.min(Math.max(body.position, 0), questionCount(quiz.data)) : start.position;
     let answers = null;
     if (body.answers && typeof body.answers === 'object' && !Array.isArray(body.answers)) {
       const next = {};
@@ -1395,7 +1414,7 @@ const routes = {
         away: Boolean(s.away_since),
       })),
       blocked: blocked.map((b) => ({ user: b.user_id, name: b.name })),
-      total: quiz.data.questions.length,
+      total: questionCount(quiz.data),
     });
   },
 
@@ -1576,7 +1595,9 @@ async function downloadFile({ db, env, user, url, request }, id) {
     );
     if (!inExam) fail(ACTIVE_EXAM_MESSAGE, 423, { activeExam: user.activeExam });
   }
-  const a = await access(db, user, file.course);
+  // Imagen de una pregunta del banco (propia o compartida por la academia): la ve el docente aunque sea de otro curso.
+  const fromBank = url.searchParams.get('bank') === '1' && file.scope === 'material' && (await bankImageVisible(db, user, id));
+  const a = fromBank ? { teach: true } : await access(db, user, file.course);
   if (!a.teach && file.owner !== user.id) {
     // Un alumno solo descarga material del docente enlazado desde una unidad visible, un material visible
     // (cuya unidad también es visible) o una actividad visible.

@@ -1,9 +1,31 @@
-# Enlace · versión 12.16
+# Enlace · versión 12.17
 
 Plataforma académica independiente para docentes y alumnos de cualquier academia (nació en la Academia de Física de la BUAP), con interfaz inspirada en Brightspace.
 No es el código de D2L Brightspace ni una plataforma oficial de la BUAP.
 
 Esta versión se despliega en **tu propia cuenta de Cloudflare** (Workers + D1 + R2, plan gratuito) y ya no depende de ChatGPT Sites.
+
+## Novedades de la versión 12.17 (banco de preguntas y preguntas al azar)
+
+Requiere la migración **0022**: solo crea una tabla nueva (el banco de preguntas) y no modifica datos. `npm run configurar` descarga un respaldo y la aplica.
+
+- **Banco de preguntas** (Evaluaciones → pestaña «Banco de preguntas», solo docentes):
+  - Guarda preguntas por tema (por ejemplo «Cinemática») para usarlas en cualquier curso y semestre: opción múltiple o numéricas, con imagen, fórmulas y datos aleatorios.
+  - Tres formas de llenarlo: «Nueva pregunta» en el banco; «Guardar en el banco» en la página de una evaluación que ya tengas (puede usar el grupo de cada pregunta como tema); y las repetidas no se duplican.
+  - Buscar por texto y filtrar por tema; renombrar un tema; editar o borrar preguntas.
+  - **Compartir con tu academia:** al compartir un tema, lo ven y lo pueden usar (sin modificarlo) los docentes de tu misma academia. Quien no ha indicado su academia no ve lo compartido (se indica en Inicio, «Completa tu registro»).
+  - Una evaluación guarda su propia copia de cada pregunta: cambiar o borrar una pregunta del banco no altera las evaluaciones que ya la usan ni sus intentos.
+  - Las imágenes de una pregunta usada en otro curso no se copian en el almacenamiento: el nuevo curso apunta al mismo archivo (como al copiar un curso).
+- **Agregar desde el banco** (en el editor de la evaluación): elige tus preguntas o las de tu academia, filtra por tema, marca todas las que ves y agrégalas. Llegan con su tema como **grupo**.
+- **Preguntas al azar:**
+  - Cada pregunta puede tener un grupo. En «Preguntas al azar» eliges cuántas recibe cada alumno de cada grupo (por ejemplo, 3 de las 10 de Cinemática). Las preguntas sin grupo le tocan a todos.
+  - Cada alumno recibe otras, y en cada intento se sortean de nuevo. La calificación es sobre las que recibió (3 de 3 correctas = 10).
+  - Con intentos registrados no se puede cambiar el sorteo (igual que las preguntas).
+  - La lista de evaluaciones dice «5 de 12 (al azar)», y la página de la evaluación explica cuántas recibe cada alumno de cada grupo.
+- **El alumno ya no recibe las preguntas antes de empezar.** Antes, aunque la pantalla no las mostraba, llegaban al navegador del alumno (sin respuestas) y alguien con conocimientos podía leerlas antes del examen. Ahora solo sabe cuántas son; recibe las suyas al empezar, y después solo ve las que contestó (para sus ✓ y ✗).
+- **Correcciones de la 12.16:**
+  - La limpieza de archivos sin uso (Administración → Reportes) no tomaba en cuenta las imágenes de las preguntas: después de 7 días las habría ofrecido para borrar. Ahora las respeta (de evaluaciones y del banco). Si ya usaste la limpieza desde la 12.16, revisa que las imágenes de tus preguntas se sigan viendo.
+  - Con «ocultar la calificación», al enviar la evaluación aparecía un error aunque el envío sí se guardaba. Ahora dice «Tu docente publicará la calificación».
 
 ## Novedades de la versión 12.16 (examen estricto: contraseña, plataforma bloqueada, un solo dispositivo, imágenes y fechas)
 
@@ -311,7 +333,7 @@ La pantalla muestra en vivo cuántos se han registrado y quiénes acaban de hace
 
 1. Descarga la versión nueva en una carpeta **nueva** (no encima de la anterior), o `git pull` si trabajas desde GitHub.
 2. Haz un respaldo desde esa carpeta: `npm run respaldo`, y de los archivos desde Enlace (ver *Respaldos*).
-3. Doble clic en `configurar.cmd` (Windows) o `configurar.command` (Mac), o `npm run configurar`. Encuentra tu base `enlace-db` y tu almacenamiento, usa el correo de administración y la dirección `.workers.dev` de la vez anterior (desde la versión 12.11 los recuerda; la primera vez te los pregunta y revisa que el correo ya haya entrado a Enlace), descarga un respaldo, aplica las migraciones pendientes (0003: asistencia y borradores; 0004: registro con QR; 0005: categorías, rúbricas y equipos; 0006: sesiones; 0007: papelera; 0008: registro de docentes; 0009: aviso de privacidad; 0010: periodos y archivo; 0011: prórrogas; 0012: intentos de evaluaciones; 0013: avisos; 0014: historial de calificaciones; 0015: asistencia con código; 0016: modo examen; 0017: usuarios y registro de acciones; 0018: avisos leídos; 0019: seguimiento del contenido; 0020: bloqueo del examen; 0021: examen estricto) y publica. No cambia tus claves. Al pasar a la versión 12.1 cada persona vuelve a entrar con Google una vez (las sesiones ahora se registran en el servidor).
+3. Doble clic en `configurar.cmd` (Windows) o `configurar.command` (Mac), o `npm run configurar`. Encuentra tu base `enlace-db` y tu almacenamiento, usa el correo de administración y la dirección `.workers.dev` de la vez anterior (desde la versión 12.11 los recuerda; la primera vez te los pregunta y revisa que el correo ya haya entrado a Enlace), descarga un respaldo, aplica las migraciones pendientes (0003: asistencia y borradores; 0004: registro con QR; 0005: categorías, rúbricas y equipos; 0006: sesiones; 0007: papelera; 0008: registro de docentes; 0009: aviso de privacidad; 0010: periodos y archivo; 0011: prórrogas; 0012: intentos de evaluaciones; 0013: avisos; 0014: historial de calificaciones; 0015: asistencia con código; 0016: modo examen; 0017: usuarios y registro de acciones; 0018: avisos leídos; 0019: seguimiento del contenido; 0020: bloqueo del examen; 0021: examen estricto; 0022: banco de preguntas) y publica. No cambia tus claves. Al pasar a la versión 12.1 cada persona vuelve a entrar con Google una vez (las sesiones ahora se registran en el servidor).
 
 **No publiques con `npx wrangler deploy` directamente**: el `wrangler.toml` del ZIP trae valores de ejemplo y quedarías sin la cuenta de administración (`npm run deploy` y `npm run db:migrate` ya lo impiden). Si prefieres hacerlo a mano: copia tu `database_id` y tu correo del `wrangler.toml` anterior al nuevo (y `ALLOWED_EMAIL_DOMAINS` si lo usabas) y ejecuta `npm install`, `npm run db:migrate` y `npm run deploy`, **en ese orden**: si publicas antes de migrar, Asistencia y Calificaciones fallarán hasta que apliques la migración.
 
@@ -521,6 +543,7 @@ La cookie de sesión usa el prefijo `__Host-`, que exige conexión segura. Chrom
 - `test-respaldo-archivos.mjs`: respaldo de archivos solo para administración, incremental, con índice; restauración solo de lo que falta y con el tamaño exacto.
 - `test-restaurar.mjs`: la exportación de D1 se reordena y comprueba con el esquema real; `npm run restaurar` solo escribe en bases vacías.
 - `test-bloqueo-examen.mjs`: bloqueo al salir (tolerancia, sin guardar ni enviar mientras está bloqueado, código solo para el docente, 5 intentos, desbloqueo del docente, al retomar tras cerrar el navegador).
+- `test-banco.mjs`: banco de preguntas (guardar sin duplicar, compartir solo con la propia academia, usar preguntas de un colega en otro curso con su imagen, editar y borrar sin tocar evaluaciones), preguntas al azar por grupo, el alumno sin preguntas antes de contestar e imágenes de preguntas que no cuentan como archivos sin uso.
 - `test-examen-estricto.mjs`: contraseña con bloqueo, plataforma bloqueada mientras contesta (ni otros cursos, materiales, avisos ni archivos), un solo dispositivo (volver a iniciar sesión bloquea y la sesión anterior ya no guarda), opciones aleatorias bien calificadas, imágenes que no se adelantan, capturas registradas, fechas, temporizador fijo y qué ve el alumno al terminar.
 - `test-programacion.mjs`: publicación programada por todas las vías (curso, descargas, foro, evaluación, avisos), evaluaciones en la calificación (validación y cálculo real: mejor, último, promedio) y seguimiento del contenido.
 - `test-calendario.mjs`: calendario con fechas por alumno (prórrogas), estado de entrega, sin lo oculto ni lo archivado, vista del docente; avisos leídos uno por uno o todos, historial y archivo .ics.

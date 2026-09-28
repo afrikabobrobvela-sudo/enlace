@@ -71,9 +71,9 @@ const q = await quiz({
   ],
 });
 
-// El alumno no recibe respuestas, fórmulas ni rangos.
+// El alumno no recibe respuestas, fórmulas ni rangos; antes de empezar, ni siquiera las preguntas (solo cuántas son).
 const publico = (await call('ana', '/api/course?id=' + c)).records.find((r) => r.id === q.id);
-assert.deepEqual(publico.data.questions.map((x) => Object.keys(x).sort()), [['text', 'type', 'unit'], ['options', 'text', 'type'], ['text', 'type', 'unit']]);
+assert.deepEqual([publico.data.questions, publico.data.questionCount], [[null, null, null], 3]);
 assert.equal(JSON.stringify(publico).includes('sqrt'), false);
 checks += 2;
 

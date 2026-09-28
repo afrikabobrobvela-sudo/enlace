@@ -6,6 +6,8 @@ let quizTimer = null; // cronómetro del intento en curso
 let quizLastResult = null; // resultado del último intento enviado (se muestra al volver a dibujar la pantalla)
 let examMonitorTimer = null;
 let examState = null; // examen en curso: posición, respuestas, salidas de la pantalla por enviar
+let quizEditorMode = 'quiz'; // el editor de preguntas también se usa para el banco ('bank': sin grupo)
+let quizDrawCounts = new Map(); // editor: grupo → cuántas preguntas recibe cada alumno
 
 const QUIZ_LETTERS = 'ABCDEF';
 const quizSettings = (q) => ({ attempts: 1, timeLimit: 0, shuffle: false, exam: null, ...(q?.data.settings || {}) });
@@ -15,6 +17,7 @@ function quizSettingsText(settings) {
   const parts = [settings.attempts === 1 ? 'Un intento' : `${settings.attempts} intentos (cuenta el mejor)`];
   parts.push(settings.timeLimit ? `${settings.timeLimit} minutos por intento` : 'sin tiempo límite');
   if (settings.shuffle) parts.push('preguntas en orden aleatorio');
+  if (settings.draw?.length) parts.push('preguntas sorteadas para cada alumno');
   if (settings.opensAt || settings.closesAt)
     parts.push([settings.opensAt ? `abre ${fmt(settings.opensAt)}` : '', settings.closesAt ? `cierra ${fmt(settings.closesAt)}` : ''].filter(Boolean).join(', '));
   if (settings.timerMode === 'fixed') parts.push('el tiempo corre desde la hora de inicio');
@@ -38,6 +41,16 @@ function quizStudentStatus(q) {
 }
 
 // ---- Editor ---------------------------------------------------------------------------------------
+
+/** Cuántas preguntas recibe cada alumno (con preguntas al azar, menos que las de la evaluación). */
+function questionCountOf(data) {
+  if (Number.isInteger(data.questionCount)) return data.questionCount;
+  let n = data.questions.length;
+  for (const { pool, count } of data.settings?.draw || []) n -= data.questions.filter((q) => q?.pool === pool).length - count;
+  return n;
+}
+
+const poolTag = (x) => (x.pool ? ` <span class="quiz-pool-tag">${esc(x.pool)}</span>` : '');
 
 /** Imagen de una pregunta (se sirve con la misma revisión de permisos que cualquier archivo del curso). */
 const quizImageHtml = (id, n) => (id ? `<img class="quiz-image" src="/api/file/${esc(id)}?preview=1" alt="Imagen de la pregunta ${n + 1}">` : '');
@@ -84,13 +97,14 @@ function quizQuestionHtml(q, i) {
     <legend>Pregunta ${i + 1}</legend>
     <div class="quiz-question-head">
       <label>Tipo<select data-f="type"><option value="choice" ${numeric ? '' : 'selected'}>Opción múltiple</option><option value="numeric" ${numeric ? 'selected' : ''}>Respuesta numérica</option></select></label>
+      ${quizEditorMode === 'quiz' ? `<label>Grupo para sortear (opcional)<input data-f="pool" list="quizPools" maxlength="80" value="${esc(q.pool || '')}" placeholder="Por ejemplo: Cinemática"></label>` : ''}
       ${quizDraft.length > 1 ? `<button type="button" class="danger-link" data-quiz="remove-question">Quitar pregunta</button>` : ''}
     </div>
     <label>Enunciado<textarea data-f="text" required maxlength="3000">${esc(q.text)}</textarea></label>
     <p class="muted quiz-text-hint">Puedes escribir fórmulas entre signos de pesos: $v = v_0 + a t$.</p>
     <div class="quiz-image-edit"><input type="hidden" data-f="image" value="${esc(q.image || '')}">${
       q.image
-        ? `<img class="quiz-image" src="/api/file/${esc(q.image)}?preview=1" alt="Imagen de la pregunta ${i + 1}"><button type="button" class="danger-link" data-quiz="remove-image">Quitar imagen</button>`
+        ? `<img class="quiz-image" src="/api/file/${esc(q.image)}?preview=1${quizEditorMode === 'bank' ? '&bank=1' : ''}" alt="Imagen de la pregunta ${i + 1}"><button type="button" class="danger-link" data-quiz="remove-image">Quitar imagen</button>`
         : `<label class="secondary quiz-image-add">＋ Imagen (diagrama, gráfica, foto)<input type="file" accept="image/*" data-quiz-image hidden></label>`
     }</div>
     ${body}
@@ -102,6 +116,7 @@ function readQuizQuestions() {
   return [...document.querySelectorAll('#quizQuestions [data-question]')].map((box, i) => {
     const get = (f) => box.querySelector(`[data-f="${f}"]`)?.value ?? '';
     const image = get('image') ? { image: get('image') } : {};
+    if (get('pool').trim()) image.pool = get('pool').trim();
     if (get('type') === 'numeric') {
       return {
         ...image,
@@ -126,7 +141,38 @@ function readQuizQuestions() {
 
 function renderQuizQuestions() {
   $('#quizQuestions').innerHTML = quizDraft.map(quizQuestionHtml).join('');
+  renderQuizDraw();
 }
+
+/** Preguntas al azar: por cada grupo escrito en las preguntas, cuántas recibe cada alumno. */
+function renderQuizDraw() {
+  const box = document.getElementById('quizDrawBox');
+  if (!box) return;
+  for (const input of box.querySelectorAll('[data-draw-pool]')) quizDrawCounts.set(input.dataset.drawPool, Number(input.value));
+  const sizes = new Map();
+  for (const q of quizDraft) if (q.pool?.trim()) sizes.set(q.pool.trim(), (sizes.get(q.pool.trim()) || 0) + 1);
+  const pools = document.getElementById('quizPools');
+  if (pools) pools.innerHTML = [...sizes.keys()].map((p) => `<option value="${esc(p)}">`).join('');
+  if (!sizes.size) {
+    box.innerHTML = `<legend>Preguntas al azar</legend><p class="muted">Para que cada alumno reciba preguntas distintas, escribe el mismo grupo en varias preguntas (por ejemplo «Cinemática») y aquí eliges cuántas recibe de cada grupo. Las preguntas del banco llegan con su tema como grupo.</p>`;
+    return;
+  }
+  let total = quizDraft.length;
+  const rows = [...sizes].map(([pool, size]) => {
+    const count = Math.min(Math.max(quizDrawCounts.get(pool) || size, 1), size);
+    total -= size - count;
+    return `<label class="draw-row"><span>«${esc(pool)}»: cada alumno recibe</span> <input type="number" data-draw-pool="${esc(pool)}" min="1" max="${size}" value="${count}" aria-label="Preguntas de ${esc(pool)} para cada alumno"> <span>de ${size}</span></label>`;
+  });
+  box.innerHTML = `<legend>Preguntas al azar</legend>${rows.join('')}<p class="muted">Cada alumno recibe <b>${total} de ${quizDraft.length}</b> preguntas; las que no tienen grupo le tocan a todos. En cada intento se sortean otra vez.</p>`;
+}
+
+document.addEventListener('change', (e) => {
+  if (e.target.matches('#quizQuestions [data-f="pool"]')) {
+    quizDraft = readQuizQuestions();
+    renderQuizDraw();
+  }
+  if (e.target.matches('#quizDrawBox [data-draw-pool]')) renderQuizDraw();
+});
 
 /** ¿Cuenta en la calificación? Solo con categorías: la evaluación entra a una categoría con su valor en puntos. */
 function quizGradeHtml(grade) {
@@ -149,6 +195,8 @@ function quizGradeHtml(grade) {
 
 function quizModal(old) {
   const settings = quizSettings(old);
+  quizEditorMode = 'quiz';
+  quizDrawCounts = new Map((settings.draw || []).map((d) => [d.pool, d.count]));
   quizDraft = old ? structuredClone(old.data.questions).map((q) => (q.type === 'numeric' ? q : { ...q, type: 'choice' })) : [blankQuestion()];
   modal(
     old ? 'Editar evaluación' : 'Nueva evaluación',
@@ -170,8 +218,10 @@ function quizModal(old) {
       examSettingsHtml(settings.exam) +
       quizGradeHtml(old?.data.grade) +
       visible(old?.data.visible ?? false, old?.data.publishAt || '') +
-      `<div id="quizQuestions"></div><button type="button" class="secondary" data-quiz="add-question">＋ Agregar pregunta</button>
-       <p class="pending-message">Una evaluación con respuestas recibidas no permite modificar las preguntas.</p>` +
+      `<div id="quizQuestions"></div><datalist id="quizPools"></datalist>
+       <div class="quiz-add-row"><button type="button" class="secondary" data-quiz="add-question">＋ Agregar pregunta</button>${bankPickerHtml()}</div>
+       <fieldset class="quiz-settings" id="quizDrawBox"></fieldset>
+       <p class="pending-message">Una evaluación con respuestas recibidas no permite modificar las preguntas ni las preguntas al azar.</p>` +
       (old ? `<p class="modal-danger">${trashButton('quiz', old.id, 'Eliminar evaluación')}</p>` : ''),
     (f) =>
       save(
@@ -187,6 +237,7 @@ function quizModal(old) {
             timeLimit: Number(f.get('timeLimit')),
             shuffle: f.get('shuffle') === 'on',
             shuffleOptions: f.get('shuffleOptions') === 'on',
+            draw: [...document.querySelectorAll('#quizDrawBox [data-draw-pool]')].map((input) => ({ pool: input.dataset.drawPool, count: Number(input.value) })),
             opensAt: iso(f.get('opensAt')),
             closesAt: iso(f.get('closesAt')),
             timerMode: f.get('timerFixed') === 'on' ? 'fixed' : 'attempt',
@@ -270,7 +321,7 @@ function quizEditorAction(action, target) {
   quizDraft = readQuizQuestions();
   const box = target.closest('[data-question]');
   const q = box ? quizDraft[Number(box.dataset.question)] : null;
-  if (action === 'add-question' && quizDraft.length < 50) quizDraft.push(blankQuestion(quizDraft.at(-1)?.type));
+  if (action === 'add-question' && quizDraft.length < 100) quizDraft.push(blankQuestion(quizDraft.at(-1)?.type));
   if (action === 'remove-question') quizDraft.splice(Number(box.dataset.question), 1);
   if (action === 'add-option' && q.options.length < 6) q.options.push('');
   if (action === 'remove-option') {
@@ -321,7 +372,8 @@ document.addEventListener('change', (e) => {
   if (!e.target.matches('#quizQuestions [data-f="type"]')) return;
   quizDraft = readQuizQuestions();
   const i = Number(e.target.closest('[data-question]').dataset.question);
-  quizDraft[i] = { ...blankQuestion(e.target.value), text: quizDraft[i].text, ...(quizDraft[i].image ? { image: quizDraft[i].image } : {}) };
+  const { text, image, pool } = quizDraft[i];
+  quizDraft[i] = { ...blankQuestion(e.target.value), text, ...(image ? { image } : {}), ...(pool ? { pool } : {}) };
   renderQuizQuestions();
 });
 
@@ -339,10 +391,10 @@ function renderQuiz() {
     const questions = q.data.questions
       .map((x, i) =>
         x.type === 'numeric'
-          ? `<section class="quiz-question"><h3>${i + 1}. ${esc(x.text)}</h3>${quizImageHtml(x.image, i)}<p>Respuesta: <code>${esc(x.answer)}</code> ${x.unit ? esc(x.unit) : ''} · tolerancia ${esc(x.tolerance)} %</p>${
+          ? `<section class="quiz-question"><h3>${i + 1}. ${esc(x.text)}${poolTag(x)}</h3>${quizImageHtml(x.image, i)}<p>Respuesta: <code>${esc(x.answer)}</code> ${x.unit ? esc(x.unit) : ''} · tolerancia ${esc(x.tolerance)} %</p>${
               x.variables?.length ? `<p class="muted">Datos por alumno: ${x.variables.map((v) => `${esc(v.name)} entre ${esc(v.min)} y ${esc(v.max)}`).join('; ')}</p>` : ''
             }</section>`
-          : `<section class="quiz-question"><h3>${i + 1}. ${esc(x.text)}</h3>${quizImageHtml(x.image, i)}<ol type="A">${x.options.map((o, j) => `<li>${esc(o)} ${j === x.correct ? '✓' : ''}</li>`).join('')}</ol></section>`,
+          : `<section class="quiz-question"><h3>${i + 1}. ${esc(x.text)}${poolTag(x)}</h3>${quizImageHtml(x.image, i)}<ol type="A">${x.options.map((o, j) => `<li>${esc(o)} ${j === x.correct ? '✓' : ''}</li>`).join('')}</ol></section>`,
       )
       .join('');
     // Resultados por alumno: mejor calificación y número de intentos.
@@ -357,8 +409,13 @@ function renderQuiz() {
     }
     const rows = [...byStudent.values()].sort((a, b) => a.name.localeCompare(b.name, 'es'));
     const exam = settings.exam?.enabled;
-    $('#main').innerHTML = `${head}<div class="toolbar">${button('Editar evaluación', 'edit-quiz', q.id, 'secondary')}</div>
-      ${exam ? `<section class="exam-monitor" id="examMonitor"><p class="muted">Cargando examen en curso…</p></section>` : ''}${questions}
+    const drawNote = settings.draw?.length
+      ? `<p class="real-status">Cada alumno recibe ${questionCountOf(q.data)} de ${q.data.questions.length} preguntas: ${settings.draw
+          .map((d) => `${d.count} de «${esc(d.pool)}»`)
+          .join(', ')} al azar${questionCountOf(q.data) > settings.draw.reduce((n, d) => n + d.count, 0) ? ' y todas las que no tienen grupo' : ''}.</p>`
+      : '';
+    $('#main').innerHTML = `${head}<div class="toolbar">${button('Editar evaluación', 'edit-quiz', q.id, 'secondary')}<button class="secondary" data-bank-save="${esc(q.id)}">Guardar en el banco</button></div>
+      ${exam ? `<section class="exam-monitor" id="examMonitor"><p class="muted">Cargando examen en curso…</p></section>` : ''}${drawNote}${questions}
       <h2>Resultados</h2><div class="table-wrap"><table><thead><tr><th>Alumno</th><th>Mejor calificación</th><th>Intentos</th><th>Último envío</th>${exam ? '<th>Integridad</th>' : ''}</tr></thead><tbody>${
         rows
           .map(
@@ -394,7 +451,7 @@ function renderQuiz() {
     ? '<div class="quiz-result is-new"><p><b>Tu evaluación se envió.</b> Tu docente publicará la calificación.</p></div>'
     : last
     ? `<div class="quiz-result is-new"><p>Resultado del intento ${last.data.attempt}: <b>${last.data.score.toFixed(2)} / 10</b> (${last.data.correct} de ${last.data.total} correctas)</p><ul class="quiz-detail">${(last.data.details || [])
-        .map((d) => `<li class="${d.correct ? 'ok' : 'bad'}">${d.correct ? '✓' : '✗'} ${esc((q.data.questions[d.index]?.text || '').replace(/\{([A-Za-z_]\w*)\}/g, (m, name) => d.values?.[name] ?? m))}</li>`)
+        .map((d) => `<li class="${d.correct ? 'ok' : 'bad'}">${d.correct ? '✓' : '✗'} ${esc(quizLastResult.texts?.[d.index] ?? (q.data.questions[d.index]?.text || '').replace(/\{([A-Za-z_]\w*)\}/g, (m, name) => d.values?.[name] ?? m))}</li>`)
         .join('')}</ul></div>`
     : '';
   const exam = settings.exam?.enabled ? settings.exam : null;
@@ -462,8 +519,9 @@ async function startQuizAttempt(quizId, extra = {}) {
     releaseActiveExam();
     clearInterval(quizTimer);
     stopExam();
-    quizLastResult = { quiz: quizId, result };
-    return `Evaluación enviada: ${result.data.score.toFixed(2)} / 10.`;
+    // Los enunciados tal como los vio (con sus datos), para mostrar sus ✓ y ✗ al volver a dibujar la pantalla.
+    quizLastResult = { quiz: quizId, result, texts: Object.fromEntries(data.questions.map((x) => [x.index, x.text])) };
+    return result.data.score === null || result.data.score === undefined ? 'Evaluación enviada. Tu docente publicará la calificación.' : `Evaluación enviada: ${result.data.score.toFixed(2)} / 10.`;
   };
   if (exam) startExam(quizId, data, collect);
   bindForm('#quizAttempt', submit);

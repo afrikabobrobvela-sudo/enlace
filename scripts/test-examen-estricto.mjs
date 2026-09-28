@@ -70,10 +70,10 @@ checks += 2;
 assert.equal((await raw('ana', '/api/file/' + imagen)).status, 403);
 await call('ana', '/api/courses');
 assert.equal((await call('ana', '/api/me')).activeExam, null);
-// El alumno recibe la imagen en la pregunta, pero no la respuesta correcta.
+// Antes de empezar no recibe las preguntas (ni el id de la imagen): llegan con el intento.
 const visto = (await call('ana', '/api/course?id=' + c)).records.find((r) => r.id === q.id);
-assert.equal(visto.data.questions[0].image, imagen);
-assert(!('correct' in visto.data.questions[0]));
+assert.deepEqual(visto.data.questions, [null, null, null]);
+assert(!JSON.stringify(visto).includes(imagen));
 checks += 3;
 
 // ---- Contraseña + bloqueo al salir juntos ----

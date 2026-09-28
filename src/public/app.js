@@ -111,6 +111,7 @@ function render() {
     forum: renderForum,
     quizzes: renderQuizzes,
     quiz: renderQuiz,
+    bank: renderBank,
     groups: renderGroups,
     grades: renderGrades,
     review: renderReview,
@@ -174,7 +175,7 @@ function renderForum() {
   $('#main').innerHTML = `<button class="back" data-section="forums">❮ Lista de foros</button><h1>${esc(f.data.title)}</h1>${richText(f.data.body)}<div class="toolbar">${button('Publicar mensaje', 'new-post', f.id)}</div>${records('post').filter(p => p.data.forum === f.id).map(p => `<article class="forum-post"><h2>${esc(p.data.title)}</h2><p class="muted">${esc(p.data.name)} · ${fmt(p.created)}</p>${richText(p.data.body)}${teaches() || p.author === viewerKey() ? trashButton('post', p.id) : ''}</article>`).join('') || '<p class="empty">Todavía no hay publicaciones.</p>'}`;
 }
 function renderQuizzes() {
-  $('#main').innerHTML = `<h1>Evaluaciones</h1><div class="home-tabs"><button class="active">${teaches() ? 'Administrar evaluaciones' : 'Mis evaluaciones'}</button></div><div class="toolbar">${teaches() ? button('Nueva evaluación', 'new-quiz') : ''}</div><div class="table-wrap"><table><thead><tr><th>Evaluación</th><th>Preguntas</th><th>Estado</th></tr></thead><tbody>${records('quiz').map(q => `<tr><td>${button(esc(q.data.title), 'quiz', q.id, 'table-link')}</td><td>${q.data.questions.length}</td><td>${teaches() ? (q.data.visible ? (scheduledFor(q) ? 'Programada · ' + esc(fmt(scheduledFor(q))) : 'Publicada') : 'Oculta') : esc(quizStudentStatus(q))}</td></tr>`).join('') || '<tr><td colspan="3">No hay evaluaciones.</td></tr>'}</tbody></table></div>`;
+  $('#main').innerHTML = `<h1>Evaluaciones</h1><div class="home-tabs"><button class="active">${teaches() ? 'Administrar evaluaciones' : 'Mis evaluaciones'}</button>${teaches() ? '<button data-section="bank">Banco de preguntas</button>' : ''}</div><div class="toolbar">${teaches() ? button('Nueva evaluación', 'new-quiz') : ''}</div><div class="table-wrap"><table><thead><tr><th>Evaluación</th><th>Preguntas</th><th>Estado</th></tr></thead><tbody>${records('quiz').map(q => `<tr><td>${button(esc(q.data.title), 'quiz', q.id, 'table-link')}</td><td>${questionCountOf(q.data) < q.data.questions.length ? `${questionCountOf(q.data)} de ${q.data.questions.length} (al azar)` : questionCountOf(q.data)}</td><td>${teaches() ? (q.data.visible ? (scheduledFor(q) ? 'Programada · ' + esc(fmt(scheduledFor(q))) : 'Publicada') : 'Oculta') : esc(quizStudentStatus(q))}</td></tr>`).join('') || '<tr><td colspan="3">No hay evaluaciones.</td></tr>'}</tbody></table></div>`;
 }
 function gradeOf(member, task) {
   return records('submission').find(s => s.data.member === member && s.data.task === task);

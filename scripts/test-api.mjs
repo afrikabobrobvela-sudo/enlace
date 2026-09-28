@@ -104,9 +104,15 @@ try {
     rec('quiz', { title: 'Quiz', questions: [{ text: '2+2', options: ['3', '4', '5'], correct: 1 }] }),
     201,
   );
-  assert(!('correct' in (await call('student', '/api/course?id=' + c)).records.find((x) => x.id === quiz.id).data.questions[0]));
+  // Antes de contestar, el alumno no recibe las preguntas (ni la respuesta correcta): solo cuántas son.
+  const antes = (await call('student', '/api/course?id=' + c)).records.find((x) => x.id === quiz.id).data;
+  assert.deepEqual([antes.questions, antes.questionCount], [[null], 1]);
   const attempt = await call('student', '/api/attempt', { course: c, quiz: quiz.id, answers: [1] }, 201);
   assert.equal(attempt.data.score, 10);
+  // Después ve el enunciado de lo que contestó (para sus ✓ y ✗), nunca la respuesta correcta.
+  const despues = (await call('student', '/api/course?id=' + c)).records.find((x) => x.id === quiz.id).data.questions[0];
+  assert.equal(despues.text, '2+2');
+  assert(!('correct' in despues));
   await call('student', '/api/attempt', { course: c, quiz: quiz.id, answers: [0] }, 409);
   await call(
     'owner',
