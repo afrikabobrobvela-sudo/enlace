@@ -1,5 +1,5 @@
 // Asistencia: sesiones de clase, registro por alumno y reglas para calcular el porcentaje.
-import { access, requireTeacher } from './access.js';
+import { access, requireTeacher, viewAs } from './access.js';
 import {
   all,
   base64url,
@@ -106,11 +106,12 @@ export const attendanceRoutes = {
   'GET /api/attendance': async ({ db, user, url }) => {
     const course = url.searchParams.get('course');
     const a = await access(db, user, course);
+    const { teach, viewer } = viewAs(a, user, url);
     const settings =
       (await one(db, 'SELECT min_percent, lates_per_absence, excused_counts FROM aula_attendance_settings WHERE course=?', course)) ||
       DEFAULT_SETTINGS;
     const sessions = await all(db, 'SELECT id, date, start_time, topic FROM aula_sessions WHERE course=? ORDER BY date, start_time', course);
-    const records = a.teach
+    const records = teach
       ? await all(
           db,
           'SELECT a.session, a.member, a.status, a.note FROM aula_attendance a JOIN aula_sessions s ON s.id=a.session WHERE s.course=?',
@@ -122,9 +123,9 @@ export const attendanceRoutes = {
            JOIN aula_sessions s ON s.id=a.session JOIN aula_members m ON m.id=a.member
            WHERE s.course=? AND m.user_id=?`,
           course,
-          user.id,
+          viewer,
         );
-    return json({ settings, sessions, records, canTeach: a.teach });
+    return json({ settings, sessions, records, canTeach: teach });
   },
 
   'POST /api/attendance/session': async ({ db, user, request }) => {

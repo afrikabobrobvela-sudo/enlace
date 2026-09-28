@@ -60,6 +60,8 @@ function attachmentManager(root, existing = [], scope = 'material', max = 5, ext
   };
   render();
   const send = (item, onProgress) => new Promise((resolve, reject) => {
+    if (previewAsStudent)
+      return reject(new Error(PREVIEW_READONLY));
               const xhr = new XMLHttpRequest();
               xhr.open('POST', `/api/upload?course=${encodeURIComponent(current.course.id)}&scope=${scope}`);
               xhr.setRequestHeader('X-Aula-Request', '1');

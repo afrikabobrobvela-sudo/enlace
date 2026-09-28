@@ -154,7 +154,7 @@ async function renderAttendance() {
   if (!attendanceData || attendanceData.course !== courseId || Date.now() - attendanceLoadedAt > 30000) {
     if (!attendanceData || attendanceData.course !== courseId) $('#main').innerHTML = '<p class="empty">Cargando asistencia…</p>';
     try {
-      const data = await request('/api/attendance?course=' + encodeURIComponent(courseId));
+      const data = await request('/api/attendance?course=' + encodeURIComponent(courseId) + viewSuffix());
       attendanceData = { course: courseId, ...data };
       attendanceLoadedAt = Date.now();
     } catch (error) {

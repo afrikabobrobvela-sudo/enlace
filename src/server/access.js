@@ -35,3 +35,12 @@ export function requireAdmin(user) {
 export function ownsCourse(user, course) {
   return course.owner === user.id && (user.role === 'teacher' || user.role === 'admin');
 }
+
+/**
+ * Vista como alumno: con `?as=student`, quien enseña en el curso recibe los datos exactamente como un alumno
+ * inscrito sin entregas (mismos filtros del servidor). Solo aplica a lecturas; `viewer` es null en esa vista.
+ */
+export function viewAs(a, user, url) {
+  const preview = a.teach && url.searchParams.get('as') === 'student';
+  return { teach: a.teach && !preview, preview, viewer: preview ? null : user.id };
+}

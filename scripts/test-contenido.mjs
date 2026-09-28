@@ -79,4 +79,28 @@ await toggle('material', material.id, true, 'docente', 404); // en la papelera
 const saved = (await view('docente')).find((r) => r.id === unidad.id);
 assert.deepEqual([saved.data.title, saved.data.body, saved.data.fileIds, saved.data.visible], ['Unidad 1', '**Cinemática**', [programa], true]);
 
-console.log(`PASS: ${checks} verificaciones de contenido — archivos en unidades con permisos por visibilidad y mostrar/ocultar con un toque.`);
+// ---- Vista como alumno: el docente recibe exactamente lo que recibe un alumno ----
+await call('docente', '/api/record', { course: c, kind: 'quiz', data: { title: 'Q', visible: true, questions: [{ text: '¿1+1?', options: ['1', '2'], correct: 1 }] } }, 201);
+await call('docente', '/api/record', { course: c, kind: 'notice', data: { title: 'Borrador', body: '', visible: false } }, 201);
+const real = await call('ana', '/api/course?id=' + c);
+const vista = await call('docente', '/api/course?id=' + c + '&as=student');
+const normal = await call('docente', '/api/course?id=' + c);
+assert.deepEqual([vista.canTeach, vista.canPreview, vista.preview, vista.canDelete], [false, true, true, false]);
+assert.deepEqual([normal.canTeach, normal.canPreview, normal.preview], [true, true, false]);
+const ids = (r) => r.records.filter((x) => x.kind !== 'grading').map((x) => x.id).sort();
+assert.deepEqual(ids(vista), ids(real), 'Mismos elementos que un alumno (sin ocultos ni eliminados)');
+assert(ids(normal).length > ids(vista).length, 'El docente normalmente ve más');
+assert(vista.records.filter((r) => r.kind === 'quiz').every((q) => q.data.questions.every((x) => !('correct' in x))), 'Sin respuestas correctas');
+assert(vista.members.every((m) => !('email' in m) && !('matricula' in m)), 'Sin correos ni matrículas');
+assert.deepEqual(vista.files.map((f) => f.id).sort(), real.files.map((f) => f.id).sort(), 'Mismos archivos visibles');
+assert(!vista.records.some((r) => r.kind === 'submission' || r.kind === 'attempt'), 'Sin entregas propias ni ajenas');
+// Un alumno que pide la vista de alumno no gana nada; la asistencia también se filtra.
+const trampa = await call('ana', '/api/course?id=' + c + '&as=student');
+assert.deepEqual([trampa.canTeach, trampa.canPreview, trampa.preview], [false, false, false]);
+await call('docente', '/api/attendance/session', { course: c, date: '2026-10-01', start_time: '08:00' }, 201);
+const asistencia = await call('docente', '/api/attendance?course=' + c + '&as=student');
+assert.deepEqual([asistencia.canTeach, asistencia.records.length, asistencia.sessions.length], [false, 0, 1]);
+assert.equal((await call('docente', '/api/attendance?course=' + c)).canTeach, true);
+checks += 12;
+
+console.log(`PASS: ${checks} verificaciones de contenido — archivos en unidades con permisos por visibilidad, mostrar/ocultar con un toque y vista como alumno idéntica a la de un alumno real.`);

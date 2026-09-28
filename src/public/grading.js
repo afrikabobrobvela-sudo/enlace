@@ -88,7 +88,7 @@ function ensureAttendanceForGrades() {
   if (!needs || (attendanceData && attendanceData.course === current.course.id) || attendanceForGradesLoading) return;
   attendanceForGradesLoading = true;
   const courseId = current.course.id;
-  request('/api/attendance?course=' + encodeURIComponent(courseId))
+  request('/api/attendance?course=' + encodeURIComponent(courseId) + viewSuffix())
     .then((data) => {
       attendanceData = { course: courseId, ...data };
       attendanceLoadedAt = Date.now();

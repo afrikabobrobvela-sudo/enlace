@@ -1,9 +1,13 @@
-# Enlace · versión 12.4
+# Enlace · versión 12.5
 
 Plataforma académica independiente para docentes y alumnos de cualquier academia (nació en la Academia de Física de la BUAP), con interfaz inspirada en Brightspace.
 No es el código de D2L Brightspace ni una plataforma oficial de la BUAP.
 
 Esta versión se despliega en **tu propia cuenta de Cloudflare** (Workers + D1 + R2, plan gratuito) y ya no depende de ChatGPT Sites.
+
+## Novedades de la versión 12.5 (vista como alumno)
+
+Dentro de cualquier curso que impartes, el botón **Ver como alumno** (a la derecha del menú) muestra el curso tal como lo ven tus alumnos: solo unidades, materiales, actividades, foros y evaluaciones visibles, sin respuestas correctas ni datos de otros alumnos, y solo los archivos que ellos pueden descargar. No es una simulación: el servidor aplica exactamente los mismos filtros que a un alumno inscrito. Una franja naranja recuerda que estás en esa vista, y en ella **nada se guarda** (entregar, publicar o subir archivos muestra un aviso). *Volver a vista de docente* regresa a la vista normal. Cada docente registra **una sola academia y una unidad**. No hay migraciones nuevas.
 
 ## Novedades de la versión 12.4 (registro de docentes)
 

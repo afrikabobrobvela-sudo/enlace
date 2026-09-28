@@ -1,7 +1,7 @@
 // API de Enlace: cursos, contenido, inscripciones, actividades, entregas, calificaciones y archivos.
 // Las rutas y las respuestas son compatibles con la interfaz de la versión 8.
 
-import { access, ownsCourse, requireAdmin, requireTeacher } from './access.js';
+import { access, ownsCourse, requireAdmin, requireTeacher, viewAs } from './access.js';
 import { attendanceRoutes } from './attendance.js';
 import { directoryRoutes, registrationStatus } from './directory.js';
 import { gradingRoutes } from './grading.js';
@@ -196,6 +196,7 @@ const routes = {
   'GET /api/course': async ({ db, user, url }) => {
     const courseId = url.searchParams.get('id');
     const a = await access(db, user, courseId);
+    const { teach, preview, viewer } = viewAs(a, user, url);
     const rows = (
       await all(
         db,
@@ -206,7 +207,7 @@ const routes = {
     ).map(unpack);
     const visible = (r) => r?.data.visible !== false;
     const byId = new Map(rows.map((r) => [r.id, r]));
-    const content = a.teach
+    const content = teach
       ? rows
       : rows
           .filter(
@@ -219,22 +220,25 @@ const routes = {
             // El alumno nunca recibe las respuestas correctas de una evaluación.
             r.kind === 'quiz' ? { ...r, data: { ...r.data, questions: r.data.questions.map(({ correct: _c, ...q }) => q) } } : r,
           );
-    const records = [...content, ...(await courseGradebook(db, courseId, { teacher: a.teach, userId: user.id }))];
+    const records = [...content, ...(await courseGradebook(db, courseId, { teacher: teach, userId: viewer }))];
 
     const memberRows = await all(db, "SELECT * FROM aula_members WHERE course=? AND role!='removed' ORDER BY name", courseId);
-    const members = a.teach
+    const members = teach
       ? memberRows
       : memberRows.map((m) => ({ id: m.id, user_id: m.user_id, name: m.name, role: m.role }));
 
     let files = await all(db, 'SELECT id,course,owner,scope,name,size,mime,created FROM aula_files WHERE course=?', courseId);
-    if (!a.teach) {
+    if (!teach) {
       const shared = new Set(records.filter((r) => ['module', 'material', 'task'].includes(r.kind)).flatMap((r) => r.data.fileIds || []));
-      files = files.filter((f) => f.owner === user.id || (f.scope === 'material' && shared.has(f.id)));
+      files = files.filter((f) => (viewer && f.owner === viewer) || (f.scope === 'material' && shared.has(f.id)));
     }
     return json({
       course: a.course,
-      canTeach: a.teach,
-      canDelete: user.role === 'admin' || ownsCourse(user, a.course),
+      canTeach: teach,
+      // canPreview: quien enseña puede alternar entre su vista y la de alumno.
+      canPreview: a.teach,
+      preview,
+      canDelete: !preview && (user.role === 'admin' || ownsCourse(user, a.course)),
       records,
       members,
       files,

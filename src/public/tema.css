@@ -537,3 +537,36 @@ dialog:not(.viewer)::backdrop { background: rgba(12, 28, 42, 0.45); backdrop-fil
 .catalog-list li:first-child { border-top: 0; }
 .catalog-list li.is-inactive span:first-child { color: var(--ink-faint); }
 .toolbar input[data-search] { width: min(420px, 100%); }
+
+/* ---- Vista como alumno --------------------------------------------------------------------------- */
+
+#topnav > .view-toggle {
+  margin-left: auto;
+  border: 1px dashed #9fb3c3;
+  background: #fff;
+  color: var(--brand);
+  font-weight: 600;
+  font-size: 14px;
+}
+#topnav > .view-toggle.is-on { border-style: solid; border-color: #d97706; background: #fff4e0; color: #8a4b00; }
+#topnav .more-menu + .view-toggle { margin-left: 8px; }
+#previewBar {
+  position: sticky;
+  top: 124px;
+  z-index: 24;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding: 10px 28px;
+  background: repeating-linear-gradient(135deg, #fff4e0 0 14px, #ffefd2 14px 28px);
+  border-bottom: 1px solid #f3c77a;
+  color: #7a4300;
+  font-size: 14px;
+}
+#previewBar[hidden] { display: none; }
+@media (max-width: 800px) {
+  #previewBar { position: static; padding: 10px 16px; }
+  #topnav > .view-toggle { margin-left: 0; }
+}

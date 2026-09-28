@@ -6,6 +6,10 @@ const $ = s => document.querySelector(s), esc = s => String(s ?? '').replace(/[&
   "'": '&#39;'
 }[c]));
 let homeView = 'courses';
+/** Vista como alumno: el docente ve el curso con los filtros de un alumno (solo lectura). */
+let previewAsStudent = false;
+const viewSuffix = () => (previewAsStudent ? '&as=student' : '');
+const PREVIEW_READONLY = 'Estás en la vista de alumno: aquí no se guardan cambios. Vuelve a la vista de docente para editar.';
 let me = null, courses = [], current = null, section = 'hub', detail = null, moduleId = null, gradeTab = 'entry', busy = false, dirty = false;
 const records = kind => current?.records.filter(r => r.kind === kind) || [], find = id => current?.records.find(r => r.id === id), teaches = () => !!current?.canTeach;
 const fmt = v => v ? new Date(v).toLocaleString('es-MX', { dateStyle: 'medium', timeStyle: 'short' }) : 'Sin fecha límite';
@@ -32,6 +36,8 @@ function toast(t) {
   window.toastTimer = setTimeout(() => $('#toast').style.display = 'none', 5000);
 }
 async function request(path, data, method = 'POST') {
+  if (previewAsStudent && data !== undefined && path.startsWith('/api/'))
+    throw new Error(PREVIEW_READONLY);
   const r = await fetch(path, {
     method: data === undefined ? 'GET' : method,
     credentials: 'same-origin',
@@ -45,7 +51,7 @@ async function request(path, data, method = 'POST') {
 }
 async function reload() {
   if (current) {
-    const next = await request('/api/course?id=' + encodeURIComponent(current.course.id));
+    const next = await request('/api/course?id=' + encodeURIComponent(current.course.id) + viewSuffix());
     current = next;
   }
   else
@@ -53,7 +59,9 @@ async function reload() {
   render();
 }
 async function openCourse(id) {
-  const next = await request('/api/course?id=' + encodeURIComponent(id));
+  if (current?.course.id !== id)
+    previewAsStudent = false;
+  const next = await request('/api/course?id=' + encodeURIComponent(id) + viewSuffix());
   current = next;
   section = 'hub';
   detail = null;
@@ -522,6 +530,7 @@ document.addEventListener('click', async (e) => {
         break;
       case 'home':
         current = null;
+        previewAsStudent = false;
         homeView = 'courses';
         courses = await request('/api/courses');
         render();
@@ -673,6 +682,20 @@ document.addEventListener('click', async (e) => {
         const { published } = await request('/api/grades/publish', { course: current.course.id, task: id });
         await reload();
         toast(published === 1 ? 'Se publicó 1 calificación.' : `Se publicaron ${published} calificaciones.`);
+        break;
+      }
+      case 'toggle-preview': {
+        // Mismos datos que recibe un alumno, filtrados por el servidor. Las pantallas solo de docente vuelven al inicio.
+        previewAsStudent = !previewAsStudent;
+        attendanceData = null;
+        current = await request('/api/course?id=' + encodeURIComponent(current.course.id) + viewSuffix());
+        if (['progress', 'admin', 'trash', 'editor', 'review'].includes(section)) {
+          section = 'hub';
+          detail = null;
+        }
+        render();
+        window.scrollTo?.(0, 0);
+        toast(previewAsStudent ? 'Vista de alumno: así ven el curso tus alumnos.' : 'De vuelta en la vista de docente.');
         break;
       }
       case 'toggle-visible': {

@@ -13,6 +13,14 @@ function workspaceNav() {
   const active = section === 'task' || section === 'editor' || section === 'review' ? 'tasks' : section === 'forum' ? 'forums' : section === 'quiz' ? 'quizzes' : section;
   const item = ([id, label]) => `<button data-section="${id}" class="${active === id ? 'active' : ''}" ${active === id ? 'aria-current="page"' : ''}>${label}</button>`;
   $('#topnav').innerHTML = c ? [['hub', 'Inicio'], ['content', 'Contenido'], ['tasks', 'Actividades'], ['forums', 'Foros'], ['quizzes', 'Evaluaciones'], ['grades', 'Calificaciones']].map(item).join('') + `<details class="more-menu"><summary>Más</summary><div class="menu-panel">${[['groups', 'Grupos'], ['members', 'Alumnos'], ['attendance', 'Asistencia'], ['notices', 'Noticias'], ...(teaches() ? [['progress', 'Progreso'], ['admin', 'Administración del curso']] : [])].map(item).join('')}</div></details>` : '';
+  // Vista como alumno: el docente alterna entre su vista y la que reciben sus alumnos.
+  if (c && current.canPreview)
+    $('#topnav').insertAdjacentHTML('beforeend', `<button type="button" class="view-toggle ${current.preview ? 'is-on' : ''}" data-action="toggle-preview" aria-pressed="${!!current.preview}">${current.preview ? 'Salir de la vista de alumno' : 'Ver como alumno'}</button>`);
+  const bar = $('#previewBar');
+  if (bar) {
+    bar.hidden = !current?.preview;
+    bar.innerHTML = current?.preview ? '<span><strong>Vista de alumno.</strong> Así ven este curso tus alumnos: solo lo visible, sin respuestas correctas ni datos de otros alumnos. Nada se guarda en esta vista.</span><button type="button" class="secondary" data-action="toggle-preview">Volver a vista de docente</button>' : '';
+  }
   const picker = $('#coursePickerList');
   if (picker)
     picker.innerHTML = `${button('Todos mis cursos', 'home', '', 'text-btn')}${courses.map(x => button(esc(x.name) + ' <small>' + esc(x.group_name) + '</small>', 'course', x.id, 'text-btn')).join('')}`;
