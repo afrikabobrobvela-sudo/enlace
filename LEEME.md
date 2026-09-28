@@ -1,9 +1,28 @@
-# Enlace · versión 12.5
+# Enlace · versión 12.6
 
 Plataforma académica independiente para docentes y alumnos de cualquier academia (nació en la Academia de Física de la BUAP), con interfaz inspirada en Brightspace.
 No es el código de D2L Brightspace ni una plataforma oficial de la BUAP.
 
 Esta versión se despliega en **tu propia cuenta de Cloudflare** (Workers + D1 + R2, plan gratuito) y ya no depende de ChatGPT Sites.
+
+## Novedades de la versión 12.6 (Microsoft, periodos, evaluaciones y más)
+
+Requiere las migraciones **0009 a 0014** (`npm run configurar` las aplica después de descargar un respaldo). Todas son no destructivas: solo agregan tablas y columnas.
+
+- **Acceso con Microsoft (correo institucional).** Botón *Continuar con Microsoft (correo BUAP)*, restringido al directorio de la BUAP y a sus dominios de correo. Quien ya entraba con Google con el mismo correo conserva su cuenta. Se activa al configurarlo (ver *Opcional: acceso con Microsoft*); mientras tanto el botón no aparece.
+- **Aviso de privacidad** en `/privacidad` y enlace al pie de cada página. Cada persona lo acepta una vez al entrar (y otra vez si cambia la versión del aviso). **Es un borrador: pide que lo revise el área jurídica o de transparencia de la BUAP** antes de usarlo como definitivo (`src/public/privacidad.html`; al cambiarlo, sube `PRIVACY_VERSION` en `src/server/privacy.js`).
+- **Respaldo automático semanal y vigilancia** con GitHub Actions (ver *Respaldos*). Nueva dirección `/salud` que confirma que el Worker y la base responden.
+- **Periodos y archivo de cursos.** Cada curso puede tener un periodo (por ejemplo, *Otoño 2026*). *Copiar a un nuevo periodo* crea un curso nuevo con unidades, materiales, noticias, foros, evaluaciones, actividades, categorías y reglas (sin alumnos, entregas ni calificaciones; los archivos se comparten sin ocupar espacio extra; las fechas se vacían salvo que pidas conservarlas). *Archivar* deja el curso en solo lectura para todos; se puede desarchivar.
+- **Co-docentes.** El propietario agrega a otro docente registrado de Enlace; puede editar y calificar, pero no borrar el curso ni agregar más co-docentes. Si deja de ser docente de Enlace, pierde también ese acceso.
+- **Prórrogas individuales.** En la lista de entregas, *Prórroga* da a un alumno otra fecha de entrega y de cierre; cuenta para entregas tardías, riesgo, pendientes y calificación final.
+- **Evaluaciones mejoradas.** Preguntas **numéricas** con tolerancia en porcentaje, unidad y **datos aleatorios por alumno** (variables con rango, por ejemplo `{h}` entre 5 y 45 m, y respuesta como fórmula `sqrt(2*h/g)`; se calculan en el servidor con un evaluador propio, sin `eval`). **Varios intentos** (hasta 10, cuenta el mejor), **tiempo límite** (se envía solo al terminar; si se cierra la página, el tiempo sigue corriendo) y orden aleatorio. El alumno nunca recibe respuestas ni fórmulas.
+- **Mis pendientes.** La pantalla de inicio muestra lo que vence en los próximos 14 días (con prórrogas), las calificaciones nuevas y, para docentes, las entregas por calificar.
+- **Avisos dentro de Enlace.** La campana del encabezado muestra noticias, materiales, actividades, evaluaciones, calificaciones publicadas y (docentes) entregas nuevas de los últimos 14 días. No se guarda un aviso por alumno: se calculan de lo publicado, sin gastar escrituras de la base.
+- **Comprobante de entrega** con folio verificable (si la entrega cambia, el folio cambia); se puede imprimir o guardar como PDF.
+- **Se instala como aplicación** (PWA) en el teléfono o la computadora: *Agregar a pantalla de inicio*. Nunca guarda datos del curso en el dispositivo.
+- **Reportes por academia y unidad** (administración → *Reportes*): cursos activos y archivados, docentes, alumnos, actividades, entregas y espacio usado, con descarga CSV por curso.
+- **Historial de calificaciones.** Cada cambio de calificación, publicación de borradores y reinicio por una nueva entrega queda registrado con quién y cuándo. En la pantalla de revisión: *Ver historial de esta calificación*. Empieza a registrar a partir de esta versión.
+- **Limpieza de archivos sin usar** (en *Reportes*): lista los archivos de más de 7 días que nada enlaza, con su tamaño, y los borra solo después de escribir la confirmación. Lo que está en la papelera se conserva y los archivos compartidos con cursos copiados no se borran de R2 mientras alguna copia los use. Descarga un respaldo antes.
 
 ## Novedades de la versión 12.5 (vista como alumno)
 
@@ -99,7 +118,7 @@ La pantalla muestra en vivo cuántos se han registrado y quiénes acaban de hace
 
 1. Descarga la versión nueva en una carpeta **nueva** (no encima de la anterior), o `git pull` si trabajas desde GitHub.
 2. Haz un respaldo desde esa carpeta: `npm run respaldo` (ver *Respaldos*).
-3. Doble clic en `configurar.cmd` (Windows) o `configurar.command` (Mac), o `npm run configurar`. Encuentra tu base `enlace-db` y tu almacenamiento, te pide tu correo de administración y tu dirección `.workers.dev`, descarga un respaldo, aplica las migraciones pendientes (0003: asistencia y borradores; 0004: registro con QR; 0005: categorías, rúbricas y equipos; 0006: sesiones; 0007: papelera; 0008: registro de docentes) y publica. No cambia tus claves. Al pasar a la versión 12.1 cada persona vuelve a entrar con Google una vez (las sesiones ahora se registran en el servidor).
+3. Doble clic en `configurar.cmd` (Windows) o `configurar.command` (Mac), o `npm run configurar`. Encuentra tu base `enlace-db` y tu almacenamiento, te pide tu correo de administración y tu dirección `.workers.dev`, descarga un respaldo, aplica las migraciones pendientes (0003: asistencia y borradores; 0004: registro con QR; 0005: categorías, rúbricas y equipos; 0006: sesiones; 0007: papelera; 0008: registro de docentes; 0009: aviso de privacidad; 0010: periodos y archivo; 0011: prórrogas; 0012: intentos de evaluaciones; 0013: avisos; 0014: historial de calificaciones) y publica. No cambia tus claves. Al pasar a la versión 12.1 cada persona vuelve a entrar con Google una vez (las sesiones ahora se registran en el servidor).
 
 Si prefieres hacerlo a mano: copia tu `database_id` y tu correo del `wrangler.toml` anterior al nuevo (y `ALLOWED_EMAIL_DOMAINS` si lo usabas) y ejecuta `npm install`, `npm run db:migrate` y `npm run deploy`, **en ese orden**: si publicas antes de migrar, Asistencia y Calificaciones fallarán hasta que apliques la migración.
 
@@ -133,7 +152,7 @@ Para generar un `SESSION_SECRET` aleatorio: `node -e "console.log(require('crypt
 
 ## GitHub
 
-Crea un repositorio **privado** (tu `wrangler.toml` incluye tu correo) y sube esta carpeta sin `node_modules/` (el archivo `.gitignore` ya lo excluye). El flujo `.github/workflows/pruebas.yml` corre `npm test` en cada cambio: una palomita verde significa que las nueve suites pasaron. La publicación automática desde GitHub es posible (en el panel de Cloudflare, en la configuración de *Builds* del Worker), pero mientras te familiarizas conviene publicar a mano con `npm run configurar`, que aplica las migraciones antes de publicar.
+Crea un repositorio **privado** (tu `wrangler.toml` incluye tu correo) y sube esta carpeta sin `node_modules/` (el archivo `.gitignore` ya lo excluye). El flujo `.github/workflows/pruebas.yml` corre `npm test` en cada cambio: una palomita verde significa que todas las suites pasaron. La publicación automática desde GitHub es posible (en el panel de Cloudflare, en la configuración de *Builds* del Worker), pero mientras te familiarizas conviene publicar a mano con `npm run configurar`, que aplica las migraciones antes de publicar.
 
 ## Qué cambió respecto a la versión 8
 
@@ -275,7 +294,7 @@ La cookie de sesión usa el prefijo `__Host-`, que exige conexión segura. Chrom
 
 ## Pruebas
 
-`npm test` compila la interfaz y ejecuta dieciocho suites con una base SQLite temporal (con llaves foráneas activas, como D1). No tocan tu base real.
+`npm test` compila la interfaz y ejecuta veintitrés suites con una base SQLite temporal (con llaves foráneas activas, como D1). No tocan tu base real.
 
 - `test-api.mjs`: todas las verificaciones de la versión 8 más sesiones firmadas, cabeceras falsificadas, ponderaciones, restricciones de la base, docentes, inscripción masiva y el límite de 50 consultas.
 - `test-papelera.mjs`: eliminar y restaurar contenido, actividades (con sus entregas y calificaciones), evaluaciones y publicaciones de foro; permisos de moderación; nombres de alumnos en foros; cuotas de archivos.
@@ -287,6 +306,11 @@ La cookie de sesión usa el prefijo `__Host-`, que exige conexión segura. Chrom
 - `test-fase1.mjs`: asistencia (permisos, calendario, registros, borrado en cascada), borradores de calificación, equipos en lote y vista previa (tipo real del archivo, descargas parciales para video, permisos).
 - `test-fase2.mjs`: registro con QR (firma que caduca, códigos alterados o del futuro, PIN con intentos limitados, un teléfono por alumno, permisos robados, retardos, cierre y reapertura).
 - `test-fase2b.mjs`: categorías (validaciones, borrado sin perder actividades), reglas finales, banco de rúbricas (propias, compartidas, solo el autor edita), evaluación con rúbrica oculta en borrador, y entregas por equipo (archivos visibles solo para el equipo, calificación de equipo y ajuste individual).
+- `test-periodos.mjs`: copiar un curso a un nuevo periodo (contenido, actividades, reglas y archivos compartidos, sin alumnos ni entregas) y archivar en solo lectura.
+- `test-codocentes.mjs`: co-docentes (alta, permisos, retiro) y prórrogas individuales.
+- `test-evaluaciones.mjs`: evaluador de fórmulas seguro, preguntas numéricas con datos por alumno y tolerancia, intentos, tiempo límite y confidencialidad de respuestas.
+- `test-pendientes.mjs`: mis pendientes, avisos (sin contenido oculto) y comprobante con folio.
+- `test-reportes.mjs`: historial de calificaciones, reportes por academia y unidad y limpieza de archivos sin usar (incluidos los compartidos entre cursos copiados).
 - `test-qr.mjs`: generador de QR. Sus huellas corresponden a códigos que se decodificaron con OpenCV; si una cambia, hay que volver a verificarlo.
 - `test-auth-ui.mjs`, `test-admin-ui.mjs`, `test-teacher-files.mjs`, `test-workspace-ui.mjs`, `test-fase1-ui.mjs`, `test-fase2-ui.mjs`, `test-fase2b-ui.mjs`: interfaz (incluye las reglas del porcentaje de asistencia, el reparto de equipos, la revisión en secuencia, la exportación a Excel sin fórmulas inyectadas, que la firma del QR del navegador sea la que acepta el servidor, el ZIP verificado por un lector independiente, las reglas de riesgo, el cálculo por categorías y puntos, el redondeo de la calificación final y la evaluación con rúbrica).
 
@@ -314,4 +338,5 @@ Workers: 100 000 solicitudes al día y 3 MB por Worker comprimido (Enlace ocupa 
 - En producción está publicada la versión 11 (septiembre de 2026). La versión 12.1 pasó las pruebas automáticas y se recorrió en `wrangler dev` con D1 local y Chromium (papelera, moderación de foros, perfil de alumno, cierre de sesión). Las versiones 10, 11 y 12 pasaron todas las pruebas automáticas y se recorrieron en Chromium real (incluido el QR leído desde la pantalla y el registro desde un navegador de tamaño teléfono), pero no se han probado contra tu Cloudflare, tu Google ni en un iPad o iPhone reales: conviene probarlas primero en el entorno de pruebas o con un curso de prueba.
 - Bibliotecas incluidas, sin modificar: pdf.js 5.6.205 (Apache 2.0), KaTeX 0.16.45 (MIT) y la fuente Inter 5.3.0 (SIL OFL 1.1), en `src/public/vendor/` junto con sus licencias.
 - No hay integración con Turnitin.
-- Siguientes pasos previstos: entregas por equipo (una entrega y una calificación para todo el equipo), asistencia por código QR con la validación de AulaPass, vista previa de Word, Excel y PowerPoint, co-docentes por curso, periodos y archivo de cursos, historial de cambios de calificaciones, limpieza de archivos sin uso en R2 y acceso con cuentas de Microsoft si el correo institucional lo requiere.
+- La versión 12.6 pasó las 23 suites y se recorrió en `wrangler dev` con D1 local y Chromium (también en tamaño teléfono). El acceso con Microsoft se probó con respuestas simuladas: la primera prueba real requiere el registro en el directorio de la BUAP.
+- Siguientes pasos posibles: vista previa de Word, Excel y PowerPoint; dividir `app.js` y las capas de estilos antiguas en archivos por sección; pruebas en iPad y iPhone reales.

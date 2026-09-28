@@ -462,6 +462,23 @@ export async function saveSubmission(db, { course, user, id, revision, input, va
       existing.revision,
     );
     if (!result.meta.changes) fail('Otra persona modificó este elemento. Recarga antes de guardar.', 409);
+    // Una nueva entrega borra la calificación anterior: queda en el historial.
+    if (existing.grade !== null) {
+      await run(
+        db,
+        `INSERT INTO aula_grade_history (id,course,task,member,old_grade,new_grade,old_published,new_published,feedback_changed,reason,changed_by,changed_at)
+         VALUES (?,?,?,?,?,NULL,?,1,?,'nueva entrega',?,?)`,
+        crypto.randomUUID(),
+        course,
+        task.id,
+        member.id,
+        existing.grade,
+        existing.published,
+        existing.feedback ? 1 : 0,
+        user.id,
+        now,
+      );
+    }
     await shareWithTeam();
     return { record: submissionRecord(await one(db, 'SELECT * FROM aula_submissions WHERE id=?', existing.id)), created: false };
   }
@@ -534,6 +551,17 @@ export async function saveGrade(db, { course, grader, taskId, memberId, revision
     targets = found.members;
   }
   const now = nowIso();
+  // Historial: valores anteriores de cada integrante (una sola consulta) para registrar el cambio.
+  const before = new Map(
+    (
+      await all(
+        db,
+        'SELECT member, grade, published, feedback FROM aula_submissions WHERE task=? AND member IN (SELECT value FROM json_each(?))',
+        task.id,
+        JSON.stringify(targets.map((m) => m.id)),
+      )
+    ).map((r) => [r.member, r]),
+  );
   // Sin entrega previa se crea un registro "manual" (por ejemplo, un examen escrito).
   // ?13: la revisión que vio el docente; si otra persona guardó antes, no se sobrescribe.
   const sql = `INSERT INTO aula_submissions (id,course,task,member,author,body,file_ids,submitted,late,manual,grade,feedback,published,
@@ -544,13 +572,35 @@ export async function saveGrade(db, { course, grader, taskId, memberId, revision
       rubric_scores=CASE WHEN ?12 THEN excluded.rubric_scores ELSE aula_submissions.rubric_scores END,
       revision=aula_submissions.revision+1, updated=excluded.updated
     WHERE ?13 IS NULL OR aula_submissions.revision=?13`;
+  // El registro del historial solo se escribe si la calificación realmente se guardó (graded_at = ahora).
+  const history = `INSERT INTO aula_grade_history (id,course,task,member,old_grade,new_grade,old_published,new_published,feedback_changed,reason,changed_by,changed_at)
+    SELECT ?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12 WHERE EXISTS (SELECT 1 FROM aula_submissions WHERE task=?3 AND member=?4 AND graded_at=?12)`;
   await db.batch(
-    targets.map((m) => {
+    targets.flatMap((m) => {
       const owner = m.user_id || m.id;
       const seen = m.id === member.id ? (existing ? existing.revision : null) : null;
-      return db
-        .prepare(sql)
-        .bind(`submission:${task.id}:${owner}`, course, task.id, m.id, owner, grade, note, publish ? 1 : 0, grader.id, now, scores ?? null, scores === undefined ? 0 : 1, seen);
+      const old = before.get(m.id);
+      return [
+        db
+          .prepare(sql)
+          .bind(`submission:${task.id}:${owner}`, course, task.id, m.id, owner, grade, note, publish ? 1 : 0, grader.id, now, scores ?? null, scores === undefined ? 0 : 1, seen),
+        db
+          .prepare(history)
+          .bind(
+            crypto.randomUUID(),
+            course,
+            task.id,
+            m.id,
+            old?.grade ?? null,
+            grade,
+            old ? old.published : null,
+            publish ? 1 : 0,
+            (old?.feedback ?? '') !== note ? 1 : 0,
+            team && m.id !== member.id ? 'calificación de equipo' : 'calificación',
+            grader.id,
+            now,
+          ),
+      ];
     }),
   );
   const saved = await one(db, 'SELECT * FROM aula_submissions WHERE task=? AND member=?', task.id, member.id);

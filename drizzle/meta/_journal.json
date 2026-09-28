@@ -99,6 +99,13 @@
       "when": 1790563889065,
       "tag": "0013_avisos",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "6",
+      "when": 1790564336067,
+      "tag": "0014_historial",
+      "breakpoints": true
     }
   ]
 }

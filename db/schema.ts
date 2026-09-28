@@ -537,3 +537,23 @@ export const attemptStarts = sqliteTable(
   },
   (t) => [primaryKey({ columns: [t.quiz, t.userId, t.attempt] })],
 );
+
+/** Migración 0014: historial de calificaciones (quién cambió qué y cuándo, con el valor anterior). */
+export const gradeHistory = sqliteTable(
+  'aula_grade_history',
+  {
+    id: text('id').primaryKey(),
+    course: text('course').notNull(),
+    task: text('task').notNull(),
+    member: text('member').notNull(),
+    oldGrade: real('old_grade'),
+    newGrade: real('new_grade'),
+    oldPublished: integer('old_published'),
+    newPublished: integer('new_published'),
+    feedbackChanged: integer('feedback_changed').notNull().default(0),
+    reason: text('reason').notNull(),
+    changedBy: text('changed_by').notNull(),
+    changedAt: text('changed_at').notNull(),
+  },
+  (t) => [index('aula_grade_history_lookup').on(t.course, t.task, t.member)],
+);

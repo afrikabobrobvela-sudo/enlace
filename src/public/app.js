@@ -82,7 +82,7 @@ function render() {
   richAttachments = null;
   nav();
   if (!current)
-    return homeView === 'teachers' && me?.role === 'admin' ? renderTeachers() : renderHome();
+    return me?.role === 'admin' && homeView === 'teachers' ? renderTeachers() : me?.role === 'admin' && homeView === 'reports' ? renderReports() : renderHome();
   const routes = {
     hub: renderHub,
     content: renderContent,
@@ -241,6 +241,7 @@ function renderReview() {
       ${team ? `<label class="check-row"><input type="checkbox" name="team" checked> Aplicar a todo el equipo (${esc(team.data.title)}: ${esc(teamNames(team))})</label>` : ''}<label class="check-row"><input type="checkbox" name="publish" ${reviewPublishNow() ? 'checked' : ''}> Publicar al guardar (el alumno la verá de inmediato)</label>
       <p class="form-error error" hidden></p>
       <div class="review-actions">${next ? '<button class="primary" type="submit" value="next">Guardar y siguiente</button><button class="secondary" type="submit" value="stay">Guardar</button>' : '<button class="primary" type="submit" value="stay">Guardar</button>'}</div>
+      ${s ? `<p><button type="button" class="text-btn" data-grade-history="${esc(m.id)}" data-task="${esc(t.id)}">Ver historial de esta calificación</button></p>` : ''}
       <p class="muted review-keys">Con teclado: ← y → cambian de alumno cuando no estás escribiendo.</p></form></div>`;
   mountInlinePreview(previewable.length ? $('#inlinePreview') : null, previewable[0], previewable);
   if (next)
@@ -488,7 +489,7 @@ document.addEventListener('click', async (e) => {
   if (!b || busy)
     return;
   try {
-    if (b.dataset.section || ['home', 'teachers', 'course', 'hub', 'task', 'edit-task', 'new-task', 'review'].includes(b.dataset.action)) {
+    if (b.dataset.section || ['home', 'teachers', 'reports', 'course', 'hub', 'task', 'edit-task', 'new-task', 'review'].includes(b.dataset.action)) {
       if (dirty && !confirm('Hay cambios sin guardar. ¿Quieres salir de esta pantalla?'))
         return;
       dirty = false;
@@ -690,8 +691,9 @@ document.addEventListener('click', async (e) => {
         removeTeacherModal(b.dataset);
         break;
       case 'teachers':
+      case 'reports':
         current = null;
-        homeView = 'teachers';
+        homeView = b.dataset.action;
         render();
         break;
       case 'bulk-members':

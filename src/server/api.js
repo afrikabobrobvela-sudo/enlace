@@ -7,6 +7,7 @@ import { directoryRoutes, registrationStatus } from './directory.js';
 import { PRIVACY_VERSION, privacyAccepted, privacyRoutes } from './privacy.js';
 import { assertWritable, periodRoutes } from './periods.js';
 import { dashboardRoutes } from './dashboard.js';
+import { reportRoutes } from './reports.js';
 import { assertInTime, deadlineOf, gradeAttempt, publicQuestions, quizFields, quizInstance, sameQuestions } from './quizzes.js';
 import { gradingRoutes } from './grading.js';
 import { clearSessionCookie, identity, lastLogins, revokeAllStatements } from './auth.js';
@@ -64,7 +65,7 @@ export async function api(request, env) {
     }
     const ctx = { db: env.DB, env, user, url, request };
     const handler =
-      routes[route] || attendanceRoutes[route] || gradingRoutes[route] || directoryRoutes[route] || privacyRoutes[route] || periodRoutes[route] || dashboardRoutes[route];
+      routes[route] || attendanceRoutes[route] || gradingRoutes[route] || directoryRoutes[route] || privacyRoutes[route] || periodRoutes[route] || dashboardRoutes[route] || reportRoutes[route];
     if (handler) return await handler(ctx);
     if (request.method === 'GET' && url.pathname.startsWith('/api/file/')) return await downloadFile(ctx, url.pathname.slice(10));
     fail('Ruta no encontrada.', 404);
@@ -650,6 +651,22 @@ const routes = {
     return json({ visible: body.visible });
   },
 
+  // Historial de calificaciones de un alumno en una actividad (solo docentes).
+  'GET /api/grade-history': async ({ db, user, url }) => {
+    const course = url.searchParams.get('course');
+    requireTeacher(await access(db, user, course));
+    const rows = await all(
+      db,
+      `SELECT h.old_grade, h.new_grade, h.old_published, h.new_published, h.feedback_changed, h.reason, h.changed_at, u.name AS changed_by
+       FROM aula_grade_history h LEFT JOIN aula_users u ON u.id=h.changed_by
+       WHERE h.course=? AND h.task=? AND h.member=? ORDER BY h.changed_at DESC LIMIT 100`,
+      course,
+      url.searchParams.get('task'),
+      url.searchParams.get('member'),
+    );
+    return json({ history: rows });
+  },
+
   // ---- Prórrogas individuales ----
 
   'POST /api/extension': async ({ db, user, request }) => {
@@ -794,13 +811,18 @@ const routes = {
     const body = await readJson(request);
     requireTeacher(await access(db, user, body.course));
     await loadTask(db, body.task, body.course);
-    const result = await run(
-      db,
-      'UPDATE aula_submissions SET published=1,revision=revision+1,updated=? WHERE course=? AND task=? AND published=0',
-      nowIso(),
-      body.course,
-      body.task,
-    );
+    const now = nowIso();
+    const [, result] = await db.batch([
+      // Historial: cada borrador publicado queda registrado.
+      db
+        .prepare(
+          `INSERT INTO aula_grade_history (id,course,task,member,old_grade,new_grade,old_published,new_published,feedback_changed,reason,changed_by,changed_at)
+           SELECT lower(hex(randomblob(16))), course, task, member, grade, grade, 0, 1, 0, 'publicación', ?1, ?2
+           FROM aula_submissions WHERE course=?3 AND task=?4 AND published=0`,
+        )
+        .bind(user.id, now, body.course, body.task),
+      db.prepare('UPDATE aula_submissions SET published=1,revision=revision+1,updated=? WHERE course=? AND task=? AND published=0').bind(now, body.course, body.task),
+    ]);
     return json({ published: result.meta.changes });
   },
 
