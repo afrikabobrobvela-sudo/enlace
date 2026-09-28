@@ -553,6 +553,16 @@ document.addEventListener('click', async (e) => {
       case 'edit-course':
         courseModal(true);
         break;
+      case 'demo-course':
+        // Materia completa con alumnos ficticios para conocer la plataforma (se crea en el servidor, src/server/demo.js).
+        modal('Crear curso de ejemplo', `<p>Se creará <strong>Mecánica clásica (curso de ejemplo)</strong> a tu nombre, con todo lo que hace Enlace ya en uso:</p>
+          <ul class="demo-list"><li>18 alumnos ficticios, sin cuenta (nadie más ve el curso)</li><li>Temario en 4 unidades con apuntes, fórmulas y simuladores</li><li>Noticias, foros con participación y equipos de laboratorio</li><li>Actividades entregadas y calificadas, con rúbrica, borradores y pendientes por calificar</li><li>Evaluación con resultados y seis semanas de pases de lista</li></ul>
+          <p class="muted">Puedes calificar, pasar lista o editarlo sin afectar a nadie, y eliminarlo cuando quieras.</p>`, async () => {
+          const { id } = await request('/api/demo-course', {});
+          await openCourse(id);
+          return 'Curso de ejemplo creado.';
+        }, 'Crear curso de ejemplo');
+        break;
       case 'add-coteacher':
         modal('Agregar co-docente', field('Correo del docente', 'email', '', 'email', 'required') + '<p class="muted">Debe estar registrado como docente en Enlace. Verá el curso la próxima vez que entre.</p>', async f => {
           await request('/api/course/teachers', { course: current.course.id, email: f.get('email') });

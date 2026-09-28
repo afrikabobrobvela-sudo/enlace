@@ -727,3 +727,7 @@ button.my-grade-row:hover .my-grade-title { color: var(--link); }
 .my-grade-value { flex: none; max-width: 48%; padding: 4px 10px; border-radius: 999px; font-weight: 700; font-variant-numeric: tabular-nums; text-align: right; background: var(--canvas); }
 .my-grade-value.is-pending { font-weight: 500; font-size: 13.5px; color: var(--ink-soft); background: none; padding-right: 0; }
 .my-grade-item .grade-feedback { margin: -2px 2px 12px; padding: 8px 12px; border-left: 3px solid var(--accent); background: #f6fafc; border-radius: 0 var(--radius-sm) var(--radius-sm) 0; max-width: none; font-size: 14.5px; white-space: pre-wrap; }
+
+/* Ventana «Crear curso de ejemplo» */
+.demo-list { margin: 8px 0 12px; padding-left: 22px; }
+.demo-list li { margin: 4px 0; line-height: 1.45; }

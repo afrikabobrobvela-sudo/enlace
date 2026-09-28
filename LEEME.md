@@ -1,9 +1,28 @@
-# Enlace · versión 12.9
+# Enlace · versión 12.10
 
 Plataforma académica independiente para docentes y alumnos de cualquier academia (nació en la Academia de Física de la BUAP), con interfaz inspirada en Brightspace.
 No es el código de D2L Brightspace ni una plataforma oficial de la BUAP.
 
 Esta versión se despliega en **tu propia cuenta de Cloudflare** (Workers + D1 + R2, plan gratuito) y ya no depende de ChatGPT Sites.
+
+## Novedades de la versión 12.10 (curso de ejemplo)
+
+No requiere migraciones.
+
+- **Botón «Curso de ejemplo»** en Mis cursos (docentes y administración). Crea a tu nombre la materia **Mecánica clásica (curso de ejemplo)**, lista para mostrar la plataforma:
+  - 18 alumnos ficticios con matrícula;
+  - temario en 4 unidades con fórmulas y simuladores PhET (una unidad oculta como borrador);
+  - 3 noticias, 2 foros con participación de alumnos y 4 equipos de laboratorio;
+  - 7 actividades: calificadas y publicadas, una con rúbrica, una por equipo, un examen capturado sin entrega, borradores sin publicar, entregas por calificar y una actividad abierta;
+  - calificación por categorías (Tareas, Laboratorio, Exámenes y Asistencia);
+  - una evaluación con resultados de 16 alumnos y otra abierta;
+  - seis semanas de pases de lista con asistencias, retardos, faltas y justificantes.
+- **Los alumnos del ejemplo no existen.** Sus correos terminan en `@ejemplo.invalid`, un dominio reservado que nunca recibe correo, y no tienen cuenta: nadie más ve el curso.
+- **Se puede usar como cualquier otro curso.** Puedes calificar, pasar lista, editar, «Ver como alumno», copiarlo a otro periodo o eliminarlo.
+- **Máximo 3 cursos de ejemplo a la vez por persona.** Al eliminar uno se puede crear otro.
+- **Fechas relativas.** Se calculan a partir del día en que se crea, así siempre hay actividades vencidas, por calificar y abiertas.
+- **Una sola operación.** Todo se escribe con 13 inserciones: si algo falla, no queda nada a medias.
+- **Qué agrega fuera del curso.** Solo una rúbrica «Resolución de problemas (ejemplo)» en tu banco personal (no compartida).
 
 ## Novedades de la versión 12.9 (experiencia en el celular)
 
