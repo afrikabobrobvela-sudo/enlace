@@ -6,6 +6,7 @@ import { attendanceRoutes } from './attendance.js';
 import { directoryRoutes, registrationStatus } from './directory.js';
 import { PRIVACY_VERSION, privacyAccepted, privacyRoutes } from './privacy.js';
 import { assertWritable, periodRoutes } from './periods.js';
+import { assertInTime, deadlineOf, gradeAttempt, publicQuestions, quizFields, quizInstance, sameQuestions } from './quizzes.js';
 import { gradingRoutes } from './grading.js';
 import { clearSessionCookie, identity, lastLogins, revokeAllStatements } from './auth.js';
 import {
@@ -13,7 +14,7 @@ import {
   courseGradebook,
   loadTask,
   quizHasAttempts,
-  saveAttempt,
+  attemptRecord,
   saveGrade,
   saveSubmission,
   saveTask,
@@ -131,6 +132,17 @@ function assertRecordAvailable(r) {
   if (r.data.end && now > Date.parse(r.data.end)) fail('El periodo de entrega ha terminado.', 403);
 }
 
+/** El primer intento conserva el id de la versión 8; los siguientes llevan su número. */
+const attemptId = (quiz, user, attempt) => (attempt === 1 ? `attempt:${quiz}:${user}` : `attempt:${quiz}:${user}:${attempt}`);
+
+async function attemptContext(db, user, body) {
+  const a = await access(db, user, body.course);
+  if (a.teach) fail('Las evaluaciones se responden desde una cuenta de alumno. Usa Ver como alumno para revisarlas.');
+  const quiz = await contentRecord(db, body.quiz, body.course, 'quiz');
+  assertRecordAvailable(quiz);
+  return { a, quiz };
+}
+
 // ---- Rutas -------------------------------------------------------------------------------------
 
 const routes = {
@@ -228,8 +240,8 @@ const routes = {
               (r.kind !== 'post' || visible(byId.get(r.data.forum))),
           )
           .map((r) =>
-            // El alumno nunca recibe las respuestas correctas de una evaluación.
-            r.kind === 'quiz' ? { ...r, data: { ...r.data, questions: r.data.questions.map(({ correct: _c, ...q }) => q) } } : r,
+            // El alumno nunca recibe respuestas correctas, fórmulas ni rangos de las variables.
+            r.kind === 'quiz' ? { ...r, data: { ...r.data, questions: publicQuestions(r.data.questions) } } : r,
           );
     const records = [...content, ...(await courseGradebook(db, courseId, { teacher: teach, userId: viewer }))];
 
@@ -590,21 +602,8 @@ const routes = {
         data.fileIds = await validateFiles(db, input.fileIds, body.course, user, 'material');
       }
       if (kind === 'quiz') {
-        if (!Array.isArray(input.questions) || !input.questions.length || input.questions.length > 50) {
-          fail('Agrega de una a cincuenta preguntas.');
-        }
-        data.questions = input.questions.map((q) => {
-          const validOptions =
-            Array.isArray(q.options) &&
-            q.options.length >= 2 &&
-            q.options.length <= 6 &&
-            Number.isInteger(q.correct) &&
-            q.correct >= 0 &&
-            q.correct < q.options.length;
-          if (!validOptions) fail('Opciones de respuesta inválidas.');
-          return { text: text(q.text, 3000), options: q.options.map((o) => text(o, 1500)), correct: q.correct };
-        });
-        if (previous && (await quizHasAttempts(db, body.course, previous.id)) && JSON.stringify(previous.data.questions) !== JSON.stringify(data.questions)) {
+        Object.assign(data, quizFields(input));
+        if (previous && !sameQuestions(previous.data.questions, data.questions) && (await quizHasAttempts(db, body.course, previous.id))) {
           fail('Una evaluación con intentos no permite cambiar sus preguntas. Crea una nueva.');
         }
       }
@@ -804,13 +803,74 @@ const routes = {
     return json({ published: result.meta.changes });
   },
 
+  // Empieza (o retoma) un intento: fija la hora de inicio y devuelve las preguntas de ese alumno e intento.
+  'POST /api/attempt/start': async ({ db, user, request }) => {
+    const body = await readJson(request);
+    const { quiz } = await attemptContext(db, user, body);
+    const max = quiz.data.settings?.attempts || 1;
+    for (;;) {
+      const done = await one(db, 'SELECT count(*) AS n, coalesce(max(attempt),0) AS last FROM aula_attempts WHERE quiz=? AND user_id=?', quiz.id, user.id);
+      if (done.n >= max) fail(max === 1 ? 'Ya enviaste esta evaluación. Se permite un intento.' : `Ya usaste tus ${max} intentos.`, 409);
+      const attempt = done.last + 1;
+      await run(db, 'INSERT OR IGNORE INTO aula_attempt_starts (quiz,user_id,attempt,started) VALUES (?,?,?,?)', quiz.id, user.id, attempt, nowIso());
+      const { started } = await one(db, 'SELECT started FROM aula_attempt_starts WHERE quiz=? AND user_id=? AND attempt=?', quiz.id, user.id, attempt);
+      const deadline = deadlineOf(quiz, started);
+      // Un intento cuyo tiempo se acabó sin enviarse cuenta como intento con 0.
+      if (deadline && Date.now() > Date.parse(deadline) + 60_000) {
+        await run(
+          db,
+          `INSERT OR IGNORE INTO aula_attempts (id,course,quiz,user_id,name,answers,correct,total,score,created,attempt,details)
+           VALUES (?,?,?,?,?,'[]',0,?,0,?,?,NULL)`,
+          attemptId(quiz.id, user.id, attempt),
+          quiz.course,
+          quiz.id,
+          user.id,
+          user.name,
+          quiz.data.questions.length,
+          nowIso(),
+          attempt,
+        );
+        continue;
+      }
+      const questions = quizInstance(quiz, user.id, attempt).map(({ values: _v, ...q }) => q);
+      return json({ attempt, started, deadline, attemptsLeft: max - done.n, serverNow: Date.now(), questions });
+    }
+  },
+
   'POST /api/attempt': async ({ db, user, request }) => {
     const body = await readJson(request);
-    const a = await access(db, user, body.course);
-    const quiz = await contentRecord(db, body.quiz, body.course, 'quiz');
-    assertRecordAvailable(quiz);
-    if (a.teach) fail('Las evaluaciones se envían desde una cuenta de alumno.');
-    return json(await saveAttempt(db, { course: body.course, user, quiz, answers: body.answers }), 201);
+    const { quiz } = await attemptContext(db, user, body);
+    const max = quiz.data.settings?.attempts || 1;
+    const done = await one(db, 'SELECT count(*) AS n, coalesce(max(attempt),0) AS last FROM aula_attempts WHERE quiz=? AND user_id=?', quiz.id, user.id);
+    if (done.n >= max) fail(max === 1 ? 'Ya enviaste esta evaluación. Se permite un intento.' : `Ya usaste tus ${max} intentos.`, 409);
+    const attempt = done.last + 1;
+    const start = await one(db, 'SELECT started FROM aula_attempt_starts WHERE quiz=? AND user_id=? AND attempt=?', quiz.id, user.id, attempt);
+    if (quiz.data.settings?.timeLimit && !start) fail('Comienza el intento antes de enviarlo.', 409);
+    if (start) assertInTime(quiz, start.started);
+    const graded = gradeAttempt(quiz, quizInstance(quiz, user.id, attempt), body.answers);
+    const id = attemptId(quiz.id, user.id, attempt);
+    try {
+      await run(
+        db,
+        `INSERT INTO aula_attempts (id,course,quiz,user_id,name,answers,correct,total,score,created,attempt,details)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+        id,
+        quiz.course,
+        quiz.id,
+        user.id,
+        user.name,
+        JSON.stringify(graded.details.map((d) => d.answer)),
+        graded.correct,
+        graded.total,
+        graded.score,
+        nowIso(),
+        attempt,
+        JSON.stringify(graded.details),
+      );
+    } catch {
+      fail('Este intento ya se envió. Recarga la página.', 409);
+    }
+    return json(attemptRecord(await one(db, 'SELECT * FROM aula_attempts WHERE id=?', id)), 201);
   },
 
   // ---- Archivos ----

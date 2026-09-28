@@ -156,19 +156,6 @@ function renderForum() {
 function renderQuizzes() {
   $('#main').innerHTML = `<h1>Evaluaciones</h1><div class="home-tabs"><button class="active">${teaches() ? 'Administrar evaluaciones' : 'Mis evaluaciones'}</button></div><div class="toolbar">${teaches() ? button('Nueva evaluación', 'new-quiz') : ''}</div><div class="table-wrap"><table><thead><tr><th>Evaluación</th><th>Preguntas</th><th>Estado</th></tr></thead><tbody>${records('quiz').map(q => `<tr><td>${button(esc(q.data.title), 'quiz', q.id, 'table-link')}</td><td>${q.data.questions.length}</td><td>${q.data.visible ? 'Publicada' : 'Oculta'}</td></tr>`).join('') || '<tr><td colspan="3">No hay evaluaciones.</td></tr>'}</tbody></table></div>`;
 }
-function renderQuiz() {
-  const q = find(detail);
-  if (!q)
-    return renderQuizzes();
-  const attempts = records('attempt').filter(a => a.data.quiz === q.id), own = attempts.find(a => a.author === me.id);
-  $('#main').innerHTML = `<button class="back" data-section="quizzes">❮ Evaluaciones</button><h1>${esc(q.data.title)}</h1>${richText(q.data.body)}${teaches() ? `<div class="toolbar">${button('Editar evaluación', 'edit-quiz', q.id, 'secondary')}</div><p class="real-status">Se permite un intento por alumno. Las respuestas se califican en el servidor. Los resultados se consultan aquí, separados del promedio de actividades.</p>${q.data.questions.map((x, i) => `<section class="quiz-question"><h3>${i + 1}. ${esc(x.text)}</h3><ol type="A">${x.options.map((o, j) => `<li>${esc(o)} ${j === x.correct ? '✓' : ''}</li>`).join('')}</ol></section>`).join('')}<h2>Resultados</h2><div class="table-wrap"><table><thead><tr><th>Alumno</th><th>Calificación</th><th>Fecha</th></tr></thead><tbody>${attempts.map(a => `<tr><td>${esc(a.data.name)}</td><td>${a.data.score.toFixed(2)} / 10</td><td>${fmt(a.created)}</td></tr>`).join('') || '<tr><td colspan="3">No hay intentos registrados.</td></tr>'}</tbody></table></div>` : own ? `<div class="quiz-result">Resultado: <b>${own.data.score.toFixed(2)} / 10</b><p>${own.data.correct} de ${own.data.total} respuestas correctas.</p><p>Enviado el ${fmt(own.created)}</p></div>` : `<p class="real-status">Un intento. Revisa todas tus respuestas antes de enviar.</p><form id="quizAttempt">${q.data.questions.map((x, i) => `<fieldset class="quiz-question"><legend>${i + 1}. ${esc(x.text)}</legend>${x.options.map((o, j) => `<label><input type="radio" required name="q_${i}" value="${j}"> ${esc(o)}</label>`).join('')}</fieldset>`).join('')}<p class="form-error error" hidden></p><button class="primary">Enviar evaluación</button></form>`}`;
-  if ($('#quizAttempt'))
-    bindForm('#quizAttempt', f => request('/api/attempt', {
-      course: current.course.id,
-      quiz: q.id,
-      answers: q.data.questions.map((_, i) => Number(f.get('q_' + i)))
-    }));
-}
 function gradeOf(member, task) {
   return records('submission').find(s => s.data.member === member && s.data.task === task);
 }
@@ -427,28 +414,6 @@ function materialModal(old) {
     dirty = false;
   });
   richAttachments = files = attachmentManager($('#fields'), d.fileIds || [], 'material');
-}
-function quizFields(q, i) {
-  return `<fieldset class="quiz-edit-question" data-question><legend>Pregunta ${i + 1}</legend>${textarea('Enunciado', 'question_' + i, q?.text || '')}${[0, 1, 2].map(j => field('Opción ' + String.fromCharCode(65 + j), `option_${i}_${j}`, q?.options[j] || '', 'text', 'required')).join('')}<label>Respuesta correcta<select name="correct_${i}">${[0, 1, 2].map(j => `<option value="${j}" ${q?.correct === j ? 'selected' : ''}>${String.fromCharCode(65 + j)}</option>`).join('')}</select></label></fieldset>`;
-}
-function quizModal(old) {
-  let count = old?.data.questions.length || 1;
-  modal(old ? 'Editar evaluación' : 'Nueva evaluación', field('Título', 'title', old?.data.title || '', 'text', 'required') + richTextarea('Instrucciones', 'body', old?.data.body || '') + visible(old?.data.visible ?? false) + `<div id="questions">${Array.from({ length: count }, (_, i) => quizFields(old?.data.questions[i], i)).join('')}</div><button type="button" class="secondary" id="addQuestion">＋ Agregar pregunta</button><p class="pending-message">Un intento por alumno. Una evaluación con respuestas recibidas no permite modificar las preguntas.</p>` + (old ? `<p class="modal-danger">${trashButton('quiz', old.id, 'Eliminar evaluación')}</p>` : ''), f => save('quiz', {
-    title: f.get('title'),
-    body: f.get('body'),
-    visible: f.get('visible') === 'on',
-    questions: Array.from({ length: count }, (_, i) => ({
-      text: f.get('question_' + i),
-      options: [0, 1, 2].map(j => f.get(`option_${i}_${j}`)),
-      correct: Number(f.get('correct_' + i))
-    }))
-  }, old));
-  $('#addQuestion').onclick = () => {
-    if (count >= 50)
-      return;
-    $('#questions').insertAdjacentHTML('beforeend', quizFields(null, count));
-    count++;
-  };
 }
 function groupModal(old) {
   modal(old ? 'Editar grupo' : 'Nuevo grupo', field('Nombre', 'title', old?.data.title || '', 'text', 'required') + field('Categoría', 'category', old?.data.category || 'Equipos de trabajo', 'text', 'required') + `<fieldset class="member-list"><legend>Integrantes</legend>${current.members.filter(m => m.role === 'student').map(m => `<label><input type="checkbox" name="m_${m.id}" ${old?.data.members.includes(m.id) ? 'checked' : ''}> ${esc(m.name)}</label>`).join('')}</fieldset>`, f => save('group', {

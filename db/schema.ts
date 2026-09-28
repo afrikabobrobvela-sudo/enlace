@@ -492,9 +492,12 @@ export const attempts = sqliteTable(
     total: integer('total').notNull(),
     score: real('score').notNull(),
     created: text('created').notNull(),
+    // Migración 0012: número de intento (varios intentos) y detalle por pregunta (valores y si fue correcta).
+    attempt: integer('attempt').notNull().default(1),
+    details: text('details'),
   },
   (t) => [
-    uniqueIndex('aula_attempts_quiz_user').on(t.quiz, t.userId),
+    uniqueIndex('aula_attempts_quiz_user_attempt').on(t.quiz, t.userId, t.attempt),
     index('aula_attempts_course').on(t.course),
     check('aula_attempts_answers_check', sql`json_valid(answers)`),
     check('aula_attempts_total_check', sql`total > 0`),
@@ -519,4 +522,16 @@ export const extensions = sqliteTable(
     created: text('created').notNull(),
   },
   (t) => [primaryKey({ columns: [t.task, t.member] })],
+);
+
+/** Migración 0012: inicio de cada intento de evaluación (para el tiempo límite; no se reinicia al recargar). */
+export const attemptStarts = sqliteTable(
+  'aula_attempt_starts',
+  {
+    quiz: text('quiz').notNull(),
+    userId: text('user_id').notNull(),
+    attempt: integer('attempt').notNull(),
+    started: text('started').notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.quiz, t.userId, t.attempt] })],
 );

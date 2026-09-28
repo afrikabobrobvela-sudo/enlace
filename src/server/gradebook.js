@@ -80,6 +80,8 @@ export function attemptRecord(row) {
       correct: row.correct,
       total: row.total,
       name: row.name,
+      attempt: row.attempt ?? 1,
+      details: parseJson(row.details, null),
     },
   };
 }
@@ -554,37 +556,6 @@ export async function saveGrade(db, { course, grader, taskId, memberId, revision
   const saved = await one(db, 'SELECT * FROM aula_submissions WHERE task=? AND member=?', task.id, member.id);
   if (saved.graded_at !== now) fail('Esta calificación cambió. Recarga antes de guardar.', 409);
   return submissionRecord(saved);
-}
-
-export async function saveAttempt(db, { course, user, quiz, answers }) {
-  const questions = quiz.data.questions;
-  if (!Array.isArray(answers) || answers.length !== questions.length) fail('Responde todas las preguntas.');
-  let correct = 0;
-  answers.forEach((answer, i) => {
-    if (!Number.isInteger(answer) || answer < 0 || answer >= questions[i].options.length) fail('Respuesta no válida.');
-    if (answer === questions[i].correct) correct++;
-  });
-  const id = `attempt:${quiz.id}:${user.id}`;
-  const now = nowIso();
-  try {
-    await run(
-      db,
-      'INSERT INTO aula_attempts (id,course,quiz,user_id,name,answers,correct,total,score,created) VALUES (?,?,?,?,?,?,?,?,?,?)',
-      id,
-      course,
-      quiz.id,
-      user.id,
-      user.name,
-      JSON.stringify(answers),
-      correct,
-      questions.length,
-      (correct / questions.length) * 10,
-      now,
-    );
-  } catch {
-    fail('Ya enviaste esta evaluación. Se permite un intento.', 409);
-  }
-  return attemptRecord(await one(db, 'SELECT * FROM aula_attempts WHERE id=?', id));
 }
 
 export async function quizHasAttempts(db, course, quizId) {
