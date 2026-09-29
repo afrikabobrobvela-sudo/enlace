@@ -51,6 +51,7 @@ load('resultados.js');
 load('importar.js');
 load('foros.js');
 load('condiciones.js');
+load('importaciones.js');
 load('secciones.js');
 load('especial.js');
 load('foto.js');

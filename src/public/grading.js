@@ -85,6 +85,14 @@ function finalGrade(value, rules) {
   return { value: !passed && rules.failingAs !== null ? rules.failingAs : rounded, passed };
 }
 
+/** Asistencia del alumno en «Mis calificaciones» (12.24). */
+function myAttendanceSummaryHtml(member) {
+  const pct = attendancePercentFor(member.id);
+  if (pct === null) return '';
+  const low = pct < (attendanceData.settings?.min_percent ?? 0);
+  return `<div class="my-attendance"><h2>Asistencia</h2><p class="my-grade-big-small ${low ? 'grade-low' : 'grade-pass'}">${pct.toFixed(1)} %</p><p class="muted">Mínimo requerido: ${attendanceData.settings.min_percent} %.</p></div>`;
+}
+
 function attendancePercentFor(memberId) {
   if (!attendanceData || attendanceData.course !== current.course.id || !attendanceData.sessions.length) return null;
   const member = current.members.find((m) => m.id === memberId);
@@ -94,7 +102,8 @@ function attendancePercentFor(memberId) {
 
 /** Si una categoría usa la asistencia y aún no está cargada, la pide y vuelve a dibujar la pantalla. */
 function ensureAttendanceForGrades() {
-  const needs = gradingSettings().categories.some((c) => c.source === 'attendance');
+  // 12.24: la columna «Asistencia» de Calificaciones también la necesita.
+  const needs = section === 'grades' || gradingSettings().categories.some((c) => c.source === 'attendance');
   if (!needs || (attendanceData && attendanceData.course === current.course.id) || attendanceForGradesLoading) return;
   attendanceForGradesLoading = true;
   const courseId = current.course.id;
@@ -220,6 +229,7 @@ function myGradesHtml() {
     <section class="my-grade-summary">
       <p class="my-grade-big ${tone(avg)}">${formatGrade(avg)}</p>
       <div><h2>Promedio parcial</h2><p class="muted">Promedio ${scheme}, de 0 a 10, de lo ya calificado.</p></div>
+      ${myAttendanceSummaryHtml(member)}
     </section>
     ${
       cats.length
@@ -390,4 +400,160 @@ document.addEventListener('click', async (event) => {
     }
   }
   render();
+});
+
+// ---- Libro de calificaciones: captura en la tabla, entrega y opciones por actividad (12.24) ----------------------
+
+const DOC_ICON = '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" d="M6 3h8l4 4v14H6zM14 3v4h4M9 12h6M9 16h6"/></svg>';
+
+/** Casilla del libro: la calificación se escribe ahí mismo y el ícono abre la entrega (o la pantalla para calificar). */
+function gradebookCellHtml(t, m, s) {
+  const sent = s && !s.data.manual && (s.data.submitted || s.data.body || s.data.fileIds?.length);
+  const title = sent ? `Ver la entrega de ${m.name}${s.data.late ? ' (tardía)' : ''}` : `Calificar a ${m.name} con comentarios o rúbrica`;
+  return `<div class="gb-cell-row"><input class="gb-input" type="number" min="0" max="10" step="0.01" inputmode="decimal" value="${esc(s?.data.grade ?? '')}" placeholder="—"
+      data-gb-task="${esc(t.id)}" data-gb-member="${esc(m.id)}" aria-label="Calificación de ${esc(m.name)} en ${esc(t.data.title)}">
+    <button type="button" class="gb-open ${sent ? 'has-file' : ''}" data-action="review" data-id="${esc(t.id)}" data-member="${esc(m.id)}" title="${esc(title)}" aria-label="${esc(title)}">${sent ? DOC_ICON : '›'}</button></div>${
+    s && s.data.published === false ? '<span class="draft-tag">borrador</span>' : ''
+  }${sent && s.data.late ? '<span class="late-tag">tardía</span>' : ''}`;
+}
+
+/** Menú ⌄ de cada columna (como en Brightspace). */
+function gradebookColumnMenu(t) {
+  return `<details class="gb-col-menu"><summary aria-label="Opciones de ${esc(t.data.title)}" title="Opciones">⌄</summary><div class="gb-col-panel">
+    <button type="button" data-action="task" data-id="${esc(t.id)}">Ver entregas</button>
+    <button type="button" data-action="edit-task" data-id="${esc(t.id)}">Editar actividad</button>
+    <button type="button" data-gb-enter="${esc(t.id)}">Ingresar calificaciones</button>
+    <button type="button" data-gb-stats="${esc(t.id)}">Ver las estadísticas</button>
+  </div></details>`;
+}
+
+/** Guarda lo escrito en una casilla (si cambió) y actualiza el libro sin perder el lugar. */
+async function saveGradebookCell(input) {
+  const { gbTask: task, gbMember: member } = input.dataset;
+  const raw = input.value.trim().replace(',', '.');
+  const grade = raw === '' ? null : Number(raw);
+  input.classList.remove('is-error');
+  if (grade !== null && (!Number.isFinite(grade) || grade < 0 || grade > 10)) {
+    input.classList.add('is-error');
+    toast('La calificación va de 0 a 10.');
+    return false;
+  }
+  const s = gradeOf(member, task);
+  if ((s?.data.grade ?? null) === grade) return true;
+  const key = `${task}:${member}`;
+  if (gradebookSaving.has(key)) return gradebookSaving.get(key);
+  input.classList.add('is-saving');
+  const pending = saveGradebookGrade(input, task, member, s, grade).finally(() => gradebookSaving.delete(key));
+  gradebookSaving.set(key, pending);
+  return pending;
+}
+const gradebookSaving = new Map(); // guardados en curso (Enter y luego salir de la casilla no guardan dos veces)
+
+async function saveGradebookGrade(input, task, member, s, grade) {
+  try {
+    const saved = await request('/api/grade', { course: current.course.id, task, member, revision: s?.revision, grade, publish: reviewPublishNow() });
+    const i = current.records.findIndex((r) => r.id === saved.id);
+    if (i >= 0) current.records[i] = saved;
+    else current.records.push(saved);
+    refreshGradebook();
+    return true;
+  } catch (error) {
+    input.classList.remove('is-saving');
+    input.classList.add('is-error');
+    toast(error.status === 409 ? 'Otra persona cambió esta calificación. Recarga la página.' : error.message);
+    return false;
+  }
+}
+
+/** Vuelve a dibujar el libro conservando el foco, lo que se está escribiendo y el desplazamiento. */
+function refreshGradebook() {
+  if (section !== 'grades') return;
+  const active = document.activeElement?.matches?.('.gb-input') ? document.activeElement : null;
+  const keep = active ? { task: active.dataset.gbTask, member: active.dataset.gbMember, value: active.value } : null;
+  const wrap = document.querySelector('.gradebook');
+  const [left, top, y] = [wrap?.scrollLeft, wrap?.scrollTop, window.scrollY];
+  const search = document.querySelector('[data-search]')?.value || '';
+  renderGrades();
+  const box = document.querySelector('[data-search]');
+  if (search && box) {
+    box.value = search;
+    box.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+  const again = document.querySelector('.gradebook');
+  if (again) [again.scrollLeft, again.scrollTop] = [left, top];
+  window.scrollTo(0, y);
+  if (keep) {
+    const input = document.querySelector(`.gb-input[data-gb-task="${CSS.escape(keep.task)}"][data-gb-member="${CSS.escape(keep.member)}"]`);
+    if (input) {
+      input.value = keep.value;
+      input.focus({ preventScroll: true });
+    }
+  }
+}
+
+/** Casilla de la misma actividad en otra fila visible (Enter baja, Mayús+Enter sube). */
+function nextGradebookInput(input, step) {
+  const all = [...document.querySelectorAll(`.gb-input[data-gb-task="${CSS.escape(input.dataset.gbTask)}"]`)].filter((x) => !x.closest('tr')?.hidden);
+  return all[all.indexOf(input) + step] || null;
+}
+
+function gradebookStatsModal(taskId) {
+  const t = find(taskId);
+  const students = studentsInView().filter((m) => itemApplies(t, m));
+  const subs = students.map((m) => gradeOf(m.id, t.id));
+  const grades = subs.map((s) => s?.data.grade).filter((g) => g !== null && g !== undefined).map(Number).sort((a, b) => a - b);
+  const sent = subs.filter((s) => s && !s.data.manual && s.data.submitted).length;
+  const mean = grades.length ? grades.reduce((a, b) => a + b, 0) / grades.length : null;
+  const median = grades.length ? (grades.length % 2 ? grades[(grades.length - 1) / 2] : (grades[grades.length / 2 - 1] + grades[grades.length / 2]) / 2) : null;
+  const passing = gradingSettings().final.passing;
+  const bins = [
+    ['Menos de 6', (g) => g < 6],
+    ['6 a 6.9', (g) => g >= 6 && g < 7],
+    ['7 a 7.9', (g) => g >= 7 && g < 8],
+    ['8 a 8.9', (g) => g >= 8 && g < 9],
+    ['9 a 10', (g) => g >= 9],
+  ];
+  const f = (x) => (x === null ? '—' : x.toFixed(2));
+  modal(
+    `Estadísticas: ${t.data.title}`,
+    `<div class="stat-summary"><div><b>${grades.length} de ${students.length}</b><span>calificados</span></div><div><b>${sent}</b><span>entregaron en línea</span></div><div><b>${f(mean)}</b><span>promedio</span></div><div><b>${f(median)}</b><span>mediana</span></div><div><b>${grades.length ? `${f(grades[0])} – ${f(grades.at(-1))}` : '—'}</b><span>mínima y máxima</span></div><div><b>${grades.filter((g) => g >= passing).length}</b><span>aprobados (≥ ${passing})</span></div></div>
+     <div class="stat-bars">${bins
+       .map(([label, test]) => {
+         const n = grades.filter(test).length;
+         const share = grades.length ? n / grades.length : 0;
+         return `<div class="stat-bar"><span class="stat-bar-label">${label}</span><span class="stat-bar-track" aria-hidden="true"><span class="stat-bar-fill" style="width:${Math.round(share * 100)}%"></span></span><span class="stat-bar-value">${n} · ${Math.round(share * 100)} %</span></div>`;
+       })
+       .join('')}</div>${courseSections().length ? '<p class="muted">Cuentan los alumnos de las secciones elegidas en el filtro.</p>' : ''}`,
+    null,
+  );
+}
+
+document.addEventListener('keydown', (e) => {
+  if (!e.target.matches?.('.gb-input') || e.key !== 'Enter') return;
+  e.preventDefault();
+  const input = e.target;
+  const next = nextGradebookInput(input, e.shiftKey ? -1 : 1);
+  saveGradebookCell(input).then((ok) => {
+    if (!ok) return;
+    const target = next && document.querySelector(`.gb-input[data-gb-task="${CSS.escape(next.dataset.gbTask)}"][data-gb-member="${CSS.escape(next.dataset.gbMember)}"]`);
+    target?.focus();
+    target?.select?.();
+  });
+});
+document.addEventListener('change', (e) => {
+  if (e.target.matches?.('.gb-input')) saveGradebookCell(e.target);
+});
+document.addEventListener('click', (e) => {
+  const enter = e.target.closest('[data-gb-enter]');
+  const stats = e.target.closest('[data-gb-stats]');
+  if (enter || stats) e.target.closest('details')?.removeAttribute('open');
+  if (stats) return gradebookStatsModal(stats.dataset.gbStats);
+  if (enter) {
+    const first = document.querySelector(`.gb-input[data-gb-task="${CSS.escape(enter.dataset.gbEnter)}"]`);
+    first?.scrollIntoView({ block: 'center', inline: 'center' });
+    first?.focus({ preventScroll: true });
+    return;
+  }
+  // Cerrar el menú de columna al tocar fuera.
+  for (const open of document.querySelectorAll('.gb-col-menu[open]')) if (!open.contains(e.target)) open.removeAttribute('open');
 });

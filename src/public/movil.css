@@ -451,3 +451,16 @@ dialog.sheet::backdrop { background: rgba(12, 28, 42, 0.45); }
 }
 
 @keyframes dt-sheet-up { from { transform: translateY(24px); } to { transform: none; } }
+
+/* Asistencia en el teléfono (12.24): la columna del alumno ocupa como máximo la mitad, así se ven y se tocan las fechas. */
+@media (max-width: 720px) {
+  .att-grid .sticky-name { width: 46vw; min-width: 0 !important; max-width: 46vw; }
+  .att-grid .att-who { flex-wrap: wrap; gap: 4px 8px; }
+  .att-grid .att-who .avatar { width: 28px; height: 28px; }
+  .att-grid .att-who-name { flex: 1 1 calc(100% - 40px); font-size: 0.85rem; line-height: 1.25; white-space: normal; overflow-wrap: anywhere; }
+  .att-grid .att-who .att-pill { margin-left: 36px; font-size: 0.72rem; }
+  .att-grid .sticky-name > .muted { margin-left: 36px; font-size: 0.72rem; }
+  .gradebook .sticky-name { width: 44vw; min-width: 0 !important; max-width: 44vw; }
+  .gradebook .sticky-name .person { align-items: flex-start; }
+  .gradebook .sticky-name .person > span:last-child { font-size: 0.85rem; overflow-wrap: anywhere; }
+}

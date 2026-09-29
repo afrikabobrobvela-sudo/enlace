@@ -1,9 +1,33 @@
-# Enlace · versión 12.23
+# Enlace · versión 12.24
 
 Plataforma académica independiente para docentes y alumnos de cualquier academia (nació en la Academia de Física de la BUAP), con interfaz inspirada en Brightspace.
 No es el código de D2L Brightspace ni una plataforma oficial de la BUAP.
 
 Esta versión se despliega en **tu propia cuenta de Cloudflare** (Workers + D1 + R2, plan gratuito) y ya no depende de ChatGPT Sites.
+
+## Novedades de la versión 12.24 (asistencia, importar lista y calificaciones, libro de calificaciones)
+
+**Cambiar el estado después de pasar lista**: en el resumen de Asistencia, toca cualquier casilla (P, R, F, J o «·») y elige **Presente, Retardo, Falta o Justificada**, con una nota opcional (por ejemplo, «constancia médica»). Se guarda al momento, también sin internet (se envía al reconectar). En el teléfono, la columna del alumno ocupa menos espacio para que se vean y se toquen las fechas.
+
+**La ubicación ya no marca a quien está en el salón**. Dentro de edificios, el GPS de un teléfono (el tuyo o el del alumno) puede equivocarse cientos de metros; por eso se marcaban alumnos «a 650 m». Ahora:
+- el teléfono escucha la ubicación unos segundos y se queda con la lectura más precisa, en lugar de la primera (que suele venir de la red);
+- se cuenta toda la imprecisión que reportan los dos teléfonos (hasta 1 km cada uno) antes de decir que alguien está lejos;
+- se compara con el grupo: si todos aparecen a la misma distancia de tu punto, el que quedó mal es tu punto, y no se marca a nadie. Al cerrar el registro, los primeros en registrarse se revisan otra vez contra el grupo;
+- en la misma red que tú (el Wi-Fi de la escuela) y a menos de 1.5 km, una lectura dudosa no se marca.
+
+Quien de verdad está lejos (por ejemplo, en su casa) sigue quedando «por revisar».
+
+**Importar pase de lista** (Asistencia → «Importar lista»): un Excel o CSV con un alumno por fila (matrícula, correo o nombre, en cualquier orden) y una columna por clase con la fecha (2026-09-01 o 01/09/2026). En las casillas van P, R, F o J (o «Presente», «Retardo», «Falta», «Justificada», 1 o 0). Se crean las clases que falten y antes de guardar ves cuántos alumnos se reconocieron. Sirve el archivo de «Exportar a Excel».
+
+**Importar calificaciones** (Calificaciones → «Importar calificaciones»): del Excel que exporta **Brightspace** o de uno propio. Cada columna va a una actividad existente o a una nueva, y se convierte a la escala de 0 a 10 según sus puntos máximos (Brightspace los trae en el encabezado). Puedes elegir si se publican y si reemplazan lo ya capturado; todo queda en el historial de calificaciones.
+
+**Libro de calificaciones**:
+- La calificación se escribe **directamente en la tabla**; Enter pasa al siguiente alumno.
+- Un ícono de documento en cada casilla abre **la entrega del alumno** (o la pantalla para calificar con rúbrica y comentarios).
+- Cada actividad tiene un menú **⌄** con «Ver entregas», «Editar actividad», «Ingresar calificaciones» y «Ver las estadísticas» (promedio, mediana, aprobados y distribución).
+- Hay columna de **Asistencia** (%) y **foto** de cada alumno. El alumno también ve su porcentaje de asistencia en «Mis calificaciones».
+
+No requiere migraciones.
 
 ## Novedades de la versión 12.23 (evaluaciones, foros completos y condiciones de liberación)
 

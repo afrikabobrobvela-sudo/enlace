@@ -1229,3 +1229,49 @@ label > .dt-field { margin-top: 6px; }
 .cond-row .danger-link { margin-left: auto; font-size: 1.1rem; padding: 2px 8px; flex: none; }
 .conditions-pill { background: #eef1fb !important; color: #3b4a9c !important; }
 .conditions-pill.is-broken { background: #fdecea !important; color: #9b1c1c !important; }
+
+/* Asistencia y calificaciones (12.24) */
+button.att-mark { border: 1px solid transparent; cursor: pointer; font: inherit; font-weight: 700; font-size: 0.8rem; line-height: 1; box-shadow: none; }
+button.att-mark:hover, button.att-mark:focus-visible { border-color: var(--line-strong); outline: none; box-shadow: 0 0 0 3px rgba(14, 159, 180, 0.25); }
+button.att-mark.none { background: #f4f6f8; }
+.att-pop { position: absolute; z-index: 60; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow-lg); padding: 12px; display: grid; gap: 8px; }
+.att-pop-title { margin: 0; font-size: 0.9rem; line-height: 1.35; }
+.att-pop .att-states { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.att-pop .att-note { width: 100%; margin: 0; }
+.att-pop-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.gradebook .person { gap: 8px; }
+.gradebook .person .muted { font-size: 0.78rem; }
+.gb-task-col { min-width: 132px; }
+.gb-col-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 6px; }
+.gb-col-menu { position: relative; flex: none; }
+.gb-col-menu > summary { list-style: none; cursor: pointer; width: 28px; height: 28px; display: grid; place-items: center; border-radius: 6px; background: #eef2f5; color: var(--ink); font-weight: 700; }
+.gb-col-menu > summary::-webkit-details-marker { display: none; }
+.gb-col-menu[open] > summary { background: #dde6ee; }
+.gb-col-panel { position: absolute; right: 0; top: 32px; z-index: 30; min-width: 210px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-sm); box-shadow: var(--shadow-lg); padding: 4px 0; text-align: left; }
+.gb-col-panel button { display: block; width: 100%; text-align: left; background: none; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; padding: 10px 14px; font: inherit; font-weight: 500; color: var(--ink); cursor: pointer; box-shadow: none; }
+.gb-col-panel button:last-child { border-bottom: 0; }
+.gb-col-panel button:hover, .gb-col-panel button:focus-visible { background: #f2f7fa; outline: none; }
+.gb-cell-row { display: flex; align-items: center; gap: 4px; }
+.gb-input { width: 4.6em !important; min-width: 0; margin: 0 !important; padding: 6px 6px !important; text-align: right; font-variant-numeric: tabular-nums; }
+.gb-input.is-saving { background: #f7fbfd; }
+.gb-input.is-error { border-color: #b42318 !important; box-shadow: 0 0 0 2px rgba(180, 35, 24, 0.15); }
+.gb-open { flex: none; width: 30px; height: 30px; display: grid; place-items: center; padding: 0 !important; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--ink-faint); cursor: pointer; box-shadow: none; }
+.gb-open.has-file { color: var(--brand-2); border-color: #cfe3ee; background: #f2f8fc; }
+.gb-open:hover, .gb-open:focus-visible { border-color: var(--line-strong); color: var(--brand); outline: none; }
+.late-tag { display: inline-block; margin-left: 4px; font-size: 0.7rem; color: #8a5a00; }
+.gb-attendance { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.my-attendance { margin-left: auto; text-align: right; }
+.my-attendance h2 { margin: 0; font-size: 1rem; }
+.my-grade-big-small { margin: 2px 0; font-size: 1.6rem; font-weight: 700; }
+.grade-import-list { display: grid; gap: 8px; max-height: 420px; overflow: auto; margin: 8px 0; }
+.grade-import-row { border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 8px 12px; background: #fbfcfd; }
+.grade-import-fields { display: grid; grid-template-columns: 1.3fr 1fr 150px; gap: 6px 10px; margin-top: 6px; }
+.grade-import-fields label { margin: 0; font-size: 0.85rem; }
+.grade-import-fields input, .grade-import-fields select { margin: 2px 0 0; }
+.grade-import-fields [data-col-max] { width: 5em !important; display: inline-block; }
+@media (max-width: 720px) {
+  .grade-import-fields { grid-template-columns: 1fr; }
+  .my-attendance { margin-left: 0; text-align: left; }
+}
+.gradebook .sticky-name .person .muted { display: block; margin: 2px 0 0; padding: 0; text-align: left; white-space: nowrap; font-size: 0.75rem; }
+.gb-col-panel button { font-size: 0.9rem; }

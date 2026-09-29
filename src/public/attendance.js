@@ -202,6 +202,7 @@ function renderAttendanceGrid() {
       <button class="secondary" data-att="new">Nueva sesión</button>
       <button class="secondary" data-att="generate">Generar calendario</button>
       <button class="secondary" data-att="settings">Reglas</button>
+      <button class="secondary" data-att="import">Importar lista</button>
       ${sessions.length ? '<button class="secondary" data-att="export">Exportar a Excel</button>' : ''}
     </div>`;
   const rules = `Mínimo requerido: ${settings.min_percent} %. ${
@@ -225,28 +226,93 @@ function renderAttendanceGrid() {
       // Una clase de otra sección no le toca: no cuenta en su porcentaje.
       const statuses = sessions.map((s) => (sessionApplies(s, m) ? attendanceRecord(s.id, m.id)?.status : 'na'));
       const summary = attendanceSummary(statuses.filter((st) => st && st !== 'na'), settings);
+      // Cada casilla se puede corregir con un toque (12.24): retardo, justificada, etc.
+      const cell = (st, i) => {
+        const record = attendanceRecord(sessions[i].id, m.id);
+        const title = `${st ? ATT_STATUS[st].label : 'Sin registro'}${record?.note ? ' · ' + record.note : ''} — toca para cambiar`;
+        return `<td><button type="button" class="att-mark ${st || 'none'}" data-att-cell data-session="${sessions[i].id}" data-member="${m.id}" title="${esc(title)}" aria-label="${esc(m.name)}, ${esc(sessionLabel(sessions[i]))}: ${esc(title)}">${st ? ATT_STATUS[st].short : '·'}</button></td>`;
+      };
       return `<tr data-search-row><td class="sticky-name"><div class="att-who">${avatarHtml(m)}<span class="att-who-name">${esc(m.name)}</span>${percentPill(summary, settings.min_percent)}</div><div class="muted">${esc([m.matricula, sectionName(m.section)].filter(Boolean).join(' · '))}</div></td>
         ${statuses
-          .map((st) =>
-            st === 'na'
-              ? '<td><span class="att-mark na" title="Clase de otra sección"></span></td>'
-              : st
-              ? `<td><span class="att-mark ${st}" title="${ATT_STATUS[st].label}">${ATT_STATUS[st].short}</span></td>`
-              : '<td><span class="att-mark none" title="Sin registro">·</span></td>',
-          )
+          .map((st, i) => (st === 'na' ? '<td><span class="att-mark na" title="Clase de otra sección"></span></td>' : cell(st, i)))
           .join('')}</tr>`;
     })
     .join('');
   $('#main').innerHTML = `<div class="page-heading"><div><h1>Asistencia</h1><p class="muted">${rules}</p></div>${actions}</div>
     <p id="attSync" class="att-sync" role="status"></p>
     <div class="toolbar"><input data-search type="search" placeholder="Buscar alumno…" aria-label="Buscar alumno">${sectionFilterHtml()}</div>
-    <p class="att-legend">P presente, R retardo, F falta, J justificada. Toca una fecha para pasar lista o corregirla.</p>
+    <p class="att-legend">P presente, R retardo, F falta, J justificada. Toca una casilla para cambiar el estado de ese alumno (por ejemplo, a retardo o justificada) o una fecha para pasar lista.</p>
     <div class="table-wrap gradebook att-grid"><table><thead><tr><th class="sticky-name">Alumno y asistencia</th>
       ${sessions.map((s) => `<th><button class="table-link" data-att="open" data-id="${s.id}" aria-label="Pasar lista del ${esc(sessionLabel(s, 'long'))}">${columnLabel(s, sessions)}</button></th>`).join('')}
     </tr></thead><tbody>${rows || '<tr><td>No hay alumnos inscritos.</td></tr>'}</tbody></table></div>`;
   const wrap = document.querySelector('.att-grid');
-  if (wrap) wrap.scrollLeft = wrap.scrollWidth; // las fechas más recientes a la vista
+  if (wrap) wrap.scrollLeft = attGridScroll ?? wrap.scrollWidth; // las fechas más recientes a la vista (o donde estaba)
+  attGridScroll = null;
 }
+
+let attGridScroll = null;
+
+/** Menú para cambiar el estado de una casilla del resumen (presente, retardo, falta o justificada, con nota). */
+function openAttendanceCellMenu(target) {
+  closeAttendanceCellMenu();
+  const { session, member } = target.dataset;
+  const record = attendanceRecord(session, member);
+  const person = current.members.find((m) => m.id === member);
+  const info = attendanceData.sessions.find((x) => x.id === session);
+  const pop = document.createElement('div');
+  pop.className = 'att-pop';
+  pop.setAttribute('role', 'dialog');
+  pop.setAttribute('aria-label', 'Cambiar asistencia');
+  pop.innerHTML = `<p class="att-pop-title"><b>${esc(person?.name || '')}</b><br><span class="muted">${esc(info ? sessionLabel(info, 'long') : '')}</span></p>
+    <div class="att-states" role="group">${Object.entries(ATT_STATUS)
+      .map(([status, x]) => `<button type="button" class="att-state ${status}" data-att-pick="${status}" aria-pressed="${record?.status === status}">${x.label}</button>`)
+      .join('')}</div>
+    <input class="att-note" data-att-pop-note value="${esc(record?.note || '')}" maxlength="500" placeholder="Nota (opcional): constancia médica, llegó 7:20…" aria-label="Nota">
+    <div class="att-pop-actions"><button type="button" class="text-btn" data-att-pop-close>Cancelar</button>${record ? '<button type="button" class="secondary" data-att-pop-save>Guardar nota</button>' : ''}</div>`;
+  pop.dataset.session = session;
+  pop.dataset.member = member;
+  document.body.append(pop);
+  const r = target.getBoundingClientRect();
+  const w = Math.min(320, window.innerWidth - 16);
+  pop.style.width = w + 'px';
+  pop.style.left = Math.max(8, Math.min(r.left + window.scrollX - w / 2 + r.width / 2, window.scrollX + window.innerWidth - w - 8)) + 'px';
+  const below = r.bottom + window.scrollY + 6;
+  pop.style.top = (r.bottom + pop.offsetHeight + 12 > window.innerHeight ? Math.max(window.scrollY + 8, r.top + window.scrollY - pop.offsetHeight - 6) : below) + 'px';
+  pop.querySelector('[aria-pressed="true"], [data-att-pick]')?.focus();
+}
+
+function closeAttendanceCellMenu() {
+  document.querySelector('.att-pop')?.remove();
+}
+
+function applyAttendanceCell(pop, status) {
+  const { session, member } = pop.dataset;
+  const note = pop.querySelector('[data-att-pop-note]').value.trim();
+  attGridScroll = document.querySelector('.att-grid')?.scrollLeft ?? null;
+  const y = window.scrollY;
+  markAttendance(session, [member], status, note);
+  closeAttendanceCellMenu();
+  renderAttendanceGrid();
+  window.scrollTo(0, y);
+  document.querySelector(`[data-att-cell][data-session="${session}"][data-member="${member}"]`)?.focus({ preventScroll: true });
+}
+
+document.addEventListener('click', (event) => {
+  const pop = document.querySelector('.att-pop');
+  const cell = event.target.closest('[data-att-cell]');
+  if (cell) return openAttendanceCellMenu(cell);
+  if (!pop) return;
+  const pick = event.target.closest('[data-att-pick]');
+  if (pick) return applyAttendanceCell(pop, pick.dataset.attPick);
+  if (event.target.closest('[data-att-pop-save]')) {
+    const record = attendanceRecord(pop.dataset.session, pop.dataset.member);
+    return applyAttendanceCell(pop, record?.status || 'present');
+  }
+  if (event.target.closest('[data-att-pop-close]') || !event.target.closest('.att-pop')) closeAttendanceCellMenu();
+});
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape' && document.querySelector('.att-pop')) closeAttendanceCellMenu();
+});
 
 function renderRollCall() {
   const session = attendanceData.sessions.find((s) => s.id === attendanceSessionId);
@@ -467,6 +533,7 @@ document.addEventListener('click', (event) => {
   if (action === 'generate') generateSessionsModal();
   if (action === 'settings') attendanceSettingsModal();
   if (action === 'export') exportAttendance();
+  if (action === 'import') importAttendanceModal();
   if (action === 'delete') deleteSessionModal(button.dataset.id);
   if (action === 'open') {
     attendanceSessionId = button.dataset.id;

@@ -73,13 +73,37 @@ function useCheckin(open, serverNow) {
 }
 
 /** Ubicación actual del teléfono. Nunca lanza: devuelve { location } o { error: 'denied' | 'unavailable' }. */
-function currentLocation(timeout = 15000) {
+/**
+ * Ubicación del teléfono. Dentro de edificios la primera lectura suele venir de la red (con cientos de metros de
+ * error): se escuchan las lecturas unos segundos y se queda la más precisa (12.24). Termina antes si llega una de
+ * 30 m o menos.
+ */
+function currentLocation(timeout = 15000, settle = 8000) {
   return new Promise((resolve) => {
     if (!navigator.geolocation) return resolve({ error: 'unavailable' });
-    navigator.geolocation.getCurrentPosition(
-      (p) => resolve({ location: { lat: p.coords.latitude, lng: p.coords.longitude, accuracy: p.coords.accuracy } }),
-      (e) => resolve({ error: e.code === 1 ? 'denied' : 'unavailable' }),
-      { enableHighAccuracy: true, timeout, maximumAge: 30000 },
+    let best = null;
+    let watch = null;
+    let done = false;
+    const finish = (result) => {
+      if (done) return;
+      done = true;
+      if (watch !== null) navigator.geolocation.clearWatch(watch);
+      clearTimeout(settleTimer);
+      clearTimeout(hardTimer);
+      resolve(result);
+    };
+    const settleTimer = setTimeout(() => best && finish({ location: best }), Math.min(settle, timeout));
+    const hardTimer = setTimeout(() => finish(best ? { location: best } : { error: 'unavailable' }), timeout);
+    watch = navigator.geolocation.watchPosition(
+      (p) => {
+        const reading = { lat: p.coords.latitude, lng: p.coords.longitude, accuracy: p.coords.accuracy };
+        if (!best || reading.accuracy < best.accuracy) best = reading;
+        if (best.accuracy <= 30) finish({ location: best });
+      },
+      (e) => {
+        if (e.code === 1) finish({ error: 'denied' });
+      },
+      { enableHighAccuracy: true, timeout, maximumAge: 0 },
     );
   });
 }

@@ -18,6 +18,7 @@ import {
 } from './http.js';
 
 const STATUSES = ['present', 'late', 'absent', 'excused'];
+const MAX_IMPORT = 15000;
 const DEFAULT_SETTINGS = { min_percent: 80, lates_per_absence: 0, excused_counts: 'present' };
 const MAX_GENERATED = 200;
 // Registro con QR: la firma cambia cada 10 s y se acepta hasta ~30 s después (lo que tarda un teléfono en leerla).
@@ -74,7 +75,23 @@ const distanceText = (m) => (m >= 1000 ? `${(m / 1000).toFixed(1)} km` : `${Math
  * Revisa la ubicación del alumno contra la del salón. Devuelve lo que se guarda (distancia, precisión, red)
  * y el motivo para revisar ('' si todo está bien). Nunca se guardan las coordenadas del alumno.
  */
-function locationCheck(session, place, locationError, network) {
+/** Mediana de las distancias ya registradas en la clase (con al menos CROWD_MIN registros), o null. */
+const CROWD_MIN = 5;
+function crowdMedian(distances) {
+  const list = distances.filter((d) => Number.isFinite(d)).sort((a, b) => a - b);
+  if (list.length < CROWD_MIN) return null;
+  const mid = list.length >> 1;
+  return list.length % 2 ? list[mid] : (list[mid - 1] + list[mid]) / 2;
+}
+
+/**
+ * ¿Está en el salón? Dentro de edificios, el GPS de un teléfono (el del alumno o el del docente) puede equivocarse
+ * cientos de metros (12.24: se marcaban alumnos «a 650 m» estando en el salón). Solo se marca «por revisar» si el
+ * alumno está lejos aun contando la imprecisión de los dos teléfonos, lejos del resto del grupo (la mediana de las
+ * distancias de quienes ya se registraron: si el punto del docente quedó mal, todo el grupo aparece a la misma
+ * distancia) y, si la lectura es dudosa, desde otra red.
+ */
+function locationCheck(session, place, locationError, network, crowd = []) {
   const sameNetwork = session.checkin_network && network ? (session.checkin_network === network ? 1 : 0) : null;
   const result = { distance: null, accuracy: place ? Math.round(place.accuracy) : null, sameNetwork, flag: '' };
   if (!session.checkin_radius) return result;
@@ -89,10 +106,44 @@ function locationCheck(session, place, locationError, network) {
   }
   const distance = distanceMeters({ lat: session.checkin_lat, lng: session.checkin_lng }, place);
   result.distance = Math.round(distance);
-  // Margen por la imprecisión de ambos teléfonos dentro de edificios (hasta 250 m cada uno).
-  const margin = Math.min(place.accuracy, 250) + Math.min(session.checkin_accuracy ?? 0, 250);
-  if (distance > session.checkin_radius + margin) result.flag = `a ${distanceText(distance)} del salón`;
+  // Margen por la imprecisión de ambos teléfonos dentro de edificios (hasta 1 km cada uno).
+  const margin = Math.min(place.accuracy, 1000) + Math.min(session.checkin_accuracy ?? 0, 1000);
+  const limit = session.checkin_radius + margin;
+  if (distance <= limit) return result;
+  // Si el grupo está a la misma distancia del punto del docente, el que quedó mal es ese punto.
+  const median = crowdMedian(crowd);
+  if (median !== null && median > session.checkin_radius && Math.abs(distance - median) <= limit) return result;
+  // Misma red que el docente (Wi-Fi del edificio) y a menos de 1.5 km: la lectura del GPS es la que falla.
+  if (sameNetwork === 1 && distance <= 1500) return result;
+  result.flag = `a ${distanceText(distance)} del salón`;
   return result;
+}
+
+/**
+ * Al cerrar el registro, los primeros en registrarse (antes de que hubiera grupo con qué comparar) se revisan otra vez
+ * contra la distancia del resto del grupo: si están donde está el grupo, se quita el «por revisar».
+ */
+async function reconcileLocationFlags(db, session, userId) {
+  if (!session.checkin_radius) return 0;
+  const rows = await all(db, 'SELECT member, distance, accuracy, flag FROM aula_checkins WHERE session=? AND distance IS NOT NULL', session.id);
+  const median = crowdMedian(rows.map((r) => r.distance));
+  if (median === null || median <= session.checkin_radius) return 0;
+  const clear = rows
+    .filter((r) => /^a .* del salón$/.test(r.flag))
+    .filter((r) => Math.abs(r.distance - median) <= session.checkin_radius + Math.min(r.accuracy ?? 0, 1000) + Math.min(session.checkin_accuracy ?? 0, 1000))
+    .map((r) => r.member);
+  if (!clear.length) return 0;
+  const list = JSON.stringify(clear);
+  await db.batch([
+    db.prepare("UPDATE aula_checkins SET flag='' WHERE session=? AND member IN (SELECT value FROM json_each(?))").bind(session.id, list),
+    db
+      .prepare(
+        `UPDATE aula_attendance SET note=substr(note,1,instr(note,' · Por revisar')-1) || ' · Ubicación confirmada con el grupo', updated_by=?, updated=?
+         WHERE session=? AND member IN (SELECT value FROM json_each(?)) AND instr(note,' · Por revisar')>0`,
+      )
+      .bind(userId, nowIso(), session.id, list),
+  ]);
+  return clear.length;
 }
 
 async function qrSignature(secret, code, window) {
@@ -320,6 +371,64 @@ export const attendanceRoutes = {
     return json({ saved: byMember.size });
   },
 
+  // Importa un pase de lista (12.24): filas { date, time, member, status, note }. Crea las clases que falten (de la
+  // sección elegida o de todo el curso) y guarda los registros en un solo batch; con overwrite=false no toca los que
+  // ya existen.
+  'POST /api/attendance/import': async ({ db, user, request }) => {
+    const body = await readJson(request);
+    requireTeacher(await access(db, user, body.course));
+    const section = await validSection(db, body.course, body.section);
+    const input = Array.isArray(body.entries) ? body.entries : [];
+    if (!input.length) fail('No hay registros para importar.');
+    if (input.length > MAX_IMPORT) fail(`Importa como máximo ${MAX_IMPORT} registros a la vez (divide el archivo).`);
+    const byKey = new Map();
+    for (const e of input) {
+      if (!STATUSES.includes(e?.status)) fail('Estado de asistencia no válido.');
+      const entry = { date: validDate(e.date), time: validTime(e.time), member: String(e.member ?? ''), status: e.status, note: optionalText(e.note, 500) };
+      byKey.set(`${entry.date} ${entry.time} ${entry.member}`, entry);
+    }
+    const entries = [...byKey.values()];
+    const dates = new Set(entries.map((e) => `${e.date} ${e.time}`));
+    if (dates.size > 200) fail('Importa como máximo 200 clases a la vez.');
+    const json_ = JSON.stringify(entries);
+    const members = [...new Set(entries.map((e) => e.member))];
+    const valid = await one(
+      db,
+      `SELECT count(*) AS n FROM aula_members m WHERE m.course=? AND m.role='student' AND (?='' OR m.section=?) AND m.id IN (SELECT value FROM json_each(?))`,
+      body.course,
+      section,
+      section,
+      JSON.stringify(members),
+    );
+    if (valid.n !== members.length) fail(section ? 'Hay alumnos que no pertenecen a esa sección.' : 'Hay alumnos que no pertenecen a este curso.');
+    const now = nowIso();
+    const before = await one(db, 'SELECT count(*) AS n FROM aula_sessions WHERE course=?', body.course);
+    await db.batch([
+      db
+        .prepare(
+          `INSERT INTO aula_sessions (id,course,date,start_time,topic,created_by,created,section)
+           SELECT lower(hex(randomblob(16))), ?1, d.date, d.time, '', ?2, ?3, ?4
+           FROM (SELECT DISTINCT json_extract(value,'$.date') AS date, json_extract(value,'$.time') AS time FROM json_each(?5)) d
+           WHERE true ON CONFLICT DO NOTHING`,
+        )
+        .bind(body.course, user.id, now, section, json_),
+      db
+        .prepare(
+          `INSERT INTO aula_attendance (session,member,status,note,updated_by,updated)
+           SELECT s.id, json_extract(j.value,'$.member'), json_extract(j.value,'$.status'), json_extract(j.value,'$.note'), ?2, ?3
+           FROM json_each(?5) j JOIN aula_sessions s ON s.course=?1 AND s.section=?4
+             AND s.date=json_extract(j.value,'$.date') AND s.start_time=json_extract(j.value,'$.time')
+           WHERE true
+           ON CONFLICT(session,member) DO UPDATE SET status=excluded.status,
+             note=CASE WHEN excluded.note<>'' THEN excluded.note ELSE aula_attendance.note END, updated_by=excluded.updated_by, updated=excluded.updated
+           WHERE ?6`,
+        )
+        .bind(body.course, user.id, now, section, json_, body.overwrite === false ? 0 : 1),
+    ]);
+    const after = await one(db, 'SELECT count(*) AS n FROM aula_sessions WHERE course=?', body.course);
+    return json({ sessions: after.n - before.n, marks: entries.length });
+  },
+
   // ---- Registro con QR ----------------------------------------------------------------------
 
   // El docente abre el registro: se genera un código nuevo, un secreto para firmar el QR y, si se pide, un PIN.
@@ -414,7 +523,10 @@ export const attendanceRoutes = {
     const info = { course: session.course_name, date: session.date, start_time: session.start_time };
     const existing = await one(db, 'SELECT status FROM aula_attendance WHERE session=? AND member=?', session.id, member.id);
     if (existing && (existing.status === 'present' || existing.status === 'late')) return json({ ...info, status: existing.status, already: true });
-    const check = locationCheck(session, validLocation(body.location), String(body.locationError || ''), networkOf(request));
+    const crowd = session.checkin_radius
+      ? (await all(db, 'SELECT distance FROM aula_checkins WHERE session=? AND distance IS NOT NULL AND member<>?', session.id, member.id)).map((r) => r.distance)
+      : [];
+    const check = locationCheck(session, validLocation(body.location), String(body.locationError || ''), networkOf(request), crowd);
     if (check.flag && session.checkin_strict) {
       fail(`No se pudo registrar tu asistencia: ${check.flag}. Si estás en el salón, activa la ubicación del navegador y vuelve a intentarlo, o pide a tu docente que te registre.`, 403);
     }
@@ -440,7 +552,8 @@ export const attendanceRoutes = {
   'POST /api/attendance/checkin/close': async ({ db, user, request }) => {
     const body = await readJson(request);
     requireTeacher(await access(db, user, body.course));
-    await sessionOf(db, body.session, body.course);
+    const session = await sessionOf(db, body.session, body.course);
+    await reconcileLocationFlags(db, session, user.id);
     // La ubicación del salón solo se necesita mientras el registro está abierto.
     await run(
       db,
