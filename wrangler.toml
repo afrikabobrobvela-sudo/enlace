@@ -34,6 +34,9 @@ AULA_OWNER_EMAIL = "tu-correo@gmail.com"
 # MICROSOFT_TENANT_ID = "00000000-0000-0000-0000-000000000000"
 # Dominios aceptados por Microsoft (por omisión: correo.buap.mx, alumno.buap.mx y buap.mx).
 # MICROSOFT_EMAIL_DOMAINS = "correo.buap.mx,alumno.buap.mx"
+# Foto de perfil obligatoria: el alumno se la toma la primera vez que entra y sin ella no puede continuar.
+# Para quitar la obligación (por ejemplo, un grupo sin cámara), cámbialo a "0" y vuelve a publicar.
+FOTO_OBLIGATORIA = "1"
 
 # ── Entorno de pruebas ──────────────────────────────────────────────────────────────────────────
 # Una copia independiente (enlace-pruebas.TU-SUBDOMINIO.workers.dev) con su propia base y archivos,
@@ -56,3 +59,4 @@ bucket_name = "enlace-pruebas-archivos"
 
 [env.pruebas.vars]
 AULA_OWNER_EMAIL = "tu-correo@gmail.com"
+FOTO_OBLIGATORIA = "1"

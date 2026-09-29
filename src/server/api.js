@@ -34,6 +34,8 @@ import {
   validEvents,
 } from './quizzes.js';
 import { bankImageVisible, bankRoutes } from './bank.js';
+import { photoRoutes, servePhoto } from './photos.js';
+import { quizForStudent, quizWithSectionDates, sectionIdsByName, sectionKey, sectionRoutes, sectionsOf, validSection } from './sections.js';
 import { gradingRoutes } from './grading.js';
 import { clearSessionCookie, identity, lastLogins, revokeAllStatements } from './auth.js';
 import {
@@ -95,6 +97,20 @@ const EXAM_ROUTES = new Set([
 ]);
 const ACTIVE_EXAM_MESSAGE = 'Estás contestando un examen: hasta que lo envíes (o se acabe el tiempo) solo puedes usar el examen.';
 
+// ---- Foto de perfil obligatoria para los alumnos -------------------------------------------------------
+// Un alumno sin foto solo puede tomársela (y lo mínimo para llegar ahí): la interfaz le muestra la cámara.
+const PHOTO_FREE_ROUTES = new Set(['GET /api/me', 'POST /api/privacy/accept', 'POST /api/profile/photo', 'POST /api/logout-all']);
+export const PHOTO_REQUIRED_MESSAGE = 'Antes de continuar, tómate tu foto de perfil.';
+
+export const photoRequired = (env, user) => env.FOTO_OBLIGATORIA === '1' && user.role === 'student' && !user.photo;
+
+function assertHasPhoto(route, user, env) {
+  if (!photoRequired(env, user)) return;
+  // Un examen ya empezado no se interrumpe (por ejemplo, si el docente le quitó la foto mientras contestaba).
+  if (user.activeExam && EXAM_ROUTES.has(route)) return;
+  if (!PHOTO_FREE_ROUTES.has(route)) fail(PHOTO_REQUIRED_MESSAGE, 428, { needsPhoto: true });
+}
+
 function assertExamRoute(route, url, user) {
   const allowed =
     (EXAM_ROUTES.has(route) && (route !== 'GET /api/course' || url.searchParams.get('id') === user.activeExam.course)) ||
@@ -112,11 +128,13 @@ export async function api(request, env) {
       await assertWritable(env.DB, route, url, request); // un curso archivado es de solo lectura
     }
     if (user.activeExam) assertExamRoute(route, url, user);
+    assertHasPhoto(route, user, env);
     const ctx = { db: env.DB, env, user, url, request };
     const handler =
-      routes[route] || attendanceRoutes[route] || gradingRoutes[route] || directoryRoutes[route] || privacyRoutes[route] || periodRoutes[route] || dashboardRoutes[route] || reportRoutes[route] || demoRoutes[route] || backupRoutes[route] || userRoutes[route] || bankRoutes[route];
+      routes[route] || attendanceRoutes[route] || gradingRoutes[route] || directoryRoutes[route] || privacyRoutes[route] || periodRoutes[route] || dashboardRoutes[route] || reportRoutes[route] || demoRoutes[route] || backupRoutes[route] || userRoutes[route] || bankRoutes[route] || sectionRoutes[route] || photoRoutes[route];
     if (handler) return await handler(ctx);
     if (request.method === 'GET' && url.pathname.startsWith('/api/file/')) return await downloadFile(ctx, url.pathname.slice(10));
+    if (request.method === 'GET' && url.pathname.startsWith('/api/photo/')) return await servePhoto(ctx, url.pathname.slice(11));
     fail('Ruta no encontrada.', 404);
   } catch (error) {
     console.error('aula-api', error.status || 500, error.status ? error.message : error);
@@ -310,7 +328,8 @@ async function openStart(db, quiz, userId) {
 async function attemptContext(db, user, body) {
   const a = await access(db, user, body.course);
   if (a.teach) fail('Las evaluaciones se responden desde una cuenta de alumno. Usa Ver como alumno para revisarlas.');
-  const quiz = await contentRecord(db, body.quiz, body.course, 'quiz');
+  // Con las fechas de la sección del alumno (cada grupo presenta a su hora).
+  const quiz = await quizForStudent(db, await contentRecord(db, body.quiz, body.course, 'quiz'), user.id);
   if (user.activeExam && user.activeExam.quiz !== quiz.id) fail(ACTIVE_EXAM_MESSAGE, 423, { activeExam: user.activeExam });
   assertRecordAvailable(quiz);
   return { a, quiz };
@@ -327,6 +346,8 @@ const routes = {
       privacyVersion: PRIVACY_VERSION,
       // Examen abierto que bloquea el resto de Enlace: la interfaz entra directo a él.
       activeExam: user.activeExam || null,
+      // Alumno sin foto de perfil: la interfaz le pide tomársela antes de mostrar lo demás.
+      needsPhoto: photoRequired(env, user),
     }),
 
   // Cierra la sesión en todos los dispositivos de la persona (por ejemplo, si perdió su teléfono).
@@ -409,6 +430,24 @@ const routes = {
         ...CONTENT_KINDS,
       )
     ).map(unpack);
+    // Fechas por sección: quien enseña recibe todas; el alumno, solo las de su sección (ya aplicadas a sus evaluaciones;
+    // las de actividades se aplican en courseGradebook).
+    // Una sola consulta para las secciones y sus fechas (cuidando el límite de consultas por solicitud).
+    const sectionRow = await one(
+      db,
+      `SELECT (SELECT json_group_array(json_object('id',id,'name',name,'position',position))
+                FROM (SELECT * FROM aula_sections WHERE course=?1 ORDER BY position, name)) AS sections,
+              (SELECT json_group_array(json_object('item',d.item,'section',d.section,'start_at',d.start_at,'due',d.due,'end_at',d.end_at))
+                FROM aula_section_dates d WHERE d.course=?1 AND (?4 OR d.section=(SELECT section FROM aula_members m
+                  WHERE m.course=?1 AND m.role='student' AND (m.id=?3 OR (?3 IS NULL AND m.user_id=?2)) LIMIT 1))) AS dates`,
+      courseId,
+      viewer,
+      viewing?.id ?? null,
+      teach ? 1 : 0,
+    );
+    const sections = JSON.parse(sectionRow?.sections || '[]');
+    const sectionDates = JSON.parse(sectionRow?.dates || '[]');
+    const myDates = teach ? new Map() : new Map(sectionDates.map((d) => [d.item, d]));
     // Para el alumno: visible y con su fecha de publicación cumplida (publicación programada).
     const now = nowIso();
     const visible = (r) => isPublished(r, now);
@@ -426,7 +465,9 @@ const routes = {
             // El alumno nunca recibe respuestas correctas, fórmulas ni rangos de las variables.
             // Del modo examen tampoco recibe la contraseña ni la ubicación del salón.
             r.kind === 'quiz'
-              ? { ...r, data: { ...r.data, questions: publicQuestions(r.data.questions), questionCount: questionCount(r.data), settings: publicSettings(r.data.settings) } }
+              ? ((q) => ({ ...q, data: { ...q.data, questions: publicQuestions(q.data.questions), questionCount: questionCount(q.data), settings: publicSettings(q.data.settings) } }))(
+                  quizWithSectionDates(r, myDates.get(r.id)),
+                )
               : r,
           );
     const quizzesById = new Map(rows.filter((r) => r.kind === 'quiz').map((r) => [r.id, r]));
@@ -446,10 +487,24 @@ const routes = {
       for (const r of records) if (r.kind === 'quiz') r.data.questions = r.data.questions.map((q, i) => (seen.get(r.id)?.has(i) ? q : null));
     }
 
-    const memberRows = await all(db, "SELECT * FROM aula_members WHERE course=? AND role!='removed' ORDER BY name", courseId);
+    // `photo`: fecha de cambio de la foto de perfil (la interfaz la pide a /api/photo/<usuario>?v=<fecha>).
+    const memberRows = await all(
+      db,
+      `SELECT m.*, CASE WHEN u.photo IS NOT NULL THEN u.photo_updated END AS photo
+       FROM aula_members m LEFT JOIN aula_users u ON u.id=m.user_id WHERE m.course=? AND m.role!='removed' ORDER BY m.name`,
+      courseId,
+    );
     const members = teach
       ? memberRows
-      : memberRows.map((m) => ({ id: m.id, user_id: m.user_id, name: m.name, role: m.role }));
+      : memberRows.map((m) => ({
+          id: m.id,
+          user_id: m.user_id,
+          name: m.name,
+          role: m.role,
+          ...(m.role === 'student' ? { section: m.section } : {}),
+          // El alumno ve la foto de sus docentes y la suya, no la de sus compañeros.
+          ...(m.photo && (m.role === 'teacher' || m.user_id === viewer) ? { photo: m.photo } : {}),
+        }));
 
     // Seguimiento del contenido: quien enseña ve el de todos; el alumno (o la vista de un alumno), solo el suyo.
     const progress = teach
@@ -496,6 +551,8 @@ const routes = {
       viewing: viewing ? { id: viewing.id, name: viewing.name, user_id: viewing.user_id, key: attemptUser } : null,
       canDelete: !preview && (user.role === 'admin' || ownsCourse(user, a.course)),
       records,
+      sections,
+      ...(teach ? { sectionDates } : {}),
       members,
       files,
       progress,
@@ -646,17 +703,20 @@ const routes = {
     requireTeacher(await access(db, user, body.course));
     const address = validEmail(body.email);
     const existingUser = await one(db, 'SELECT id FROM aula_users WHERE email=?', address);
+    const section = await validSection(db, body.course, body.section);
     await run(
       db,
-      `INSERT INTO aula_members (id,course,email,user_id,name,matricula,role) VALUES (?,?,?,?,?,?,'student')
+      `INSERT INTO aula_members (id,course,email,user_id,name,matricula,role,section) VALUES (?,?,?,?,?,?,'student',?)
        ON CONFLICT(course,email) DO UPDATE SET name=excluded.name,matricula=excluded.matricula,role='student',
-         user_id=coalesce(aula_members.user_id,excluded.user_id)`,
+         user_id=coalesce(aula_members.user_id,excluded.user_id),
+         section=CASE WHEN excluded.section<>'' THEN excluded.section ELSE aula_members.section END`,
       crypto.randomUUID(),
       body.course,
       address,
       existingUser?.id || null,
       text(body.name, 150),
       optionalText(body.matricula, 50),
+      section,
     );
     return json({ ok: true });
   },
@@ -669,14 +729,19 @@ const routes = {
     if (!Array.isArray(body.students) || !body.students.length) fail('La lista está vacía.');
     if (body.students.length > MAX_BULK_STUDENTS) fail(`Importa como máximo ${MAX_BULK_STUDENTS} alumnos a la vez.`);
     const byEmail = new Map();
+    // Columna «Sección» o «Grupo» de la lista: se crean las secciones que falten. Sin ella, `section` (id) para todos.
+    const named = await sectionIdsByName(db, body.course, body.students.map((s) => s?.section));
+    const common = await validSection(db, body.course, body.sectionId);
     body.students.forEach((s, index) => {
       try {
         const address = validEmail(s?.email);
+        const sectionName = String(s.section ?? '').trim().replace(/\s+/g, ' ').slice(0, 40);
         byEmail.set(address, {
           id: crypto.randomUUID(),
           email: address,
           name: text(s.name, 150),
           matricula: optionalText(s.matricula, 50),
+          section: (sectionName && named.get(sectionKey(sectionName))) || common,
         });
       } catch (error) {
         fail(`Fila ${index + 1}: ${error.message}`);
@@ -691,13 +756,14 @@ const routes = {
     );
     await run(
       db,
-      `INSERT INTO aula_members (id,course,email,user_id,name,matricula,role)
+      `INSERT INTO aula_members (id,course,email,user_id,name,matricula,role,section)
        SELECT json_extract(j.value,'$.id'), ?1, json_extract(j.value,'$.email'),
               (SELECT u.id FROM aula_users u WHERE u.email=json_extract(j.value,'$.email')),
-              json_extract(j.value,'$.name'), json_extract(j.value,'$.matricula'), 'student'
+              json_extract(j.value,'$.name'), json_extract(j.value,'$.matricula'), 'student', json_extract(j.value,'$.section')
        FROM json_each(?2) j WHERE true
        ON CONFLICT(course,email) DO UPDATE SET name=excluded.name,matricula=excluded.matricula,role='student',
-         user_id=coalesce(aula_members.user_id,excluded.user_id)`,
+         user_id=coalesce(aula_members.user_id,excluded.user_id),
+         section=CASE WHEN excluded.section<>'' THEN excluded.section ELSE aula_members.section END`,
       body.course,
       students,
     );
@@ -1380,16 +1446,18 @@ const routes = {
     const [running, blocked] = await Promise.all([
       all(
         db,
-        `SELECT s.*, coalesce(m.name, u.name) AS name FROM aula_attempt_starts s JOIN aula_users u ON u.id=s.user_id
-           LEFT JOIN aula_members m ON m.course=? AND m.user_id=s.user_id
-         WHERE s.quiz=? AND NOT EXISTS (SELECT 1 FROM aula_attempts a WHERE a.quiz=s.quiz AND a.user_id=s.user_id AND a.attempt=s.attempt)
+        `SELECT s.*, coalesce(m.name, u.name) AS name, m.id AS member, m.section, d.start_at AS sec_start, d.end_at AS sec_end
+         FROM aula_attempt_starts s JOIN aula_users u ON u.id=s.user_id
+           LEFT JOIN aula_members m ON m.course=?1 AND m.user_id=s.user_id
+           LEFT JOIN aula_section_dates d ON d.item=s.quiz AND d.section=m.section
+         WHERE s.quiz=?2 AND NOT EXISTS (SELECT 1 FROM aula_attempts a WHERE a.quiz=s.quiz AND a.user_id=s.user_id AND a.attempt=s.attempt)
          ORDER BY name`,
         course,
         quiz.id,
       ),
       all(
         db,
-        `SELECT t.user_id, t.failures, coalesce(m.name, u.name) AS name FROM aula_exam_tries t JOIN aula_users u ON u.id=t.user_id
+        `SELECT t.user_id, t.failures, coalesce(m.name, u.name) AS name, m.section FROM aula_exam_tries t JOIN aula_users u ON u.id=t.user_id
            LEFT JOIN aula_members m ON m.course=? AND m.user_id=t.user_id
          WHERE t.quiz=? AND t.failures>=?`,
         course,
@@ -1401,9 +1469,11 @@ const routes = {
       running: running.map((s) => ({
         user: s.user_id,
         name: s.name,
+        member: s.member || null,
+        section: s.section || '',
         attempt: s.attempt,
         started: s.started,
-        deadline: deadlineOf(quiz, s.started),
+        deadline: deadlineOf(quizWithSectionDates(quiz, { start_at: s.sec_start, end_at: s.sec_end }), s.started),
         answered: Object.keys(JSON.parse(s.progress || '{}')).length,
         ...integritySummary(s),
         // Bloqueado al salir: el código solo lo ve quien enseña (para dictárselo en persona).
@@ -1413,7 +1483,7 @@ const routes = {
         unlockFailures: s.unlock_failures || 0,
         away: Boolean(s.away_since),
       })),
-      blocked: blocked.map((b) => ({ user: b.user_id, name: b.name })),
+      blocked: blocked.map((b) => ({ user: b.user_id, name: b.name, section: b.section || '' })),
       total: questionCount(quiz.data),
     });
   },
@@ -1724,5 +1794,5 @@ async function previewFile(env, request, file) {
 }
 
 function publicUser(user) {
-  return { id: user.id, email: user.email, name: user.name, role: user.role };
+  return { id: user.id, email: user.email, name: user.name, role: user.role, photo: user.photo ? user.photo_updated : null };
 }

@@ -11,7 +11,7 @@ async function boot({ search = '', login }) {
       return { ok: false, status: 401, json: async () => ({ error: 'Inicia sesión para continuar.', login }) };
     },
   });
-  browser.load('richtext.js', 'trash.js', 'evaluaciones.js', 'banco.js', 'pendientes.js', 'calendario.js', 'navegacion.js', 'movil.js', 'registro.js', 'login.js', 'app.js');
+  browser.load('richtext.js', 'trash.js', 'evaluaciones.js', 'banco.js', 'secciones.js', 'foto.js', 'pendientes.js', 'calendario.js', 'navegacion.js', 'movil.js', 'registro.js', 'login.js', 'app.js');
   await new Promise((resolve) => setTimeout(resolve, 0));
   return { ...browser, html: browser.elements.get('#main').innerHTML, calls: () => calls };
 }

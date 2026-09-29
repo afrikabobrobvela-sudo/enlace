@@ -117,24 +117,28 @@ function removeTeacherModal(dataset) {
 /**
  * Interpreta una lista pegada desde Excel (columnas separadas por tabulador) o un CSV (comas o punto y coma).
  * Reconoce las columnas por su contenido: el correo por la @, la matrícula por ser solo dígitos y el
- * nombre como el texto restante. Si la primera fila es un encabezado, la ignora.
+ * nombre como el texto restante. Si la primera fila es un encabezado, la ignora; si el encabezado tiene una
+ * columna «Sección» o «Grupo», esa columna indica la sección de cada alumno.
  */
 function parseRoster(textValue) {
   const students = [];
   const errors = [];
   const lines = String(textValue || '').split(/\r?\n/);
+  let sectionColumn = -1;
   lines.forEach((line, index) => {
     if (!line.trim()) return;
-    const cells = line
-      .split(line.includes('\t') ? '\t' : /[;,]/)
-      .map((c) => c.trim().replace(/^"(.*)"$/, '$1').trim())
-      .filter(Boolean);
-    if (index === 0 && cells.some((c) => /^(correo|e-?mail|nombre|matr[ií]cula)$/i.test(c))) return;
+    const raw = line.split(line.includes('\t') ? '\t' : /[;,]/).map((c) => c.trim().replace(/^"(.*)"$/, '$1').trim());
+    if (index === 0 && raw.some((c) => /^(correo|e-?mail|nombre|matr[ií]cula|secci[oó]n|grupo)$/i.test(c))) {
+      sectionColumn = raw.findIndex((c) => /^(secci[oó]n|grupo)$/i.test(c));
+      return;
+    }
+    const section = sectionColumn >= 0 ? raw[sectionColumn] || '' : '';
+    const cells = raw.filter((c, i) => c && i !== sectionColumn);
     const email = cells.find((c) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(c));
     const matricula = cells.find((c) => c !== email && /^\d{5,12}$/.test(c)) || '';
     const name = cells.filter((c) => c !== email && c !== matricula).join(' ');
     if (!email || !name) errors.push({ line: index + 1, text: line.trim().slice(0, 80) });
-    else students.push({ name, email: email.toLowerCase(), matricula });
+    else students.push({ name, email: email.toLowerCase(), matricula, ...(section ? { section } : {}) });
   });
   return { students, errors };
 }
@@ -144,13 +148,15 @@ function bulkMembersModal() {
     'Importar lista de alumnos',
     `<p>Pega la lista desde Excel o un archivo CSV: una fila por alumno con <strong>nombre</strong>, <strong>correo</strong> y, si la tienes, <strong>matrícula</strong>, en cualquier orden.</p>
      <label>Lista<textarea name="roster" required spellcheck="false" placeholder="Ana Pérez López	202612345	ana.perez@alumno.buap.mx"></textarea></label>
+     <label>Sección de esta lista<select name="sectionId"><option value="">${courseSections().length ? 'Sin sección (o la de la columna «Sección»)' : 'Sin sección'}</option>${courseSections().map((s) => `<option value="${esc(s.id)}" ${selectedSection() === s.id ? 'selected' : ''}>${esc(s.name)}</option>`).join('')}</select></label>
+     <p class="muted">¿Varios grupos en una sola lista? Agrega una primera fila de encabezado con una columna <strong>Sección</strong> (por ejemplo 5AV, 5BV): las secciones que no existan se crean solas.</p>
      <p class="roster-preview" id="rosterPreview" role="status">Aún no hay filas.</p>
      <p class="pending-message">Si un correo ya está inscrito, se actualizan su nombre y matrícula. No se envían invitaciones.</p>`,
     async (f) => {
       const { students, errors } = parseRoster(f.get('roster'));
       if (errors.length) throw new Error(`Revisa la fila ${errors[0].line}: falta el nombre o el correo.`);
       if (!students.length) throw new Error('Pega al menos una fila con nombre y correo.');
-      const result = await request('/api/members/bulk', { course: current.course.id, students });
+      const result = await request('/api/members/bulk', { course: current.course.id, students, sectionId: f.get('sectionId') || '' });
       return `Lista importada: ${result.created} ${result.created === 1 ? 'alumno nuevo' : 'alumnos nuevos'}, ${result.updated} ${result.updated === 1 ? 'actualizado' : 'actualizados'}.`;
     },
     'Importar alumnos',

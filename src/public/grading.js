@@ -87,7 +87,8 @@ function finalGrade(value, rules) {
 
 function attendancePercentFor(memberId) {
   if (!attendanceData || attendanceData.course !== current.course.id || !attendanceData.sessions.length) return null;
-  const statuses = attendanceData.sessions.map((s) => attendanceRecord(s.id, memberId)?.status).filter(Boolean);
+  const member = current.members.find((m) => m.id === memberId);
+  const statuses = attendanceData.sessions.filter((s) => sessionApplies(s, member)).map((s) => attendanceRecord(s.id, memberId)?.status).filter(Boolean);
   return attendanceSummary(statuses, attendanceData.settings).percent;
 }
 

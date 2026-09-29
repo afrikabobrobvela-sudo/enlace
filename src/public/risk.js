@@ -44,14 +44,14 @@ async function renderProgress() {
     }
     if (section !== 'progress' || current?.course.id !== courseId) return;
   }
-  const students = current.members.filter((m) => m.role === 'student');
+  const students = studentsInView();
   const tasks = records('task');
   const settings = attendanceData?.settings;
   const attendance = attendanceData?.sessions.length
     ? new Map(
         students.map((m) => [
           m.id,
-          attendanceSummary(attendanceData.sessions.map((s) => attendanceRecord(s.id, m.id)?.status).filter(Boolean), settings),
+          attendanceSummary(attendanceData.sessions.filter((s) => sessionApplies(s, m)).map((s) => attendanceRecord(s.id, m.id)?.status).filter(Boolean), settings),
         ]),
       )
     : null;
@@ -83,7 +83,7 @@ async function renderProgress() {
       <p class="muted">${atRisk.length ? `${atRisk.length} de ${students.length} ${atRisk.length === 1 ? 'alumno requiere' : 'alumnos requieren'} atención.` : 'Ningún alumno cumple hoy los criterios de riesgo.'}</p></div>
       <div class="action-row"><button type="button" class="secondary" data-risk="export">Exportar a Excel</button></div></div>
     <p class="real-status">Criterios: asistencia debajo del mínimo del curso${settings ? ` (${settings.min_percent} %)` : ''}, dos o más actividades vencidas sin entregar, o promedio parcial menor a ${RISK_PASSING}. Riesgo alto: dos o más criterios a la vez.</p>
-    <div class="toolbar"><input data-search type="search" placeholder="Buscar alumno…" aria-label="Buscar alumno">
+    <div class="toolbar"><input data-search type="search" placeholder="Buscar alumno…" aria-label="Buscar alumno">${sectionFilterHtml()}
       <label class="review-filter"><input type="checkbox" data-risk="only" ${progressOnlyRisk ? 'checked' : ''}> Solo alumnos en riesgo</label></div>
     <div class="table-wrap"><table><thead><tr><th>Alumno</th><th>Riesgo</th><th>Asistencia</th><th>Vencidas sin entregar</th><th>Entregas</th><th>Contenido completado</th><th>Promedio parcial</th></tr></thead>
     <tbody>${rows || `<tr><td colspan="7" class="empty">${progressOnlyRisk && students.length ? 'Nadie está en riesgo. Desmarca el filtro para ver a todo el grupo.' : 'No hay alumnos inscritos.'}</td></tr>`}</tbody></table></div>`;

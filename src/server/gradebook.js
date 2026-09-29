@@ -6,6 +6,7 @@
 // ({ id, kind, data, revision, ... }), para que el frontend no tenga que cambiar.
 
 import { all, fail, isoDate, nowIso, one, optionalText, parseJson, run, text } from './http.js';
+import { withSectionDates } from './sections.js';
 
 // ---- Conversión fila → registro --------------------------------------------------------------
 
@@ -120,8 +121,10 @@ export async function courseGradebook(db, course, { teacher, userId, memberId = 
     ? await all(db, 'SELECT * FROM aula_tasks WHERE course=? AND deleted_at IS NULL ORDER BY created', course)
     : await all(
         db,
-        `SELECT t.*, e.due AS ext_due, e.end_at AS ext_end FROM aula_tasks t
-         LEFT JOIN aula_extensions e ON e.task=t.id AND e.member=coalesce(?3, (SELECT id FROM aula_members WHERE course=?1 AND user_id=?2))
+        `WITH me AS (SELECT id, section FROM aula_members WHERE course=?1 AND (id=?3 OR (?3 IS NULL AND user_id=?2)) LIMIT 1)
+         SELECT t.*, e.due AS ext_due, e.end_at AS ext_end, d.start_at AS sec_start, d.due AS sec_due, d.end_at AS sec_end FROM aula_tasks t
+         LEFT JOIN aula_extensions e ON e.task=t.id AND e.member=(SELECT id FROM me)
+         LEFT JOIN aula_section_dates d ON d.item=t.id AND d.section=(SELECT section FROM me)
          WHERE t.course=?1 AND t.deleted_at IS NULL ORDER BY t.created`,
         course,
         userId,
@@ -156,7 +159,8 @@ export async function courseGradebook(db, course, { teacher, userId, memberId = 
       .map((t) => {
         if (teacher) return taskRecord(t);
         const extension = t.ext_due ? { due: t.ext_due, end_at: t.ext_end } : null;
-        const record = taskRecord(withExtension(t, extension));
+        // Primero las fechas de su sección; encima, su prórroga individual.
+        const record = taskRecord(withExtension(withSectionDates(t, { start_at: t.sec_start, due: t.sec_due, end_at: t.sec_end }), extension));
         return extension ? { ...record, data: { ...record.data, extended: true } } : record;
       }),
     ...(teacher
@@ -393,8 +397,16 @@ export async function saveSubmission(db, { course, user, id, revision, input, va
 
   const loaded = await loadTask(db, input.task, course);
   if (!member || member.role !== 'student') fail('Solo un alumno inscrito puede entregar esta actividad.', 403);
-  const extension = await one(db, 'SELECT due, end_at FROM aula_extensions WHERE task=? AND member=?', loaded.id, member.id);
-  const task = withExtension(loaded, extension);
+  const dates = await one(
+    db,
+    `SELECT e.due AS ext_due, e.end_at AS ext_end, d.start_at, d.due, d.end_at FROM (SELECT 1) x
+     LEFT JOIN aula_extensions e ON e.task=?1 AND e.member=?2
+     LEFT JOIN aula_section_dates d ON d.item=?1 AND d.section=?3`,
+    loaded.id,
+    member.id,
+    member.section || '',
+  );
+  const task = withExtension(withSectionDates(loaded, dates), dates?.ext_due ? { due: dates.ext_due, end_at: dates.ext_end } : null);
   assertAvailable(task);
 
   const existing = await one(db, 'SELECT * FROM aula_submissions WHERE task=? AND member=?', task.id, member.id);

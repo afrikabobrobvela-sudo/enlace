@@ -15,7 +15,7 @@ const CALENDAR_MAX_DAYS = 100;
 const noticeKey = (item) => `${item.type}:${item.id}:${item.at}`;
 
 /** Cursos activos (no archivados ni retirados) en los que la persona es alumna. */
-const STUDENT_COURSES = `SELECT m.id AS member, m.course FROM aula_members m JOIN aula_courses c ON c.id=m.course
+const STUDENT_COURSES = `SELECT m.id AS member, m.course, m.section FROM aula_members m JOIN aula_courses c ON c.id=m.course
   WHERE m.user_id=?1 AND m.role='student' AND c.archived_at IS NULL
     AND NOT EXISTS (SELECT 1 FROM aula_deleted_courses d WHERE d.course=c.id)`;
 /** Cursos activos en los que la persona enseña (propietaria o co-docente). */
@@ -45,12 +45,13 @@ export const dashboardRoutes = {
       all(
         db,
         `WITH mine AS (${STUDENT_COURSES})
-         SELECT t.id, t.title, t.course, c.name AS course_name, coalesce(e.due, t.due) AS due,
+         SELECT t.id, t.title, t.course, c.name AS course_name, coalesce(e.due, nullif(d.due,''), t.due) AS due,
                 CASE WHEN e.due IS NOT NULL THEN 1 ELSE 0 END AS extended
          FROM mine JOIN aula_tasks t ON t.course=mine.course AND t.visible=1 AND t.deleted_at IS NULL
          JOIN aula_courses c ON c.id=t.course
          LEFT JOIN aula_extensions e ON e.task=t.id AND e.member=mine.member
-         WHERE coalesce(e.due, t.due) BETWEEN ?2 AND ?3 AND (t.start_at='' OR t.start_at<=?4)
+         LEFT JOIN aula_section_dates d ON d.item=t.id AND d.section=mine.section
+         WHERE coalesce(e.due, nullif(d.due,''), t.due) BETWEEN ?2 AND ?3 AND (coalesce(nullif(d.start_at,''), t.start_at)='' OR coalesce(nullif(d.start_at,''), t.start_at)<=?4)
            AND NOT EXISTS (SELECT 1 FROM aula_submissions s WHERE s.task=t.id AND s.member=mine.member AND (s.submitted!='' OR s.grade IS NOT NULL))
          ORDER BY due LIMIT 30`,
         user.id,
@@ -192,13 +193,14 @@ export const dashboardRoutes = {
       all(
         db,
         `WITH mine AS (${STUDENT_COURSES})
-         SELECT t.id, t.title, t.course, coalesce(e.due, t.due) AS due, coalesce(e.end_at, t.end_at) AS end_at,
+         SELECT t.id, t.title, t.course, coalesce(e.due, nullif(d.due,''), t.due) AS due, coalesce(e.end_at, nullif(d.end_at,''), t.end_at) AS end_at,
                 e.due IS NOT NULL AS extended, s.submitted, s.grade, s.published, s.late
          FROM mine JOIN aula_tasks t ON t.course=mine.course AND t.visible=1 AND t.deleted_at IS NULL
-           AND (t.start_at='' OR t.start_at<=?4)
          LEFT JOIN aula_extensions e ON e.task=t.id AND e.member=mine.member
+         LEFT JOIN aula_section_dates d ON d.item=t.id AND d.section=mine.section
          LEFT JOIN aula_submissions s ON s.task=t.id AND s.member=mine.member
-         WHERE coalesce(e.due, t.due) BETWEEN ?2 AND ?3 ORDER BY due LIMIT 300`,
+         WHERE coalesce(e.due, nullif(d.due,''), t.due) BETWEEN ?2 AND ?3
+           AND (coalesce(nullif(d.start_at,''), t.start_at)='' OR coalesce(nullif(d.start_at,''), t.start_at)<=?4) ORDER BY due LIMIT 300`,
         user.id,
         fromIso,
         toIso,
@@ -224,6 +226,7 @@ export const dashboardRoutes = {
          SELECT x.id, x.course, x.date, x.start_time, x.topic, x.role,
            (SELECT a.status FROM aula_attendance a WHERE a.session=x.id AND a.member=x.member) AS status
          FROM (SELECT s.*, 'student' AS role, mine.member FROM mine JOIN aula_sessions s ON s.course=mine.course
+                 AND (s.section='' OR s.section=mine.section)
                UNION ALL
                SELECT s.*, 'teacher', NULL FROM teach JOIN aula_sessions s ON s.course=teach.course) x
          WHERE x.date BETWEEN ?2 AND ?3 ORDER BY x.date, x.start_time LIMIT 400`,

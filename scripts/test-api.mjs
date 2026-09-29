@@ -287,7 +287,8 @@ assert(store.counter.queries <= 3, `GET /api/courses usó ${store.counter.querie
   store.counter.queries = 0;
   await call('student', '/api/course?id=' + c);
 // 11 desde la 12.14 (seguimiento del contenido); el límite del plan gratuito es 50 por solicitud.
-assert(store.counter.queries <= 11, `GET /api/course usó ${store.counter.queries} consultas`);
+// 12: una más desde la 12.18 (secciones y sus fechas, juntas en una consulta).
+assert(store.counter.queries <= 12, `GET /api/course usó ${store.counter.queries} consultas`);
 
   // ---- Persistencia real al reabrir la base ----
   store.reopen();

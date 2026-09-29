@@ -58,7 +58,8 @@ function parseTeamList(text, students) {
 }
 
 function bulkTeamsModal() {
-  const students = current.members.filter((m) => m.role === 'student');
+  // Con secciones, los equipos se forman con los alumnos de la sección elegida en el filtro.
+  const students = studentsInView();
   let proposal = [];
   modal(
     'Crear equipos en lote',

@@ -215,7 +215,8 @@ function quizModal(old) {
         <label>Fecha de inicio (opcional)<input name="opensAt" type="datetime-local" value="${esc(localDate(settings.opensAt))}"></label>
         <label>Fecha final (opcional)<input name="closesAt" type="datetime-local" value="${esc(localDate(settings.closesAt))}"></label></div>
         <label class="check-label"><input type="checkbox" name="timerFixed" ${settings.timerMode === 'fixed' ? 'checked' : ''}> El tiempo empieza a la hora de inicio, igual para todos (quien entra tarde tiene menos tiempo)</label>
-        <p class="muted">Antes del inicio no se puede empezar; en la fecha final termina todo lo que esté en curso y se califica lo que cada alumno dejó guardado.</p></fieldset>
+        <p class="muted">Antes del inicio no se puede empezar; en la fecha final termina todo lo que esté en curso y se califica lo que cada alumno dejó guardado.</p>
+        ${sectionDatesHtml(old?.id, 'quiz')}</fieldset>
       <fieldset class="quiz-settings"><legend>Qué ve el alumno al terminar</legend>
         <label class="check-label"><input type="checkbox" name="showScore" ${settings.results?.score !== false ? 'checked' : ''}> Su calificación (si lo desmarcas, ve «pendiente» hasta que lo actives)</label>
         <label class="check-label"><input type="checkbox" name="showReview" ${old && settings.results?.review !== 'none' ? 'checked' : ''}> Qué preguntas acertó (ve los enunciados que le tocaron con ✓ y ✗, sin las respuestas correctas)</label>
@@ -229,8 +230,8 @@ function quizModal(old) {
        <fieldset class="quiz-settings" id="quizDrawBox"></fieldset>
        <p class="pending-message">Una evaluación con respuestas recibidas no permite modificar las preguntas ni las preguntas al azar.</p>` +
       (old ? `<p class="modal-danger">${trashButton('quiz', old.id, 'Eliminar evaluación')}</p>` : ''),
-    (f) =>
-      save(
+    async (f) => {
+      const saved = await save(
         'quiz',
         {
           title: f.get('title'),
@@ -253,7 +254,9 @@ function quizModal(old) {
           questions: readQuizQuestions(),
         },
         old,
-      ),
+      );
+      await saveSectionDates('quiz', saved.id, readSectionDates(f));
+    },
   );
   renderQuizQuestions();
 }
@@ -405,7 +408,9 @@ function renderQuiz() {
       .join('');
     // Resultados por alumno: mejor calificación y número de intentos.
     const byStudent = new Map();
-    for (const a of attempts) {
+    // Con secciones, el autor del intento (cuenta o alumno de ejemplo) se ubica en su sección.
+    const memberOfAuthor = (author) => current.members.find((m) => m.user_id === author || `demo:${m.id}` === author);
+    for (const a of attempts.filter((x) => inSelectedSection(memberOfAuthor(x.author)))) {
       const row = byStudent.get(a.author) || { author: a.author, name: a.data.name, best: 0, count: 0, last: '', integrity: [] };
       row.best = Math.max(row.best, a.data.score);
       row.count++;
@@ -420,12 +425,12 @@ function renderQuiz() {
           .map((d) => `${d.count} de «${esc(d.pool)}»`)
           .join(', ')} al azar${questionCountOf(q.data) > settings.draw.reduce((n, d) => n + d.count, 0) ? ' y todas las que no tienen grupo' : ''}.</p>`
       : '';
-    $('#main').innerHTML = `${head}<div class="toolbar">${button('Editar evaluación', 'edit-quiz', q.id, 'secondary')}<button class="secondary" data-bank-save="${esc(q.id)}">Guardar en el banco</button></div>
+    $('#main').innerHTML = `${head}<div class="toolbar">${button('Editar evaluación', 'edit-quiz', q.id, 'secondary')}<button class="secondary" data-bank-save="${esc(q.id)}">Guardar en el banco</button>${sectionFilterHtml()}</div>${sectionDatesSummary(q.id)}
       ${exam ? `<section class="exam-monitor" id="examMonitor"><p class="muted">Cargando examen en curso…</p></section>` : ''}${drawNote}${questions}
       <h2>Resultados</h2><div class="table-wrap"><table><thead><tr><th>Alumno</th><th>Mejor calificación</th><th>Intentos</th><th>Último envío</th>${exam ? '<th>Integridad</th>' : ''}</tr></thead><tbody>${
         rows
           .map(
-            (r) => `<tr><td>${esc(r.name)}</td><td>${r.best.toFixed(2)} / 10</td><td>${r.count} de ${settings.attempts}</td><td>${fmt(r.last)}</td>${
+            (r) => `<tr><td>${esc(r.name)}${courseSections().length ? `<div class="table-subtext">${esc(sectionName(memberOfAuthor(r.author)?.section) || 'Sin sección')}</div>` : ''}</td><td>${r.best.toFixed(2)} / 10</td><td>${r.count} de ${settings.attempts}</td><td>${fmt(r.last)}</td>${
               exam ? `<td>${integrityCell(r.integrity)}${r.integrity.length ? ` <button type="button" class="table-link" data-integrity="${esc(r.author)}">Detalle</button>` : ''}</td>` : ''
             }</tr>`,
           )
@@ -610,6 +615,9 @@ async function loadExamMonitor(quizId) {
     return;
   }
   if (!document.getElementById('examMonitor') || detail !== quizId) return;
+  // Con secciones, solo la sección elegida en el filtro (la que está presentando).
+  const inView = (r) => inSelectedSection({ section: r.section || '' });
+  data = { ...data, running: data.running.filter(inView), blocked: data.blocked.filter(inView) };
   // Bloqueados al salir: arriba, con el código grande para dictárselo en persona.
   const locked = data.running
     .filter((r) => r.locked)
@@ -619,7 +627,7 @@ async function loadExamMonitor(quizId) {
     .join('');
   const running = data.running
     .filter((r) => !r.locked)
-    .map((r) => `<li><strong>${esc(r.name)}</strong> <span class="muted">intento ${r.attempt} · ${r.answered} de ${data.total} contestadas · desde ${esc(new Date(r.started).toLocaleTimeString('es-MX', { timeStyle: 'short' }))}</span>${
+    .map((r) => `<li><strong>${esc(r.name)}</strong>${r.section && !selectedSection() ? ` <span class="quiz-pool-tag">${esc(sectionName(r.section))}</span>` : ''} <span class="muted">intento ${r.attempt} · ${r.answered} de ${data.total} contestadas · desde ${esc(new Date(r.started).toLocaleTimeString('es-MX', { timeStyle: 'short' }))}</span>${
       integrityText(r) ? ` <span class="integrity-warn">${esc(integrityText(r))}</span>` : ''
     }</li>`)
     .join('');

@@ -19,7 +19,7 @@ let me = null, courses = [], current = null, section = 'hub', detail = null, mod
 const records = kind => current?.records.filter(r => r.kind === kind) || [], find = id => current?.records.find(r => r.id === id), teaches = () => !!current?.canTeach;
 /** Vencimiento de una actividad para un alumno, con su prórroga si la tiene (solo el docente recibe las prórrogas). */
 const extensionOf = (taskId, memberId) => current?.records.find(r => r.kind === 'extension' && r.data.task === taskId && r.data.member === memberId);
-const dueFor = (task, memberId) => extensionOf(task.id, memberId)?.data.due || task.data.due;
+const dueFor = (task, memberId) => extensionOf(task.id, memberId)?.data.due || sectionDateOf(task.id, memberId)?.due || task.data.due;
 const fmt = v => v ? new Date(v).toLocaleString('es-MX', { dateStyle: 'medium', timeStyle: 'short' }) : 'Sin fecha límite';
 const localDate = v => {
   if (!v)
@@ -63,6 +63,9 @@ async function request(path, data, method = 'POST') {
   // Examen abierto que bloquea la plataforma: cualquier otra pantalla lleva de vuelta al examen.
   if (r.status === 423 && b.activeExam && typeof goToActiveExam === 'function')
     goToActiveExam(b.activeExam).catch(() => {});
+  // Alumno sin foto de perfil (por ejemplo, su docente se la quitó): se le pide tomarse otra.
+  if (r.status === 428 && b.needsPhoto && typeof renderPhotoGate === 'function' && !document.querySelector('.photo-gate'))
+    renderPhotoGate();
   if (!r.ok)
     throw Object.assign(new Error(b.error || 'No se pudo completar la operación.'), { status: r.status, login: b.login, data: b });
   return b;
@@ -151,10 +154,10 @@ function renderTask() {
   if (!t)
     return renderTasks();
   const subs = records('submission').filter(s => s.data.task === t.id), own = subs.find(s => s.data.member === myMember()?.id) || subs.find(s => s.author === viewerKey());
-  $('#main').innerHTML = `<div class="crumbs"><button data-section="tasks">Actividades</button><span>›</span><span>${teaches() ? 'Envíos en carpeta' : 'Entrega'}</span></div><h1>${esc(t.data.title)}</h1><p class="deadline">Vence: ${fmt(t.data.due)}</p>${t.data.extended ? '<p class="extension-note">Tienes una prórroga: esta es tu nueva fecha de entrega.</p>' : ''}${!teaches() && t.data.groupCategory ? teamBannerHtml(t) : ''}${richText(t.data.body, t.data.fileIds)}<section class="task-materials"><div class="panel-head"><h2>Material del docente</h2>${teaches() ? button('＋ Subir archivos o presentaciones', 'task-files', t.id) : ''}</div>${fileLinks(t.data.fileIds)}${!t.data.fileIds?.length ? '<p class="muted">No hay archivos adjuntos a esta actividad.</p>' : ''}</section>${teaches() ? `<div class="toolbar">${button('Editar actividad', 'edit-task', t.id, 'secondary')}${button('Descargar entregas (ZIP)', 'zip-task', t.id, 'secondary')}</div><div class="table-wrap"><table><thead><tr><th>Alumno</th><th>Estado</th><th>Calificación</th><th>Acción</th></tr></thead><tbody>${current.members.filter(m => m.role === 'student').map(m => {
+  $('#main').innerHTML = `<div class="crumbs"><button data-section="tasks">Actividades</button><span>›</span><span>${teaches() ? 'Envíos en carpeta' : 'Entrega'}</span></div><h1>${esc(t.data.title)}</h1><p class="deadline">Vence: ${fmt(t.data.due)}</p>${t.data.extended ? '<p class="extension-note">Tienes una prórroga: esta es tu nueva fecha de entrega.</p>' : ''}${!teaches() && t.data.groupCategory ? teamBannerHtml(t) : ''}${richText(t.data.body, t.data.fileIds)}<section class="task-materials"><div class="panel-head"><h2>Material del docente</h2>${teaches() ? button('＋ Subir archivos o presentaciones', 'task-files', t.id) : ''}</div>${fileLinks(t.data.fileIds)}${!t.data.fileIds?.length ? '<p class="muted">No hay archivos adjuntos a esta actividad.</p>' : ''}</section>${teaches() ? `<div class="toolbar">${button('Editar actividad', 'edit-task', t.id, 'secondary')}${button('Descargar entregas (ZIP)', 'zip-task', t.id, 'secondary')}${sectionFilterHtml()}</div>${sectionDatesSummary(t.id)}<div class="table-wrap"><table><thead><tr><th>Alumno</th>${courseSections().length ? '<th>Sección</th>' : ''}<th>Estado</th><th>Calificación</th><th>Acción</th></tr></thead><tbody>${studentsInView().map(m => {
     const s = subs.find(s => s.data.member === m.id);
     const ext = extensionOf(t.id, m.id);
-    return `<tr><td>${esc(m.name)}${ext ? `<div class="table-subtext">Prórroga hasta ${esc(fmt(ext.data.due))}</div>` : ''}</td><td>${s ? s.data.manual ? 'Captura manual' : s.data.late ? 'Entrega tardía' : 'Entregado' : 'Sin entrega'}</td><td>${s?.data.grade ?? '—'}</td><td><button class="table-link" data-action="review" data-id="${t.id}" data-member="${m.id}">Evaluar →</button> <button class="text-btn" data-action="extension" data-id="${t.id}" data-member="${m.id}">${ext ? 'Cambiar prórroga' : 'Prórroga'}</button></td></tr>`;
+    return `<tr><td><span class="person">${avatarHtml(m)}<span>${esc(m.name)}</span></span>${ext ? `<div class="table-subtext">Prórroga hasta ${esc(fmt(ext.data.due))}</div>` : ''}</td>${courseSections().length ? `<td>${esc(sectionName(m.section) || '—')}</td>` : ''}<td>${s ? s.data.manual ? 'Captura manual' : s.data.late ? 'Entrega tardía' : 'Entregado' : 'Sin entrega'}</td><td>${s?.data.grade ?? '—'}</td><td><button class="table-link" data-action="review" data-id="${t.id}" data-member="${m.id}">Evaluar →</button> <button class="text-btn" data-action="extension" data-id="${t.id}" data-member="${m.id}">${ext ? 'Cambiar prórroga' : 'Prórroga'}</button></td></tr>`;
   }).join('') || '<tr><td colspan="4">Inscribe alumnos para revisar sus entregas.</td></tr>'}</tbody></table></div>` : `${own ? `<section class="panel"><h2>Tu entrega</h2><p class="deadline">${fmt(own.data.submitted)}${own.data.submitted ? ` <button type="button" class="text-btn" data-receipt="${esc(own.id)}">Comprobante</button>` : ''}</p>${richText(own.data.body)}${fileLinks(own.data.fileIds)}<p>Calificación: <b>${own.data.grade ?? 'Pendiente'}</b></p>${richText(own.data.feedback)}${rubricResultHtml(own.data.rubricScores)}</section>` : ''}<div class="toolbar">${button(own ? 'Actualizar entrega' : 'Realizar entrega', 'submit', t.id)}</div>`}`;
 }
 function noticeCards() {
@@ -184,14 +187,14 @@ function average(member) {
   return studentGrade(member).value;
 }
 function renderGrades() {
-  const ts = records('task'), members = teaches() ? current.members.filter(m => m.role === 'student') : [myMember()].filter(Boolean), w = records('weights')[0];
+  const ts = records('task'), members = teaches() ? studentsInView() : [myMember()].filter(Boolean), w = records('weights')[0];
   const grading = gradingSettings(), cats = grading.scheme === 'categories' ? grading.categories : [];
   ensureAttendanceForGrades();
   if (!teaches()) {
     $('#main').innerHTML = myGradesHtml();
     return;
   }
-  $('#main').innerHTML = `<div class="home-tabs"><button data-grade-tab="entry" class="${gradeTab === 'entry' ? 'active' : ''}">${teaches() ? 'Ingresar calificaciones' : 'Mis calificaciones'}</button>${teaches() ? `<button data-grade-tab="manage" class="${gradeTab === 'manage' ? 'active' : ''}">Administrar calificaciones</button>` : ''}</div>${gradeTab === 'manage' && teaches() ? gradingManageHtml(`<h2 class="grading-subtitle">Pesos por actividad</h2><p class="real-status">Los pesos de todas las actividades deben sumar 100 %. Si agregas una nueva actividad, se usará el promedio simple hasta que vuelvas a guardar los pesos.</p><form id="weights" class="real-form"><div class="table-wrap"><table><thead><tr><th>Actividad</th><th>Peso (%)</th></tr></thead><tbody>${ts.map((t, i) => `<tr><td>${esc(t.data.title)}</td><td><input type="number" name="w_${t.id}" required min="0" max="100" step="0.01" class="grade-input" value="${w?.data.weights[t.id] ?? (i === ts.length - 1 ? 100 - Math.floor(10000 / ts.length) / 100 * (ts.length - 1) : Math.floor(10000 / ts.length) / 100).toFixed(2)}" aria-label="Peso de ${esc(t.data.title)}"></td></tr>`).join('')}</tbody></table></div><p class="form-error error" hidden></p>${ts.length ? '<div class="form-actions"><button class="primary">Guardar ponderaciones</button></div>' : '<p>Primero crea actividades.</p>'}</form>`) : `<div class="toolbar">${teaches() ? button('Exportar calificaciones', 'export-grades', '', 'secondary') : ''}<input data-search type="search" placeholder="Buscar alumno…" aria-label="Buscar alumno"></div><p class="grade-note">${cats.length ? 'Promedio parcial por categorías' : `Promedio parcial ${w && ts.every(t => Number.isFinite(w.data.weights[t.id])) ? 'ponderado' : 'simple'}`}, de 0 a 10.${teaches() ? ` La calificación final aplica las reglas del curso (mínima aprobatoria ${grading.final.passing}).` : ''} Se excluyen las actividades sin calificar y se normalizan los pesos restantes.${countedQuizzes().length ? ` Incluye ${countedQuizzes().length === 1 ? 'una evaluación' : countedQuizzes().length + ' evaluaciones'} en línea dentro de su categoría.` : ' Las evaluaciones en línea cuentan solo si se les asigna una categoría (al editarlas).'}</p><div class="table-wrap gradebook"><table><thead><tr><th class="sticky-name">Estudiante</th><th>Promedio parcial</th>${teaches() ? '<th>Calificación final</th>' : ''}${cats.map(c => `<th class="category-col">${esc(c.name)}<div class="muted">${c.weight} %</div></th>`).join('')}${ts.map(t => {
+  $('#main').innerHTML = `<div class="home-tabs"><button data-grade-tab="entry" class="${gradeTab === 'entry' ? 'active' : ''}">${teaches() ? 'Ingresar calificaciones' : 'Mis calificaciones'}</button>${teaches() ? `<button data-grade-tab="manage" class="${gradeTab === 'manage' ? 'active' : ''}">Administrar calificaciones</button>` : ''}</div>${gradeTab === 'manage' && teaches() ? gradingManageHtml(`<h2 class="grading-subtitle">Pesos por actividad</h2><p class="real-status">Los pesos de todas las actividades deben sumar 100 %. Si agregas una nueva actividad, se usará el promedio simple hasta que vuelvas a guardar los pesos.</p><form id="weights" class="real-form"><div class="table-wrap"><table><thead><tr><th>Actividad</th><th>Peso (%)</th></tr></thead><tbody>${ts.map((t, i) => `<tr><td>${esc(t.data.title)}</td><td><input type="number" name="w_${t.id}" required min="0" max="100" step="0.01" class="grade-input" value="${w?.data.weights[t.id] ?? (i === ts.length - 1 ? 100 - Math.floor(10000 / ts.length) / 100 * (ts.length - 1) : Math.floor(10000 / ts.length) / 100).toFixed(2)}" aria-label="Peso de ${esc(t.data.title)}"></td></tr>`).join('')}</tbody></table></div><p class="form-error error" hidden></p>${ts.length ? '<div class="form-actions"><button class="primary">Guardar ponderaciones</button></div>' : '<p>Primero crea actividades.</p>'}</form>`) : `<div class="toolbar">${teaches() ? button('Exportar calificaciones', 'export-grades', '', 'secondary') : ''}<input data-search type="search" placeholder="Buscar alumno…" aria-label="Buscar alumno">${sectionFilterHtml()}</div><p class="grade-note">${cats.length ? 'Promedio parcial por categorías' : `Promedio parcial ${w && ts.every(t => Number.isFinite(w.data.weights[t.id])) ? 'ponderado' : 'simple'}`}, de 0 a 10.${teaches() ? ` La calificación final aplica las reglas del curso (mínima aprobatoria ${grading.final.passing}).` : ''} Se excluyen las actividades sin calificar y se normalizan los pesos restantes.${countedQuizzes().length ? ` Incluye ${countedQuizzes().length === 1 ? 'una evaluación' : countedQuizzes().length + ' evaluaciones'} en línea dentro de su categoría.` : ' Las evaluaciones en línea cuentan solo si se les asigna una categoría (al editarlas).'}</p><div class="table-wrap gradebook"><table><thead><tr><th class="sticky-name">Estudiante</th><th>Promedio parcial</th>${teaches() ? '<th>Calificación final</th>' : ''}${cats.map(c => `<th class="category-col">${esc(c.name)}<div class="muted">${c.weight} %</div></th>`).join('')}${ts.map(t => {
     const drafts = teaches() ? records('submission').filter(r => r.data.task === t.id && r.data.published === false).length : 0;
     return `<th>${esc(t.data.title)}${drafts ? `<br><button class="table-link" data-action="publish-task" data-id="${t.id}">Publicar ${drafts} ${drafts === 1 ? 'borrador' : 'borradores'}</button>` : ''}</th>`;
   }).join('')}</tr></thead><tbody>${members.map(m => {
@@ -234,7 +237,7 @@ function renderReview() {
   const t = find(detail), m = current.members.find(m => m.id === reviewMember), s = gradeOf(reviewMember, detail);
   if (!t || !m)
     return renderGrades();
-  const students = current.members.filter(x => x.role === 'student');
+  const students = studentsInView().some(x => x.id === m.id) ? studentsInView() : current.members.filter(x => x.role === 'student');
   const hasGrade = x => {
     const g = gradeOf(x.id, t.id)?.data.grade;
     return g !== null && g !== undefined;
@@ -324,7 +327,7 @@ function renderGroups() {
   return workspaceGroups();
 }
 function renderMembers() {
-  $('#main').innerHTML = `<h1>Listado de alumnos</h1><div class="toolbar">${teaches() ? button('Inscribir alumno', 'new-member') + button('Importar lista', 'bulk-members', '', 'secondary') : ''}<input data-search type="search" placeholder="Buscar…" aria-label="Buscar alumno"></div>${teaches() ? '<p class="real-status">La inscripción vincula el curso al correo del alumno: verá el curso cuando entre con ese mismo correo (su cuenta de Microsoft o de Google). No se envían invitaciones. «Ver lo que ve» muestra el curso exactamente como lo ve ese alumno (solo lectura; la consulta queda registrada).</p>' : ''}${coTeachersPanel()}<div class="table-wrap"><table><thead><tr><th>Nombre</th>${teaches() ? '<th>Matrícula</th><th>Correo</th><th>Estado</th><th>Acción</th>' : ''}</tr></thead><tbody>${current.members.filter(m => m.role === 'student').map(m => `<tr data-search-row><td>${esc(m.name)}</td>${teaches() ? `<td>${esc(m.matricula)}</td><td>${esc(m.email)}</td><td>${m.user_id ? 'Cuenta vinculada' : 'Pendiente de ingreso'}</td><td><div class="row-actions">${button('Ver lo que ve', 'view-member', m.id, 'text-btn')}${button('Retirar', 'remove-member', m.id, 'text-btn')}</div></td>` : ''}</tr>`).join('') || '<tr><td>No hay alumnos inscritos.</td></tr>'}</tbody></table></div>`;
+  $('#main').innerHTML = `<h1>Listado de alumnos</h1><div class="toolbar">${teaches() ? button('Inscribir alumno', 'new-member') + button('Importar lista', 'bulk-members', '', 'secondary') + button(courseSections().length ? 'Secciones' : 'Crear secciones', 'sections', '', 'secondary') : ''}<input data-search type="search" placeholder="Buscar…" aria-label="Buscar alumno">${sectionFilterHtml()}</div>${teaches() ? '<p class="real-status">La inscripción vincula el curso al correo del alumno: verá el curso cuando entre con ese mismo correo (su cuenta de Microsoft o de Google). No se envían invitaciones. «Ver lo que ve» muestra el curso exactamente como lo ve ese alumno (solo lectura; la consulta queda registrada).</p>' : ''}${coTeachersPanel()}<div class="table-wrap"><table><thead><tr><th>Nombre</th>${teaches() ? `<th>Matrícula</th>${courseSections().length ? '<th>Sección</th>' : ''}<th>Correo</th><th>Estado</th><th>Acción</th>` : courseSections().length ? '<th>Sección</th>' : ''}</tr></thead><tbody>${(teaches() ? studentsInView() : current.members.filter(m => m.role === 'student')).map(m => `<tr data-search-row><td>${teaches() ? `<span class="person">${avatarHtml(m)}<span>${esc(m.name)}</span></span>` : esc(m.name)}</td>${!teaches() && courseSections().length ? `<td>${esc(sectionName(m.section) || '—')}</td>` : ''}${teaches() ? `<td>${esc(m.matricula)}</td>${courseSections().length ? `<td>${memberSectionSelect(m)}</td>` : ''}<td>${esc(m.email)}</td><td>${m.user_id ? 'Cuenta vinculada' : 'Pendiente de ingreso'}</td><td><div class="row-actions">${button('Ver lo que ve', 'view-member', m.id, 'text-btn')}${button('Retirar', 'remove-member', m.id, 'text-btn')}${m.photo ? `<button type="button" class="text-btn" data-member-photo-delete="${esc(m.id)}">Quitar foto</button>` : ''}</div></td>` : ''}</tr>`).join('') || '<tr><td>No hay alumnos inscritos.</td></tr>'}</tbody></table></div>`;
 }
 function renderAdmin() {
   $('#main').innerHTML = `<h1>Administración del curso</h1><section class="admin-section"><h2>Configuración</h2><div class="admin-links">${button('Información del curso', 'edit-course', '', 'table-link')}${button('Copiar a un nuevo periodo', 'copy-course', '', 'table-link')}${current.canDelete ? button(current.course.archived_at ? 'Desarchivar curso' : 'Archivar curso', 'archive-course', '', 'table-link') : ''}${button('Exportar respaldo del curso', 'backup', '', 'table-link')}${current.canDelete ? button('Eliminar curso / grupo', 'delete-course', current.course.id, 'danger-link') : ''}</div></section><section class="admin-section"><h2>Administración de estudiantes</h2><div class="admin-links"><button class="table-link" data-section="members">Listado de alumnos</button><button class="table-link" data-section="groups">Equipos de trabajo</button><button class="table-link" data-section="progress">Progreso de la clase</button></div></section><section class="admin-section"><h2>Evaluación</h2><div class="admin-links"><button class="table-link" data-section="tasks">Actividades</button><button class="table-link" data-section="grades">Calificaciones</button><button class="table-link" data-section="quizzes">Evaluaciones</button></div></section><section class="admin-section"><h2>Papelera</h2><div class="admin-links"><button class="table-link" data-section="trash">Elementos eliminados</button></div><p class="muted">Lo que eliminas del curso se puede restaurar desde aquí con todo su contenido, entregas y calificaciones.</p></section><p class="real-status">El respaldo exporta registros y metadatos en JSON. Descarga los archivos adjuntos por separado. Conserva copias periódicas fuera de la plataforma.</p>`;
@@ -454,13 +457,18 @@ function groupModal(old) {
 }
 function courseModal(edit = false) {
   const c = edit ? current.course : null;
-  modal(edit ? 'Información del curso' : 'Crear curso', field('Nombre de la materia', 'name', c?.name || '', 'text', 'required maxlength="150"') + field('Grupo', 'group', c?.group_name || '', 'text', 'required maxlength="100"') + field('Periodo', 'period', c?.period || '', 'text', 'maxlength="60" placeholder="Por ejemplo: Otoño 2026"') + textarea('Presentación', 'intro', c?.intro || '', false), f => request(edit ? '/api/course' : '/api/courses', {
-    course: c?.id,
-    name: f.get('name'),
-    group: f.get('group'),
-    period: f.get('period'),
-    intro: f.get('intro')
-  }));
+  modal(edit ? 'Información del curso' : 'Crear curso', field('Nombre de la materia', 'name', c?.name || '', 'text', 'required maxlength="150"') + field('Grupo', 'group', c?.group_name || '', 'text', 'required maxlength="100"') + field('Periodo', 'period', c?.period || '', 'text', 'maxlength="60" placeholder="Por ejemplo: Otoño 2026"') + (edit ? '' : field('Secciones (opcional)', 'sections', '', 'text', 'maxlength="300" placeholder="Por ejemplo: 5AV, 5BV, 5CV"') + '<p class="muted">¿La misma materia con varios grupos? Crea un solo curso y escribe aquí sus secciones: el contenido es el mismo para todos y en cada pantalla filtras por sección.</p>') + textarea('Presentación', 'intro', c?.intro || '', false), async f => {
+    const result = await request(edit ? '/api/course' : '/api/courses', {
+      course: c?.id,
+      name: f.get('name'),
+      group: f.get('group'),
+      period: f.get('period'),
+      intro: f.get('intro')
+    });
+    const names = edit ? [] : String(f.get('sections') || '').split(',').map(x => x.trim()).filter(Boolean);
+    for (const name of names) await request('/api/sections', { course: result.id, name });
+    return names.length ? `Curso creado con ${names.length} ${names.length === 1 ? 'sección' : 'secciones'}.` : undefined;
+  });
 }
 /** Co-docentes del curso: los ve todo el curso; el propietario o la administración los agregan y retiran. */
 function coTeachersPanel() {
@@ -508,7 +516,7 @@ function exportGrades() {
       s = "'" + s;
     return '"' + s.replace(/"/g, '""') + '"';
   };
-  const rows = [['Matrícula', 'Alumno', 'Promedio parcial', 'Calificación final', ...cats.map(c => `${c.name} (${c.weight} %)`), ...ts.map(t => t.data.title)], ...current.members.filter(m => m.role === 'student').map(m => [m.matricula, m.name, average(m.id)?.toFixed(2) || '', finalGrade(studentGrade(m.id, { final: true }).value, grading.final)?.value.toFixed(grading.final.decimals) ?? '', ...studentGrade(m.id).categories.map(c => c.value === null ? '' : c.value.toFixed(2)), ...ts.map(t => gradeOf(m.id, t.id)?.data.grade ?? '')])];
+  const rows = [['Matrícula', 'Alumno', ...(courseSections().length ? ['Sección'] : []), 'Promedio parcial', 'Calificación final', ...cats.map(c => `${c.name} (${c.weight} %)`), ...ts.map(t => t.data.title)], ...studentsInView().map(m => [m.matricula, m.name, ...(courseSections().length ? [sectionName(m.section)] : []), average(m.id)?.toFixed(2) || '', finalGrade(studentGrade(m.id, { final: true }).value, grading.final)?.value.toFixed(grading.final.decimals) ?? '', ...studentGrade(m.id).categories.map(c => c.value === null ? '' : c.value.toFixed(2)), ...ts.map(t => gradeOf(m.id, t.id)?.data.grade ?? '')])];
   download('calificaciones.csv', '\uFEFF' + rows.map(r => r.map(quote).join(',')).join('\r\n'), 'text/csv;charset=utf-8');
 }
 document.addEventListener('click', async (e) => {
@@ -713,11 +721,12 @@ document.addEventListener('click', async (e) => {
         groupModal(r);
         break;
       case 'new-member':
-        modal('Inscribir alumno', field('Nombre completo', 'name', '', 'text', 'required') + field('Matrícula', 'matricula') + field('Correo de su cuenta', 'email', '', 'email', 'required') + '<p class="pending-message">La inscripción no envía una invitación. Comparte el enlace del sitio y pide que entre con este mismo correo.</p>', f => request('/api/member', {
+        modal('Inscribir alumno', field('Nombre completo', 'name', '', 'text', 'required') + field('Matrícula', 'matricula') + field('Correo de su cuenta', 'email', '', 'email', 'required') + (courseSections().length ? `<label>Sección<select name="section"><option value="">Sin sección</option>${courseSections().map(x => `<option value="${esc(x.id)}" ${selectedSection() === x.id ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select></label>` : '') + '<p class="pending-message">La inscripción no envía una invitación. Comparte el enlace del sitio y pide que entre con este mismo correo.</p>', f => request('/api/member', {
           course: current.course.id,
           name: f.get('name'),
           matricula: f.get('matricula'),
-          email: f.get('email')
+          email: f.get('email'),
+          section: f.get('section') || ''
         }));
         break;
       case 'remove-member':
@@ -745,6 +754,9 @@ document.addEventListener('click', async (e) => {
         break;
       case 'bulk-members':
         bulkMembersModal();
+        break;
+      case 'sections':
+        sectionsModal();
         break;
       case 'bulk-teams':
         bulkTeamsModal();
@@ -826,7 +838,7 @@ document.addEventListener('click', async (e) => {
       case 'profile':
         if (!me)
           return;
-        modal('Mi perfil', (me.role === 'student' ? `<p><strong>${esc(me.name)}</strong></p>` : field('Nombre', 'name', me.name, 'text', 'required')) + `<p>${esc(me.email)}</p><p>Enlace no guarda contraseñas: entras con este correo a través de Microsoft o de Google.</p><p><button type="button" class="secondary" data-action="logout">Cerrar sesión</button></p><p>¿Perdiste un teléfono o entraste en una computadora ajena? <button type="button" class="text-btn" data-action="logout-all">Cerrar sesión en todos mis dispositivos</button></p>`, me.role === 'student' ? null : async (f) => {
+        modal('Mi perfil', profilePhotoHtml() + (me.role === 'student' ? `<p><strong>${esc(me.name)}</strong></p>` : field('Nombre', 'name', me.name, 'text', 'required')) + `<p>${esc(me.email)}</p><p>Enlace no guarda contraseñas: entras con este correo a través de Microsoft o de Google.</p><p><button type="button" class="secondary" data-action="logout">Cerrar sesión</button></p><p>¿Perdiste un teléfono o entraste en una computadora ajena? <button type="button" class="text-btn" data-action="logout-all">Cerrar sesión en todos mis dispositivos</button></p>`, me.role === 'student' ? null : async (f) => {
           await request('/api/profile', { name: f.get('name') });
           me = await request('/api/me');
         });
@@ -863,7 +875,8 @@ window.addEventListener('online', () => {
 async function init() {
   try {
     me = await request('/api/me');
-    courses = await request('/api/courses');
+    // Sin foto de perfil, el servidor no entrega nada más: primero la cámara.
+    courses = me.needsPhoto ? [] : await request('/api/courses');
     document.body.classList.remove('signed-out');
     $('#logoutButton').hidden = false;
     // Aviso de privacidad: antes de usar Enlace (y cada vez que cambie su versión).
@@ -874,6 +887,9 @@ async function init() {
       await goToActiveExam(me.activeExam);
       return startRoutes();
     }
+    // Foto de perfil obligatoria: el alumno se la toma antes de ver lo demás.
+    if (me.needsPhoto)
+      return renderPhotoGate();
     startNotices();
     if (new URLSearchParams(location.search).has('a')) {
       nav();

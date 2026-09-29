@@ -228,7 +228,7 @@ function renderCodeScreen() {
 function renderCheckinFlags() {
   const box = document.getElementById('checkinFlags');
   if (!box || !checkinState) return;
-  const students = attendanceStudents();
+  const students = sessionStudents(checkinState?.session || s.session);
   const flags = checkinState.flags.filter((f) => ['present', 'late'].includes(attendanceRecord(checkinState.session, f.member)?.status));
   box.hidden = !flags.length;
   box.innerHTML = `<h2>Por revisar (${flags.length})</h2><ul>${flags
@@ -243,7 +243,7 @@ function renderCheckinFlags() {
 /** Verificación al azar: nombra en voz alta a tres de los registrados; si alguien no está, se nota de inmediato. */
 function pickRandomCheckins() {
   const s = checkinState;
-  const students = attendanceStudents();
+  const students = sessionStudents(checkinState?.session || s.session);
   const registered = students.filter((m) => {
     const r = attendanceRecord(s.session, m.id);
     return r && ['present', 'late'].includes(r.status) && /^Registro con/.test(r.note || '');
@@ -294,7 +294,7 @@ async function checkinRefresh() {
       if (record) Object.assign(record, { status: r.status, note: r.note });
       else attendanceData.records.push({ session: s.session, member: r.member, status: r.status, note: r.note });
     }
-    const students = attendanceStudents();
+    const students = sessionStudents(checkinState?.session || s.session);
     const arrived = data.records.filter((r) => r.status === 'present' || r.status === 'late').length;
     document.getElementById('checkinCount').textContent = `${arrived} de ${students.length} registrados`;
     s.flags = data.flags || [];
@@ -326,7 +326,7 @@ async function closeCheckin() {
   checkinState = null;
   let marked = 0;
   if (markAbsent) {
-    const missing = attendanceStudents().filter((m) => !attendanceRecord(s.session, m.id)).map((m) => m.id);
+    const missing = sessionStudents(s.session).filter((m) => !attendanceRecord(s.session, m.id)).map((m) => m.id);
     if (missing.length) markAttendance(s.session, missing, 'absent');
     marked = missing.length;
   }

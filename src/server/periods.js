@@ -120,6 +120,13 @@ export const periodRoutes = {
            SELECT ?1,min_percent,lates_per_absence,excused_counts,?2 FROM aula_attendance_settings WHERE course=?3`,
         )
         .bind(id, now, source),
+      // Las secciones (solo sus nombres: los alumnos y las fechas por sección son de cada periodo).
+      db
+        .prepare(
+          `INSERT INTO aula_sections (id,course,name,position,created)
+           SELECT lower(hex(randomblob(16))),?1,name,position,?2 FROM aula_sections WHERE course=?3`,
+        )
+        .bind(id, now, source),
       db
         .prepare(
           `INSERT INTO aula_grade_categories (id,course,name,weight,source,position,updated)

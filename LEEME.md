@@ -1,9 +1,57 @@
-# Enlace · versión 12.17.1
+# Enlace · versión 12.18
 
 Plataforma académica independiente para docentes y alumnos de cualquier academia (nació en la Academia de Física de la BUAP), con interfaz inspirada en Brightspace.
 No es el código de D2L Brightspace ni una plataforma oficial de la BUAP.
 
 Esta versión se despliega en **tu propia cuenta de Cloudflare** (Workers + D1 + R2, plan gratuito) y ya no depende de ChatGPT Sites.
+
+## Novedades de la versión 12.18 (secciones y foto de perfil)
+
+Requiere las migraciones **0023** y **0024**:
+- **0023** crea dos tablas (secciones y fechas por sección) y agrega una columna a los alumnos y otra a las clases de asistencia. Además, cambia un índice de la asistencia para que dos secciones puedan tener clase a la misma hora. No borra ni modifica datos.
+- **0024** agrega dos columnas a los usuarios (su foto).
+
+`npm run configurar` descarga un respaldo y las aplica.
+
+### Un curso para varios grupos (secciones)
+- **Como en Brightspace:** en lugar de crear «Física I · 5AV», «Física I · 5BV» y «Física I · 5CV», creas un solo curso «Física I» con las secciones 5AV, 5BV y 5CV. El contenido, las actividades, los foros y los exámenes son los mismos para todos.
+- **Crear secciones:**
+  - al crear el curso (campo «Secciones»), o
+  - en Alumnos → «Crear secciones» / «Secciones», donde también se renombran y se eliminan (solo las que no tienen alumnos ni clases).
+- **Asignar alumnos a su sección:**
+  - en el listado, con el selector de cada alumno;
+  - al inscribir a uno;
+  - al importar la lista: elige la sección para toda la lista, o agrega una fila de encabezado con una columna **Sección** (las que no existan se crean solas).
+- **Juntar cursos que ya tenías separados:** en «Secciones» → «Traer alumnos de otro curso como sección». Solo se copia la lista. Las entregas, calificaciones y asistencia de ese curso se quedan en él; archívalo para conservarlas.
+- **Filtro «Sección»** en las pantallas del docente (se recuerda por curso):
+  - Alumnos, Calificaciones (y su exportación, con columna Sección), Envíos de cada actividad, Revisión en secuencia.
+  - Asistencia, Progreso, Equipos en lote.
+  - Resultados y monitor de los exámenes.
+- **Fechas por sección** («Fechas por sección» en el editor de actividades y de evaluaciones):
+  - Cada grupo puede entregar o presentar a su hora; lo vacío usa la fecha general.
+  - El alumno ve solo sus fechas, también en pendientes y en el calendario.
+  - En los exámenes, cada sección se abre y se cierra a su hora: el examen activo, el bloqueo de la plataforma y el monitor usan la hora de su sección.
+  - Una prórroga individual sigue mandando.
+  - Consejo: pon «Mostrar resultados a partir de» después de que presente el último grupo.
+- **Asistencia por sección:**
+  - Cada clase puede ser de una sección (o de todo el curso); dos secciones pueden tener clase a la misma hora.
+  - Al pasar lista solo aparecen sus alumnos, y el registro con código o QR rechaza a alumnos de otra sección.
+  - El porcentaje de cada alumno cuenta solo sus clases.
+- **Al copiar el curso a otro periodo** se copian los nombres de las secciones (sin alumnos ni fechas).
+- **Los cursos sin secciones funcionan igual que antes.**
+
+### Foto de perfil
+- **Obligatoria para los alumnos.** La primera vez que un alumno entra (y si su docente le quita la foto), antes de ver cualquier otra cosa se abre la cámara para que se tome una foto de frente, como en una credencial.
+  - Lo exige el servidor: sin foto no recibe cursos ni nada más.
+  - Si el navegador no puede usar la cámara, se ofrece tomarla con la cámara del teléfono.
+  - Un examen ya empezado no se interrumpe.
+  - Para quitar la obligación, cambia `FOTO_OBLIGATORIA = "1"` a `"0"` en `wrangler.toml` y vuelve a publicar.
+- **Dónde se ve:** en el listado de alumnos, al pasar lista, en la tabla de asistencia y en los envíos de cada actividad. La ven la persona, sus docentes y la administración; **los compañeros no**.
+- **Docentes:** suben o cambian la suya desde «Mi perfil». Pueden **quitar la foto de un alumno** (Alumnos → «Quitar foto») si no es adecuada; al volver a entrar, el alumno tendrá que tomarse otra.
+- **Cómo se guarda:** la foto se recorta en cuadrado y se reduce en el navegador (unos 30 KB). Al cambiarla se borra la anterior.
+- **A tener en cuenta:**
+  - La foto es un dato personal. Te recomiendo mencionarla en el aviso de privacidad («foto de perfil para identificar al alumno al pasar lista y en exámenes»).
+  - El respaldo de archivos de Administración no incluye las fotos; si se perdieran, cada alumno se toma otra al entrar.
 
 ## Novedades de la versión 12.17.1 (resultados de exámenes cuando hay varios grupos)
 
@@ -340,7 +388,7 @@ La pantalla muestra en vivo cuántos se han registrado y quiénes acaban de hace
 
 1. Descarga la versión nueva en una carpeta **nueva** (no encima de la anterior), o `git pull` si trabajas desde GitHub.
 2. Haz un respaldo desde esa carpeta: `npm run respaldo`, y de los archivos desde Enlace (ver *Respaldos*).
-3. Doble clic en `configurar.cmd` (Windows) o `configurar.command` (Mac), o `npm run configurar`. Encuentra tu base `enlace-db` y tu almacenamiento, usa el correo de administración y la dirección `.workers.dev` de la vez anterior (desde la versión 12.11 los recuerda; la primera vez te los pregunta y revisa que el correo ya haya entrado a Enlace), descarga un respaldo, aplica las migraciones pendientes (0003: asistencia y borradores; 0004: registro con QR; 0005: categorías, rúbricas y equipos; 0006: sesiones; 0007: papelera; 0008: registro de docentes; 0009: aviso de privacidad; 0010: periodos y archivo; 0011: prórrogas; 0012: intentos de evaluaciones; 0013: avisos; 0014: historial de calificaciones; 0015: asistencia con código; 0016: modo examen; 0017: usuarios y registro de acciones; 0018: avisos leídos; 0019: seguimiento del contenido; 0020: bloqueo del examen; 0021: examen estricto; 0022: banco de preguntas) y publica. No cambia tus claves. Al pasar a la versión 12.1 cada persona vuelve a entrar con Google una vez (las sesiones ahora se registran en el servidor).
+3. Doble clic en `configurar.cmd` (Windows) o `configurar.command` (Mac), o `npm run configurar`. Encuentra tu base `enlace-db` y tu almacenamiento, usa el correo de administración y la dirección `.workers.dev` de la vez anterior (desde la versión 12.11 los recuerda; la primera vez te los pregunta y revisa que el correo ya haya entrado a Enlace), descarga un respaldo, aplica las migraciones pendientes (0003: asistencia y borradores; 0004: registro con QR; 0005: categorías, rúbricas y equipos; 0006: sesiones; 0007: papelera; 0008: registro de docentes; 0009: aviso de privacidad; 0010: periodos y archivo; 0011: prórrogas; 0012: intentos de evaluaciones; 0013: avisos; 0014: historial de calificaciones; 0015: asistencia con código; 0016: modo examen; 0017: usuarios y registro de acciones; 0018: avisos leídos; 0019: seguimiento del contenido; 0020: bloqueo del examen; 0021: examen estricto; 0022: banco de preguntas; 0023: secciones; 0024: foto de perfil) y publica. No cambia tus claves. Al pasar a la versión 12.1 cada persona vuelve a entrar con Google una vez (las sesiones ahora se registran en el servidor).
 
 **No publiques con `npx wrangler deploy` directamente**: el `wrangler.toml` del ZIP trae valores de ejemplo y quedarías sin la cuenta de administración (`npm run deploy` y `npm run db:migrate` ya lo impiden). Si prefieres hacerlo a mano: copia tu `database_id` y tu correo del `wrangler.toml` anterior al nuevo (y `ALLOWED_EMAIL_DOMAINS` si lo usabas) y ejecuta `npm install`, `npm run db:migrate` y `npm run deploy`, **en ese orden**: si publicas antes de migrar, Asistencia y Calificaciones fallarán hasta que apliques la migración.
 
@@ -550,6 +598,8 @@ La cookie de sesión usa el prefijo `__Host-`, que exige conexión segura. Chrom
 - `test-respaldo-archivos.mjs`: respaldo de archivos solo para administración, incremental, con índice; restauración solo de lo que falta y con el tamaño exacto.
 - `test-restaurar.mjs`: la exportación de D1 se reordena y comprueba con el esquema real; `npm run restaurar` solo escribe en bases vacías.
 - `test-bloqueo-examen.mjs`: bloqueo al salir (tolerancia, sin guardar ni enviar mientras está bloqueado, código solo para el docente, 5 intentos, desbloqueo del docente, al retomar tras cerrar el navegador).
+- `test-secciones.mjs`: secciones (crear sin repetir, alumnos por lista, a mano o de otro curso, fechas de actividades y exámenes por sección con la prórroga encima, examen activo con el cierre de su sección, asistencia por sección, eliminar solo vacías, copia a otro periodo).
+- `test-foto.mjs`: foto de perfil (obligatoria para alumnos con `FOTO_OBLIGATORIA`, solo imágenes reales y pequeñas, quién la ve, cambiarla borra la anterior, el docente puede quitarla).
 - `test-banco.mjs`: banco de preguntas (guardar sin duplicar, compartir solo con la propia academia, usar preguntas de un colega en otro curso con su imagen, editar y borrar sin tocar evaluaciones), preguntas al azar por grupo, el alumno sin preguntas antes de contestar e imágenes de preguntas que no cuentan como archivos sin uso.
 - `test-examen-estricto.mjs`: contraseña con bloqueo, plataforma bloqueada mientras contesta (ni otros cursos, materiales, avisos ni archivos), un solo dispositivo (volver a iniciar sesión bloquea y la sesión anterior ya no guarda), opciones aleatorias bien calificadas, imágenes que no se adelantan, capturas registradas, fechas, temporizador fijo y qué ve el alumno al terminar.
 - `test-programacion.mjs`: publicación programada por todas las vías (curso, descargas, foro, evaluación, avisos), evaluaciones en la calificación (validación y cálculo real: mejor, último, promedio) y seguimiento del contenido.

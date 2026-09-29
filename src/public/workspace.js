@@ -8,7 +8,8 @@ function courseTheme(id) {
 function workspaceNav() {
   const c = current?.course;
   $('#crumb').textContent = c ? c.name : 'Mis cursos';
-  $('#profile').textContent = (me?.name || '').split(/\s+/).filter(Boolean).slice(0, 2).map(x => x[0]).join('').toUpperCase();
+  if (typeof renderProfileButton === 'function') renderProfileButton();
+  else $('#profile').textContent = (me?.name || '').split(/\s+/).filter(Boolean).slice(0, 2).map(x => x[0]).join('').toUpperCase();
   $('#roleLabel').textContent = me?.role === 'admin' ? 'Administrador' : me?.role === 'teacher' ? 'Docente' : 'Alumno';
   const active = section === 'task' || section === 'editor' || section === 'review' ? 'tasks' : section === 'forum' ? 'forums' : section === 'quiz' || section === 'bank' ? 'quizzes' : section;
   const item = ([id, label]) => `<button data-section="${id}" class="${active === id ? 'active' : ''}" ${active === id ? 'aria-current="page"' : ''}>${label}</button>`;
@@ -194,7 +195,7 @@ function continueCardHtml() {
 /** Botón del alumno o conteo del docente en cada material. */
 function materialProgressHtml(x) {
   if (teaches()) {
-    const students = current.members.filter((m) => m.role === 'student');
+    const students = studentsInView();
     if (!students.length) return '';
     const rows = (current.progress || []).filter((p) => p.record === x.id);
     const done = rows.filter((p) => p.completed_at).length;

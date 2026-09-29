@@ -27,6 +27,9 @@ export const users = sqliteTable(
     suspendedAt: text('suspended_at'),
     suspendedBy: text('suspended_by'),
     suspendedReason: text('suspended_reason'),
+    // Migración 0024: foto de perfil (objeto en R2, pequeño y ya reducido en el navegador) y cuándo se cambió.
+    photo: text('photo'),
+    photoUpdated: text('photo_updated'),
   },
   (t) => [uniqueIndex('aula_users_email').on(t.email)],
 );
@@ -236,6 +239,8 @@ export const members = sqliteTable(
     name: text('name').notNull(),
     matricula: text('matricula').notNull().default(''),
     role: text('role').notNull().default('student'),
+    // Migración 0023: sección del alumno dentro del curso (id de aula_sections; '' = sin sección).
+    section: text('section').notNull().default(''),
   },
   (t) => [uniqueIndex('aula_members_course_email').on(t.course, t.email), index('aula_members_user').on(t.userId)],
 );
@@ -488,9 +493,11 @@ export const classSessions = sqliteTable(
     checkinStrict: integer('checkin_strict').notNull().default(0),
     // Red desde la que el docente abrió el registro (prefijo de IP), como indicio adicional.
     checkinNetwork: text('checkin_network'),
+    // Migración 0023: sesión de una sección ('' = de todo el curso). Dos secciones pueden tener clase a la misma hora.
+    section: text('section').notNull().default(''),
   },
   (t) => [
-    uniqueIndex('aula_sessions_course_date_time').on(t.course, t.date, t.startTime),
+    uniqueIndex('aula_sessions_course_date_time_section').on(t.course, t.date, t.startTime, t.section),
     uniqueIndex('aula_sessions_checkin_code').on(t.checkinCode).where(sql`checkin_code IS NOT NULL`),
     check('aula_sessions_late_check', sql`checkin_late_minutes BETWEEN 0 AND 240`),
     check('aula_sessions_date_check', sql`date GLOB '[0-9][0-9][0-9][0-9]-[0-1][0-9]-[0-3][0-9]'`),
@@ -681,4 +688,43 @@ export const questionBank = sqliteTable(
     updated: text('updated').notNull(),
   },
   (t) => [index('aula_question_bank_owner').on(t.ownerId, t.topic), index('aula_question_bank_fingerprint').on(t.ownerId, t.fingerprint), index('aula_question_bank_shared').on(t.shared, t.ownerId)],
+);
+
+/**
+ * Migración 0023: secciones de un curso (por ejemplo 5AV, 5BV y 5CV de Física I): un solo curso con el mismo
+ * contenido, y alumnos, asistencia, calificaciones y fechas que se filtran o ajustan por sección.
+ */
+export const sections = sqliteTable(
+  'aula_sections',
+  {
+    id: text('id').primaryKey(),
+    course: text('course')
+      .notNull()
+      .references(() => courses.id),
+    name: text('name').notNull(),
+    position: integer('position').notNull().default(0),
+    created: text('created').notNull(),
+  },
+  (t) => [uniqueIndex('aula_sections_course_name').on(t.course, t.name)],
+);
+
+/**
+ * Migración 0023: fechas de una actividad o evaluación para una sección (cada grupo presenta a su hora).
+ * Actividades: inicio, vencimiento y cierre. Evaluaciones: `start_at` = se abre, `end_at` = se cierra.
+ * Vacío = la fecha general. Una prórroga individual sigue mandando sobre la de la sección.
+ */
+export const sectionDates = sqliteTable(
+  'aula_section_dates',
+  {
+    item: text('item').notNull(),
+    section: text('section')
+      .notNull()
+      .references(() => sections.id),
+    course: text('course').notNull(),
+    startAt: text('start_at').notNull().default(''),
+    due: text('due').notNull().default(''),
+    endAt: text('end_at').notNull().default(''),
+    updated: text('updated').notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.item, t.section] }), index('aula_section_dates_course').on(t.course)],
 );

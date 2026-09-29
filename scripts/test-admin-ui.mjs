@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { fakeBrowser } from './lib/fake-dom.mjs';
 
 const browser = fakeBrowser({ fetch: async () => ({ ok: true, status: 200, json: async () => [] }) });
-browser.load('registro.js', 'admin-tools.js', 'usuarios.js');
+browser.load('registro.js', 'secciones.js', 'admin-tools.js', 'usuarios.js');
 const { context } = browser;
 
 // ---- parseRoster: Excel (tabuladores), CSV y encabezados ----
@@ -16,6 +16,12 @@ assert.deepEqual(JSON.parse(JSON.stringify(excel.students)), [
 ]);
 assert.equal(excel.errors.length, 0);
 
+// Encabezado con columna «Sección»: cada alumno con la suya (y la columna no se mezcla con el nombre).
+const conSeccion = context.parseRoster('Nombre\tSección\tCorreo\nAna Pérez\t5AV\tana@alumno.buap.mx\nBeto Ruiz\t\tbeto@alumno.buap.mx\n');
+assert.deepEqual(JSON.parse(JSON.stringify(conSeccion.students)), [
+  { name: 'Ana Pérez', email: 'ana@alumno.buap.mx', matricula: '', section: '5AV' },
+  { name: 'Beto Ruiz', email: 'beto@alumno.buap.mx', matricula: '' },
+]);
 const csv = context.parseRoster('"rosa@alumno.buap.mx","Rosa Díaz",202600001\nmario@alumno.buap.mx;Mario Ruiz\nSin correo, 202600003\n');
 assert.equal(csv.students.length, 2);
 assert.equal(csv.students[0].name, 'Rosa Díaz');

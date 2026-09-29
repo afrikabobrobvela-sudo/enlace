@@ -1,5 +1,6 @@
 // Asistencia: sesiones de clase, registro por alumno y reglas para calcular el porcentaje.
 import { access, requireTeacher, viewAs } from './access.js';
+import { validSection } from './sections.js';
 import {
   all,
   base64url,
@@ -167,6 +168,8 @@ function validTime(value) {
   return time;
 }
 
+const OTHER_SECTION = 'Este registro de asistencia es para otra sección del curso. Regístrate en la clase de tu sección.';
+
 async function sessionOf(db, id, course) {
   const session = await one(db, 'SELECT * FROM aula_sessions WHERE id=? AND course=?', id, course);
   if (!session) fail('Sesión no encontrada.', 404);
@@ -181,7 +184,17 @@ export const attendanceRoutes = {
     const settings =
       (await one(db, 'SELECT min_percent, lates_per_absence, excused_counts FROM aula_attendance_settings WHERE course=?', course)) ||
       DEFAULT_SETTINGS;
-    const sessions = await all(db, 'SELECT id, date, start_time, topic FROM aula_sessions WHERE course=? ORDER BY date, start_time', course);
+    // El alumno solo ve las clases de todo el curso y las de su sección.
+    const sessions = await all(
+      db,
+      `SELECT id, date, start_time, topic, section FROM aula_sessions WHERE course=?1
+         AND (?2 OR section='' OR section=(SELECT section FROM aula_members WHERE course=?1 AND role='student' AND (id=?4 OR (?4 IS NULL AND user_id=?3))))
+       ORDER BY date, start_time`,
+      course,
+      teach ? 1 : 0,
+      viewer,
+      member?.id ?? null,
+    );
     const records = teach
       ? await all(
           db,
@@ -204,10 +217,11 @@ export const attendanceRoutes = {
     const body = await readJson(request);
     requireTeacher(await access(db, user, body.course));
     const id = crypto.randomUUID();
+    const section = await validSection(db, body.course, body.section);
     try {
       await run(
         db,
-        'INSERT INTO aula_sessions (id,course,date,start_time,topic,created_by,created) VALUES (?,?,?,?,?,?,?)',
+        'INSERT INTO aula_sessions (id,course,date,start_time,topic,created_by,created,section) VALUES (?,?,?,?,?,?,?,?)',
         id,
         body.course,
         validDate(body.date),
@@ -215,10 +229,11 @@ export const attendanceRoutes = {
         optionalText(body.topic, 200),
         user.id,
         nowIso(),
+        section,
       );
     } catch (error) {
       if (error.status) throw error;
-      fail('Ya existe una sesión en esa fecha y hora.', 409);
+      fail(section ? 'Esa sección ya tiene una sesión en esa fecha y hora.' : 'Ya existe una sesión en esa fecha y hora.', 409);
     }
     return json({ id }, 201);
   },
@@ -234,6 +249,7 @@ export const attendanceRoutes = {
     if (!weekdays.length || weekdays.some((d) => !Number.isInteger(d) || d < 0 || d > 6)) fail('Elige al menos un día de clase.');
     const skip = new Set((Array.isArray(body.skip) ? body.skip : []).map(validDate));
     const time = validTime(body.start_time);
+    const section = await validSection(db, body.course, body.section);
     const dates = [];
     for (let d = new Date(from + 'T00:00:00Z'); d.toISOString().slice(0, 10) <= to; d.setUTCDate(d.getUTCDate() + 1)) {
       const date = d.toISOString().slice(0, 10);
@@ -245,14 +261,15 @@ export const attendanceRoutes = {
     const rows = dates.map((date) => ({ id: crypto.randomUUID(), date }));
     const result = await run(
       db,
-      `INSERT OR IGNORE INTO aula_sessions (id,course,date,start_time,topic,created_by,created)
-       SELECT json_extract(j.value,'$.id'), ?1, json_extract(j.value,'$.date'), ?2, ?3, ?4, ?5 FROM json_each(?6) j`,
+      `INSERT OR IGNORE INTO aula_sessions (id,course,date,start_time,topic,created_by,created,section)
+       SELECT json_extract(j.value,'$.id'), ?1, json_extract(j.value,'$.date'), ?2, ?3, ?4, ?5, ?7 FROM json_each(?6) j`,
       body.course,
       time,
       optionalText(body.topic, 200),
       user.id,
       now,
       JSON.stringify(rows),
+      section,
     );
     return json({ created: result.meta.changes, existing: dates.length - result.meta.changes }, 201);
   },
@@ -270,7 +287,7 @@ export const attendanceRoutes = {
   'POST /api/attendance/mark': async ({ db, user, request }) => {
     const body = await readJson(request);
     requireTeacher(await access(db, user, body.course));
-    await sessionOf(db, body.session, body.course);
+    const session = await sessionOf(db, body.session, body.course);
     if (!Array.isArray(body.marks) || !body.marks.length || body.marks.length > 500) fail('No hay registros para guardar.');
     const byMember = new Map();
     for (const mark of body.marks) {
@@ -281,11 +298,13 @@ export const attendanceRoutes = {
     const valid = await one(
       db,
       `SELECT count(*) AS n FROM aula_members m
-       WHERE m.course=? AND m.role='student' AND m.id IN (SELECT json_extract(value,'$.member') FROM json_each(?))`,
+       WHERE m.course=? AND m.role='student' AND (?='' OR m.section=?) AND m.id IN (SELECT json_extract(value,'$.member') FROM json_each(?))`,
       body.course,
+      session.section,
+      session.section,
       marks,
     );
-    if (valid.n !== byMember.size) fail('Hay alumnos que no pertenecen a este curso.');
+    if (valid.n !== byMember.size) fail(session.section ? 'Hay alumnos que no pertenecen a la sección de esta clase.' : 'Hay alumnos que no pertenecen a este curso.');
     await run(
       db,
       `INSERT INTO aula_attendance (session,member,status,note,updated_by,updated)
@@ -389,8 +408,9 @@ export const attendanceRoutes = {
     if (!session) fail(NO_CODE, 404);
     if (!isOpen(session)) fail(CLOSED, 410);
     const device = validDevice(body.device);
-    const member = await one(db, "SELECT id FROM aula_members WHERE course=? AND user_id=? AND role='student'", session.course, user.id);
+    const member = await one(db, "SELECT id, section FROM aula_members WHERE course=? AND user_id=? AND role='student'", session.course, user.id);
     if (!member) fail('No estás inscrito como alumno en este curso.', 403);
+    if (session.section && member.section !== session.section) fail(OTHER_SECTION, 403);
     const info = { course: session.course_name, date: session.date, start_time: session.start_time };
     const existing = await one(db, 'SELECT status FROM aula_attendance WHERE session=? AND member=?', session.id, member.id);
     if (existing && (existing.status === 'present' || existing.status === 'late')) return json({ ...info, status: existing.status, already: true });
@@ -456,7 +476,7 @@ export const attendanceRoutes = {
           located: session.checkin_lat !== null,
         }
       : null;
-    return json({ session: { id: session.id, date: session.date, start_time: session.start_time, topic: session.topic }, records, flags, checkin, serverNow: Date.now() });
+    return json({ session: { id: session.id, date: session.date, start_time: session.start_time, topic: session.topic, section: session.section }, records, flags, checkin, serverNow: Date.now() });
   },
 
   // El alumno escanea el QR. Si la clase pide PIN, recibe un permiso firmado de 2 minutos para escribirlo.
@@ -472,8 +492,9 @@ export const attendanceRoutes = {
     if (!Number.isSafeInteger(window) || current - window > 2 || window - current > 1) fail(EXPIRED, 410);
     if (!sameText(signature, await qrSignature(session.checkin_secret, code, window))) fail('Código QR no válido.');
     const device = validDevice(body.device);
-    const member = await one(db, "SELECT id FROM aula_members WHERE course=? AND user_id=? AND role='student'", session.course, user.id);
+    const member = await one(db, "SELECT id, section FROM aula_members WHERE course=? AND user_id=? AND role='student'", session.course, user.id);
     if (!member) fail('No estás inscrito como alumno en este curso.', 403);
+    if (session.section && member.section !== session.section) fail(OTHER_SECTION, 403);
     const info = { course: session.course_name, date: session.date, start_time: session.start_time };
     const existing = await one(db, 'SELECT status FROM aula_attendance WHERE session=? AND member=?', session.id, member.id);
     if (existing && (existing.status === 'present' || existing.status === 'late')) return json({ ...info, status: existing.status, already: true });

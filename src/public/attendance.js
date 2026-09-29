@@ -49,11 +49,28 @@ function columnLabel(session, sessions) {
   const shared = sessions.filter((s) => s.date === session.date).length > 1;
   return `<span class="att-day">${esc(weekday)}</span><span>${session.date.slice(8)}/${session.date.slice(5, 7)}</span>${
     shared && session.start_time ? `<span class="att-day">${esc(session.start_time)}</span>` : ''
-  }`;
+  }${session.section && !selectedSection() ? `<span class="att-day att-section">${esc(sectionName(session.section))}</span>` : ''}`;
 }
 
+/** Alumnos que se ven con el filtro de sección (todos si el curso no tiene secciones). */
 function attendanceStudents() {
-  return current.members.filter((m) => m.role === 'student');
+  return studentsInView();
+}
+
+/** Alumnos a los que les toca una clase: los de su sección, o los del filtro si es de todo el curso. */
+function sessionStudents(sessionId) {
+  const session = attendanceData?.sessions.find((x) => x.id === sessionId);
+  return session?.section ? current.members.filter((m) => m.role === 'student' && m.section === session.section) : attendanceStudents();
+}
+
+/** Sección elegida en el filtro para crear clases ('' = todo el curso). */
+const defaultSessionSection = () => (selectedSection() === SECTION_NONE ? '' : selectedSection());
+
+function sessionSectionField() {
+  if (!courseSections().length) return '';
+  return `<label>Sección<select name="section"><option value="">Todo el curso</option>${courseSections()
+    .map((x) => `<option value="${esc(x.id)}" ${defaultSessionSection() === x.id ? 'selected' : ''}>${esc(x.name)}</option>`)
+    .join('')}</select></label><p class="muted">Una clase de una sección solo pide asistencia a sus alumnos; las de «todo el curso», a todos.</p>`;
 }
 
 function attendanceRecord(sessionId, memberId) {
@@ -177,7 +194,8 @@ async function renderAttendance() {
 }
 
 function renderAttendanceGrid() {
-  const { sessions, settings } = attendanceData;
+  const { settings } = attendanceData;
+  const sessions = sessionsInView(attendanceData.sessions);
   const students = attendanceStudents();
   const actions = `<div class="action-row">
       <button class="primary" data-att="today">Pasar lista de hoy</button>
@@ -189,6 +207,13 @@ function renderAttendanceGrid() {
   const rules = `Mínimo requerido: ${settings.min_percent} %. ${
     settings.lates_per_absence ? `${settings.lates_per_absence} retardos equivalen a una falta. ` : 'Los retardos cuentan como asistencia. '
   }${settings.excused_counts === 'present' ? 'Las faltas justificadas cuentan como asistencia.' : 'Las faltas justificadas no se toman en cuenta.'}`;
+  if (!sessions.length && attendanceData.sessions.length) {
+    // Hay clases, pero ninguna de la sección elegida en el filtro.
+    $('#main').innerHTML = `<div class="page-heading"><div><h1>Asistencia</h1><p class="muted">${rules}</p></div>${actions}</div>
+      <div class="toolbar">${sectionFilterHtml()}</div>
+      <p class="empty">Todavía no hay clases de la sección ${esc(sectionName(selectedSection()) || 'elegida')}. Crea una con «Nueva sesión» o «Generar calendario» (elige la sección en la ventana), o cambia el filtro.</p>`;
+    return;
+  }
   if (!sessions.length) {
     $('#main').innerHTML = `<div class="page-heading"><div><h1>Asistencia</h1><p class="muted">${rules}</p></div></div>
       <section class="empty-state"><h2>Todavía no hay sesiones</h2>
@@ -197,15 +222,24 @@ function renderAttendanceGrid() {
   }
   const rows = students
     .map((m) => {
-      const statuses = sessions.map((s) => attendanceRecord(s.id, m.id)?.status);
-      const summary = attendanceSummary(statuses.filter(Boolean), settings);
-      return `<tr data-search-row><td class="sticky-name"><div class="att-who"><span>${esc(m.name)}</span>${percentPill(summary, settings.min_percent)}</div><div class="muted">${esc(m.matricula || '')}</div></td>
-        ${statuses.map((st) => (st ? `<td><span class="att-mark ${st}" title="${ATT_STATUS[st].label}">${ATT_STATUS[st].short}</span></td>` : '<td><span class="att-mark none" title="Sin registro">·</span></td>')).join('')}</tr>`;
+      // Una clase de otra sección no le toca: no cuenta en su porcentaje.
+      const statuses = sessions.map((s) => (sessionApplies(s, m) ? attendanceRecord(s.id, m.id)?.status : 'na'));
+      const summary = attendanceSummary(statuses.filter((st) => st && st !== 'na'), settings);
+      return `<tr data-search-row><td class="sticky-name"><div class="att-who">${avatarHtml(m)}<span>${esc(m.name)}</span>${percentPill(summary, settings.min_percent)}</div><div class="muted">${esc([m.matricula, sectionName(m.section)].filter(Boolean).join(' · '))}</div></td>
+        ${statuses
+          .map((st) =>
+            st === 'na'
+              ? '<td><span class="att-mark na" title="Clase de otra sección"></span></td>'
+              : st
+              ? `<td><span class="att-mark ${st}" title="${ATT_STATUS[st].label}">${ATT_STATUS[st].short}</span></td>`
+              : '<td><span class="att-mark none" title="Sin registro">·</span></td>',
+          )
+          .join('')}</tr>`;
     })
     .join('');
   $('#main').innerHTML = `<div class="page-heading"><div><h1>Asistencia</h1><p class="muted">${rules}</p></div>${actions}</div>
     <p id="attSync" class="att-sync" role="status"></p>
-    <div class="toolbar"><input data-search type="search" placeholder="Buscar alumno…" aria-label="Buscar alumno"></div>
+    <div class="toolbar"><input data-search type="search" placeholder="Buscar alumno…" aria-label="Buscar alumno">${sectionFilterHtml()}</div>
     <p class="att-legend">P presente, R retardo, F falta, J justificada. Toca una fecha para pasar lista o corregirla.</p>
     <div class="table-wrap gradebook att-grid"><table><thead><tr><th class="sticky-name">Alumno y asistencia</th>
       ${sessions.map((s) => `<th><button class="table-link" data-att="open" data-id="${s.id}" aria-label="Pasar lista del ${esc(sessionLabel(s, 'long'))}">${columnLabel(s, sessions)}</button></th>`).join('')}
@@ -216,12 +250,13 @@ function renderAttendanceGrid() {
 
 function renderRollCall() {
   const session = attendanceData.sessions.find((s) => s.id === attendanceSessionId);
-  const students = attendanceStudents();
+  // La lista de una clase de sección es la de sus alumnos (sin importar el filtro).
+  const students = sessionStudents(session.id);
   const records = students.map((m) => attendanceRecord(session.id, m.id));
   const counts = attendanceSummary(records.filter(Boolean).map((r) => r.status), attendanceData.settings);
   const missing = records.filter((r) => !r).length;
   $('#main').innerHTML = `<button class="back" data-att="back">❮ Resumen de asistencia</button>
-    <div class="page-heading"><div><h1>Pasar lista</h1><p class="muted">${esc(sessionLabel(session, 'long'))}${session.topic ? `. ${esc(session.topic)}` : ''}</p></div>
+    <div class="page-heading"><div><h1>Pasar lista</h1><p class="muted">${session.section ? `<b>${esc(sectionName(session.section))}</b> · ` : ''}${esc(sessionLabel(session, 'long'))}${session.topic ? `. ${esc(session.topic)}` : ''}</p></div>
       <div class="action-row">${missing ? `<button class="primary" data-att="all-present">${missing === students.length ? 'Todos presentes' : `Marcar ${missing} sin registro como presentes`}</button>` : ''}
       <button class="secondary" data-att="code">Registro con código</button>
       <button class="secondary" data-att="qr">Registro con QR</button>
@@ -233,7 +268,7 @@ function renderRollCall() {
       .map((m, i) => {
         const record = records[i];
         return `<li data-search-row class="${record ? '' : 'att-missing'}">
-          <div class="att-name">${esc(m.name)}<small>${esc(m.matricula || '')}</small></div>
+          <div class="att-person">${avatarHtml(m, 'md')}<div class="att-name">${esc(m.name)}<small>${esc(m.matricula || '')}</small></div></div>
           <div class="att-states" role="group" aria-label="Asistencia de ${esc(m.name)}">${Object.entries(ATT_STATUS)
             .map(([status, info]) => `<button type="button" class="att-state ${status}" data-att="mark" data-member="${m.id}" data-status="${status}" aria-pressed="${record?.status === status}" aria-label="${info.label}">${attStateLabel(info)}</button>`)
             .join('')}</div>
@@ -287,13 +322,14 @@ function refreshAttendance(message) {
 function newSessionModal(date = localToday()) {
   modal(
     'Nueva sesión',
-    field('Fecha', 'date', date, 'date', 'required') + field('Hora (opcional)', 'start_time', '', 'time') + field('Tema (opcional)', 'topic', '', 'text', 'maxlength="200"'),
+    field('Fecha', 'date', date, 'date', 'required') + field('Hora (opcional)', 'start_time', '', 'time') + field('Tema (opcional)', 'topic', '', 'text', 'maxlength="200"') + sessionSectionField(),
     async (f) => {
       const { id } = await request('/api/attendance/session', {
         course: current.course.id,
         date: f.get('date'),
         start_time: f.get('start_time'),
         topic: f.get('topic'),
+        section: f.get('section') || '',
       });
       attendanceSessionId = id;
       return refreshAttendance('Sesión creada.');
@@ -310,6 +346,7 @@ function generateSessionsModal() {
       field('Hasta', 'to', '', 'date', 'required') +
       `<fieldset class="att-weekdays"><legend>Días de clase</legend>${WEEKDAYS.map(([value, label]) => `<label><input type="checkbox" name="d${value}"> ${label}</label>`).join('')}</fieldset>` +
       field('Hora (opcional)', 'start_time', '', 'time') +
+      sessionSectionField() +
       `<label>Días sin clase (opcional)<textarea name="skip" placeholder="2026-11-02&#10;2026-11-16"></textarea></label>
        <p class="muted">Una fecha por línea con el formato AAAA-MM-DD. También puedes borrar sesiones después.</p>`,
     async (f) => {
@@ -322,6 +359,7 @@ function generateSessionsModal() {
         weekdays,
         start_time: f.get('start_time'),
         skip,
+        section: f.get('section') || '',
       });
       return refreshAttendance(
         `Se ${result.created === 1 ? 'creó 1 sesión' : `crearon ${result.created} sesiones`}${result.existing ? ` (${result.existing} ya existían)` : ''}.`,
@@ -373,20 +411,23 @@ function deleteSessionModal(id) {
 }
 
 function exportAttendance() {
-  const { sessions, settings } = attendanceData;
+  const { settings } = attendanceData;
+  const sessions = sessionsInView(attendanceData.sessions);
   const cell = (value) => {
     let text = String(value ?? '');
     if (/^[=+@\-]/.test(text)) text = "'" + text; // evita que Excel lo interprete como fórmula
     return '"' + text.replace(/"/g, '""') + '"';
   };
-  const header = ['Matrícula', 'Alumno', ...sessions.map((s) => s.date + (s.start_time ? ' ' + s.start_time : '')), 'Asistencias', 'Retardos', 'Faltas', 'Justificadas', 'Porcentaje'];
+  const withSections = courseSections().length > 0;
+  const header = ['Matrícula', 'Alumno', ...(withSections ? ['Sección'] : []), ...sessions.map((s) => s.date + (s.start_time ? ' ' + s.start_time : '') + (s.section ? ' ' + sectionName(s.section) : '')), 'Asistencias', 'Retardos', 'Faltas', 'Justificadas', 'Porcentaje'];
   const rows = attendanceStudents().map((m) => {
-    const statuses = sessions.map((s) => attendanceRecord(s.id, m.id)?.status);
-    const summary = attendanceSummary(statuses.filter(Boolean), settings);
+    const statuses = sessions.map((s) => (sessionApplies(s, m) ? attendanceRecord(s.id, m.id)?.status : 'na'));
+    const summary = attendanceSummary(statuses.filter((st) => st && st !== 'na'), settings);
     return [
       m.matricula,
       m.name,
-      ...statuses.map((st) => (st ? ATT_STATUS[st].short : '')),
+      ...(withSections ? [sectionName(m.section)] : []),
+      ...statuses.map((st) => (st === 'na' ? 'n/a' : st ? ATT_STATUS[st].short : '')),
       summary.present,
       summary.late,
       summary.absent,
@@ -398,13 +439,15 @@ function exportAttendance() {
 }
 
 async function openTodaySession() {
-  const today = attendanceData.sessions.find((s) => s.date === localToday());
+  // Con una sección elegida en el filtro, la clase de hoy de esa sección.
+  const today = sessionsInView(attendanceData.sessions).find((s) => s.date === localToday() && (!defaultSessionSection() || s.section === defaultSessionSection())) ||
+    sessionsInView(attendanceData.sessions).find((s) => s.date === localToday());
   if (today) {
     attendanceSessionId = today.id;
     return renderAttendance();
   }
   try {
-    const { id } = await request('/api/attendance/session', { course: current.course.id, date: localToday() });
+    const { id } = await request('/api/attendance/session', { course: current.course.id, date: localToday(), section: defaultSessionSection() });
     attendanceSessionId = id;
     attendanceData = null;
     renderAttendance();
