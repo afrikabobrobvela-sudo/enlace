@@ -422,3 +422,32 @@ dialog.sheet::backdrop { background: rgba(12, 28, 42, 0.45); }
   .quiz-pair > span { display: none; }
   .quiz-match-row { grid-template-columns: 1fr; gap: 4px; }
 }
+
+/* ==== Pulido visual en el teléfono (12.22) ========================================================= */
+@media (max-width: 720px) {
+  /* Barras de herramientas: botones en dos columnas del mismo ancho; búsqueda y filtros a lo ancho. */
+  .toolbar { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .toolbar > button, .toolbar > .primary, .toolbar > .secondary { width: 100%; min-height: 44px; }
+  .toolbar > input[type='search'], .toolbar > .section-filter, .toolbar > label, .toolbar > .inline-label, .toolbar > p { grid-column: 1 / -1; }
+  .toolbar > button:last-of-type:nth-of-type(odd) { grid-column: 1 / -1; }
+  /* Filtro de secciones: etiqueta y valor juntos, la flecha a la derecha. */
+  .section-filter > summary { justify-content: flex-start; }
+  .section-filter > summary::after { margin-left: auto; }
+  /* Selector de fecha como hoja inferior. */
+  .dt-pop.is-sheet {
+    left: 0 !important; right: 0; top: auto !important; bottom: 0; width: auto; max-height: 92dvh;
+    border-radius: 18px 18px 0 0; padding: 14px 16px calc(14px + env(safe-area-inset-bottom));
+    box-shadow: 0 0 0 100vmax rgba(12, 28, 42, 0.45); animation: dt-sheet-up 0.18s ease-out;
+  }
+  .dt-pop.is-sheet .dt-day { aspect-ratio: auto; height: 40px; font-size: 15px; }
+  .dt-pop.is-sheet .dt-week span { padding: 2px 0; }
+  .dt-pop.is-sheet .dt-time { margin-top: 8px; padding-top: 10px; }
+  .dt-pop.is-sheet .dt-actions .primary { min-height: 44px; padding: 8px 22px; }
+  .special-row { flex-direction: column; align-items: flex-start; }
+  .special-picker-top select { flex: 1 1 100%; }
+  .special-count { margin-left: 0; }
+  /* Inicio: «Crear curso» a lo ancho, arriba de los demás. */
+  .home-title-row .action-row > .primary { order: -1; flex: 1 1 100%; }
+}
+
+@keyframes dt-sheet-up { from { transform: translateY(24px); } to { transform: none; } }

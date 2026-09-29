@@ -84,7 +84,9 @@ export const periodRoutes = {
 
     const clearDates = (data) => (keepDates ? data : { ...data, start: '', end: '', due: '' });
     const recordRows = records.map((r) => {
-      const data = JSON.parse(remap(r.data, map));
+      // Lo que era de los alumnos del curso original no se copia: el acceso especial (el curso nuevo no tiene esos
+      // alumnos: una evaluación «solo con acceso especial» no la vería nadie) y el aviso de noticia ya enviada por correo.
+      const { specialOnly: _special, emailedAt: _emailed, ...data } = JSON.parse(remap(r.data, map));
       return { id: map.get(r.id), kind: r.kind, data: JSON.stringify(r.kind === 'quiz' ? clearDates(data) : data) };
     });
     const taskRows = tasks.map((t) => ({

@@ -40,12 +40,14 @@ const context = vm.createContext({
   confirm: () => true,
 });
 const load = (file, transform = (s) => s) => vm.runInContext(transform(readFileSync('src/public/' + file, 'utf8')), context);
+load('fecha.js');
 load('richtext.js');
 load('trash.js');
 load('reactivos.js');
 load('evaluaciones.js');
 load('banco.js');
 load('secciones.js');
+load('especial.js');
 load('foto.js');
 load('pendientes.js');
 load('calendario.js');

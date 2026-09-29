@@ -414,7 +414,7 @@ function renderQuiz() {
   if (!q) return renderQuizzes();
   const settings = quizSettings(q);
   const attempts = records('attempt').filter((a) => a.data.quiz === q.id);
-  const head = `<button class="back" data-section="quizzes">❮ Evaluaciones</button><h1>${esc(q.data.title)}${sectionTag(q)}</h1>${richText(q.data.body)}<p class="quiz-meta">${esc(quizSettingsText(settings))}</p>`;
+  const head = `<button class="back" data-section="quizzes">❮ Evaluaciones</button><h1>${esc(q.data.title)}${sectionTag(q)}</h1>${richText(q.data.body)}<p class="quiz-meta">${esc(quizSettingsText(settings))}</p>${!teaches() && q.data.specialAccess ? '<p class="extension-note">Tienes acceso especial en esta evaluación: el horario, el tiempo y los intentos de arriba ya son los tuyos.</p>' : ''}`;
   if (teaches()) {
     const questions = q.data.questions
       .map((x, i) =>
@@ -449,7 +449,7 @@ function renderQuiz() {
       : '';
     const essays = q.data.questions.some((x) => x.type === 'essay');
     const toReview = attempts.filter((a) => inSelectedSection(memberOfAuthor(a.author))).reduce((n, a) => n + (a.data.pending || 0), 0);
-    $('#main').innerHTML = `${head}<div class="toolbar">${button('Editar evaluación', 'edit-quiz', q.id, 'secondary')}${
+    $('#main').innerHTML = `${head}<div class="toolbar">${button('Editar evaluación', 'edit-quiz', q.id, 'secondary')}${specialAccessButton('quiz', q.id)}${
       essays ? `<button class="${toReview ? 'primary' : 'secondary'}" type="button" data-essay-review="${esc(q.id)}">Revisar respuestas escritas${toReview ? ` (${toReview} por calificar)` : ''}</button>` : ''
     }<button class="secondary" data-bank-save="${esc(q.id)}">Guardar en el banco</button>${sectionFilterHtml()}</div>${sectionDatesSummary(q.id)}
       ${exam ? `<section class="exam-monitor" id="examMonitor"><p class="muted">Cargando examen en curso…</p></section>` : ''}${drawNote}${questions}

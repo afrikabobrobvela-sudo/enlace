@@ -73,17 +73,21 @@ export async function identity(request, env) {
       `SELECT u.*, (
          SELECT s.quiz || '|' || r.course FROM aula_attempt_starts s
            JOIN aula_records r ON r.id=s.quiz AND r.kind='quiz' AND r.deleted_at IS NULL
-           -- Fechas de la sección del alumno (cada grupo presenta a su hora); si no tiene, las de la evaluación.
-           LEFT JOIN aula_members m ON m.course=r.course AND m.user_id=s.user_id AND m.role='student' AND m.section<>''
-           LEFT JOIN aula_section_dates d ON d.item=r.id AND d.section=m.section
+           -- Fechas de la sección del alumno (cada grupo presenta a su hora) y, encima, su acceso especial (horario
+           -- propio y minutos extra); si no tiene, las de la evaluación.
+           LEFT JOIN aula_members m ON m.course=r.course AND m.user_id=s.user_id AND m.role='student'
+           LEFT JOIN aula_section_dates d ON d.item=r.id AND d.section=m.section AND m.section<>''
+           LEFT JOIN aula_quiz_access qa ON qa.quiz=r.id AND qa.member=m.id
          WHERE s.user_id=u.id AND s.started>?4 AND json_extract(r.data,'$.settings.exam.lockPlatform')=1
            AND NOT EXISTS (SELECT 1 FROM aula_attempts a WHERE a.quiz=s.quiz AND a.user_id=s.user_id AND a.attempt=s.attempt)
            AND CASE WHEN coalesce(json_extract(r.data,'$.settings.timeLimit'),0)=0 THEN 1
-                    WHEN json_extract(r.data,'$.settings.timerMode')='fixed' AND coalesce(nullif(d.start_at,''), json_extract(r.data,'$.settings.opensAt')) IS NOT NULL
-                      THEN datetime(coalesce(nullif(d.start_at,''), json_extract(r.data,'$.settings.opensAt')), '+' || (json_extract(r.data,'$.settings.timeLimit') + 1) || ' minutes') > datetime(?3)
-                    ELSE datetime(s.started, '+' || (json_extract(r.data,'$.settings.timeLimit') + 1) || ' minutes') > datetime(?3) END
-           AND (coalesce(nullif(d.end_at,''), json_extract(r.data,'$.settings.closesAt')) IS NULL
-                OR datetime(coalesce(nullif(d.end_at,''), json_extract(r.data,'$.settings.closesAt')), '+1 minutes') > datetime(?3))
+                    WHEN json_extract(r.data,'$.settings.timerMode')='fixed'
+                         AND coalesce(nullif(qa.start_at,''), nullif(d.start_at,''), json_extract(r.data,'$.settings.opensAt')) IS NOT NULL
+                      THEN datetime(coalesce(nullif(qa.start_at,''), nullif(d.start_at,''), json_extract(r.data,'$.settings.opensAt')),
+                             '+' || (json_extract(r.data,'$.settings.timeLimit') + coalesce(qa.extra_minutes,0) + 1) || ' minutes') > datetime(?3)
+                    ELSE datetime(s.started, '+' || (json_extract(r.data,'$.settings.timeLimit') + coalesce(qa.extra_minutes,0) + 1) || ' minutes') > datetime(?3) END
+           AND (coalesce(nullif(qa.end_at,''), nullif(d.end_at,''), json_extract(r.data,'$.settings.closesAt')) IS NULL
+                OR datetime(coalesce(nullif(qa.end_at,''), nullif(d.end_at,''), json_extract(r.data,'$.settings.closesAt')), '+1 minutes') > datetime(?3))
          ORDER BY s.started DESC LIMIT 1) AS active_exam
        FROM aula_logins l JOIN aula_users u ON u.id=l.user_id
        WHERE l.id=?1 AND l.user_id=?2 AND l.revoked_at IS NULL AND l.expires>?3`,

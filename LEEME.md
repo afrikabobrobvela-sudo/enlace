@@ -1,9 +1,43 @@
-# Enlace · versión 12.21
+# Enlace · versión 12.22
 
 Plataforma académica independiente para docentes y alumnos de cualquier academia (nació en la Academia de Física de la BUAP), con interfaz inspirada en Brightspace.
 No es el código de D2L Brightspace ni una plataforma oficial de la BUAP.
 
 Esta versión se despliega en **tu propia cuenta de Cloudflare** (Workers + D1 + R2, plan gratuito) y ya no depende de ChatGPT Sites.
+
+## Novedades de la versión 12.22 (acceso especial, fechas en español y pulido visual)
+
+**Acceso especial** (como en Brightspace), en actividades y en evaluaciones: botón **«Acceso especial»** en la página de la actividad o de la evaluación. También está en cada alumno de «Envíos en carpeta» (antes «Prórroga»).
+- Se eligen **varios alumnos a la vez**: con filtro por sección, búsqueda y «todos los que se ven». Solo aparecen alumnos de las secciones a las que va dirigida.
+- **Actividades**: «Disponible desde», «Vence» y «Cierre de entregas» propios. Sirve para volver a abrir una actividad ya cerrada solo para esos alumnos.
+- **Evaluaciones**: horario propio («Se abre», «Se cierra»), **minutos extra** en el tiempo límite e **intentos adicionales**. Cuentan también en el modo examen, en el bloqueo de la plataforma y en el monitor del docente. El alumno ve el aviso «Tienes acceso especial…».
+- **«Solo los alumnos con acceso especial ven esta actividad/evaluación»**: para reposiciones o exámenes extemporáneos. Los demás no la ven en ningún lado (curso, pendientes, calendario, avisos, correo, descargas) ni les cuenta en la calificación. Al copiar el curso a otro periodo esta marca no se copia.
+- El motivo (por ejemplo, «justificante médico») solo lo ven los docentes.
+- Lo que se deja vacío usa la fecha de la sección del alumno o la general. Un acceso especial manda sobre las dos.
+
+**Fechas y horas en español en toda la plataforma**: cada campo de fecha abre un calendario propio:
+- mes con lunes a domingo, hoy marcado y el día elegido resaltado;
+- hora y minutos, con atajos (07:00, 12:00, 18:00, 23:59);
+- botones «Hoy», «Borrar» y «Listo».
+
+En el teléfono se abre como hoja desde abajo. El campo muestra, por ejemplo, «30 sep 2026 · 18:00» en lugar del formato del navegador (antes aparecía «mm/dd/yyyy» en inglés). Al elegir un día sin hora se propone 07:00 para «desde» y 23:59 para lo demás.
+
+**Pulido visual**:
+- Se midió en cada pantalla, en computadora y en teléfono, qué botones cambiaban de tamaño o de lugar al pasar el mouse o presionarlos. Ya no se mueve ninguno. Antes, todos los botones bajaban al presionarlos y las tarjetas de los cursos y de las unidades subían al pasar el mouse, arrastrando sus botones.
+- **Editor de actividad**: «Visible» y «¿Para qué secciones?» pasaron a la columna lateral. La barra fija de abajo solo tiene «Guardar y cerrar», «Cancelar» y «Eliminar», y ya no tapa la página.
+- **Tablas**: todo alineado a la mitad de la fila.
+- **Asistencia**: la foto, el nombre y el porcentaje van juntos (el nombre quedaba separado).
+- **En el teléfono**: los botones de las barras de herramientas quedan en dos columnas del mismo ancho, y «Crear curso» va primero en el inicio.
+- Otros detalles: el filtro de secciones, los paneles plegables con flecha moderna y «Material del docente» sin el hueco vacío.
+
+**Más rápido en el teléfono**: el navegador ya no descarga toda la interfaz (≈770 KB) en cada visita. Cada archivo lleva una huella (ETag): el navegador solo pregunta si cambió y recibe un «no cambió» sin volver a bajarlo. Cuando publiques una versión nueva, se descarga sola.
+
+Requiere la migración **0028**:
+- crea la tabla del acceso especial en evaluaciones;
+- agrega a las actividades la marca «solo con acceso especial»;
+- agrega la fecha «desde» al acceso especial de las actividades.
+
+No borra ni modifica datos. Las prórrogas que ya diste siguen igual (ahora se llaman «acceso especial»).
 
 ## Novedades de la versión 12.21 (tipos de reactivos)
 
@@ -480,7 +514,7 @@ La pantalla muestra en vivo cuántos se han registrado y quiénes acaban de hace
 
 1. Descarga la versión nueva en una carpeta **nueva** (no encima de la anterior), o `git pull` si trabajas desde GitHub.
 2. Haz un respaldo desde esa carpeta: `npm run respaldo`, y de los archivos desde Enlace (ver *Respaldos*).
-3. Doble clic en `configurar.cmd` (Windows) o `configurar.command` (Mac), o `npm run configurar`. Encuentra tu base `enlace-db` y tu almacenamiento, usa el correo de administración y la dirección `.workers.dev` de la vez anterior (desde la versión 12.11 los recuerda; la primera vez te los pregunta y revisa que el correo ya haya entrado a Enlace), descarga un respaldo, aplica las migraciones pendientes (0003: asistencia y borradores; 0004: registro con QR; 0005: categorías, rúbricas y equipos; 0006: sesiones; 0007: papelera; 0008: registro de docentes; 0009: aviso de privacidad; 0010: periodos y archivo; 0011: prórrogas; 0012: intentos de evaluaciones; 0013: avisos; 0014: historial de calificaciones; 0015: asistencia con código; 0016: modo examen; 0017: usuarios y registro de acciones; 0018: avisos leídos; 0019: seguimiento del contenido; 0020: bloqueo del examen; 0021: examen estricto; 0022: banco de preguntas; 0023: secciones; 0024: foto de perfil; 0025: contenido por sección; 0026: correo de avisos; 0027: accesos y código por sección), pregunta la cuenta de Gmail para los avisos (si aún no está) y publica. No cambia tus claves. Al pasar a la versión 12.1 cada persona vuelve a entrar con Google una vez (las sesiones ahora se registran en el servidor).
+3. Doble clic en `configurar.cmd` (Windows) o `configurar.command` (Mac), o `npm run configurar`. Encuentra tu base `enlace-db` y tu almacenamiento, usa el correo de administración y la dirección `.workers.dev` de la vez anterior (desde la versión 12.11 los recuerda; la primera vez te los pregunta y revisa que el correo ya haya entrado a Enlace), descarga un respaldo, aplica las migraciones pendientes (0003: asistencia y borradores; 0004: registro con QR; 0005: categorías, rúbricas y equipos; 0006: sesiones; 0007: papelera; 0008: registro de docentes; 0009: aviso de privacidad; 0010: periodos y archivo; 0011: prórrogas; 0012: intentos de evaluaciones; 0013: avisos; 0014: historial de calificaciones; 0015: asistencia con código; 0016: modo examen; 0017: usuarios y registro de acciones; 0018: avisos leídos; 0019: seguimiento del contenido; 0020: bloqueo del examen; 0021: examen estricto; 0022: banco de preguntas; 0023: secciones; 0024: foto de perfil; 0025: contenido por sección; 0026: correo de avisos; 0027: accesos y código por sección; 0028: acceso especial), pregunta la cuenta de Gmail para los avisos (si aún no está) y publica. No cambia tus claves. Al pasar a la versión 12.1 cada persona vuelve a entrar con Google una vez (las sesiones ahora se registran en el servidor).
 
 **No publiques con `npx wrangler deploy` directamente**: el `wrangler.toml` del ZIP trae valores de ejemplo y quedarías sin la cuenta de administración (`npm run deploy` y `npm run db:migrate` ya lo impiden). Si prefieres hacerlo a mano: copia tu `database_id` y tu correo del `wrangler.toml` anterior al nuevo (y `ALLOWED_EMAIL_DOMAINS` si lo usabas) y ejecuta `npm install`, `npm run db:migrate` y `npm run deploy`, **en ese orden**: si publicas antes de migrar, Asistencia y Calificaciones fallarán hasta que apliques la migración.
 
@@ -690,6 +724,7 @@ La cookie de sesión usa el prefijo `__Host-`, que exige conexión segura. Chrom
 - `test-respaldo-archivos.mjs`: respaldo de archivos solo para administración, incremental, con índice; restauración solo de lo que falta y con el tamaño exacto.
 - `test-restaurar.mjs`: la exportación de D1 se reordena y comprueba con el esquema real; `npm run restaurar` solo escribe en bases vacías.
 - `test-bloqueo-examen.mjs`: bloqueo al salir (tolerancia, sin guardar ni enviar mientras está bloqueado, código solo para el docente, 5 intentos, desbloqueo del docente, al retomar tras cerrar el navegador).
+- `test-acceso-especial.mjs`: acceso especial (actividad cerrada que se abre a varios alumnos, fecha «desde» propia, alumnos de otras secciones rechazados, «solo con acceso especial» en curso, entregas, descargas, pendientes, calendario, avisos y correo; evaluaciones con otro horario, minutos e intentos extra, examen activo y monitor; se conserva al editar y no se copia a otro periodo).
 - `test-reactivos.mjs`: tipos de reactivos (validación de cada tipo, lo que recibe el alumno sin claves ni respuestas, crédito parcial y todo o nada, cifras significativas, respuesta escrita calificada por el docente y sus comentarios, examen retomado con respuestas de todos los tipos y banco).
 - `test-accesos.mjs`: accesos (historial de inicios que no se borra con las sesiones vencidas, inicios contados solo durante el curso, ingresos con visita nueva tras 30 min y a lo más una escritura cada 5 min, reporte solo para quien enseña).
 - `test-correo.mjs`: avisos por correo (resumen diario por sección y persona, prórrogas, lo ya entregado, preferencia en el perfil, cupo diario sin perder avisos, noticia urgente una sola vez, rutas de administración, mensaje MIME sin inyección de encabezados y la conversación SMTP con un Gmail simulado).

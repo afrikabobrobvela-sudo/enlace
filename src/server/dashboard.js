@@ -2,7 +2,7 @@
 // Los avisos no se guardan uno por alumno: se calculan de lo publicado después de su última revisión,
 // así no se gastan escrituras de D1 (100 000 al día en el plan gratuito).
 import { access } from './access.js';
-import { publishedSql, sectionSql } from './published.js';
+import { publishedSql, sectionSql, specialRecordSql, specialTaskSql } from './published.js';
 import { base64url, fail, json, nowIso, one, all, readJson, run } from './http.js';
 
 const DAY = 86_400_000;
@@ -45,13 +45,15 @@ export const dashboardRoutes = {
       all(
         db,
         `WITH mine AS (${STUDENT_COURSES})
-         SELECT t.id, t.title, t.course, c.name AS course_name, coalesce(e.due, nullif(d.due,''), t.due) AS due,
-                CASE WHEN e.due IS NOT NULL THEN 1 ELSE 0 END AS extended
+         SELECT t.id, t.title, t.course, c.name AS course_name, coalesce(nullif(e.due,''), nullif(d.due,''), t.due) AS due,
+                CASE WHEN e.task IS NOT NULL THEN 1 ELSE 0 END AS extended
          FROM mine JOIN aula_tasks t ON t.course=mine.course AND t.visible=1 AND t.deleted_at IS NULL
          JOIN aula_courses c ON c.id=t.course
          LEFT JOIN aula_extensions e ON e.task=t.id AND e.member=mine.member
          LEFT JOIN aula_section_dates d ON d.item=t.id AND d.section=mine.section
-         WHERE ${sectionSql('t.sections', 'mine.section')} AND coalesce(e.due, nullif(d.due,''), t.due) BETWEEN ?2 AND ?3 AND (coalesce(nullif(d.start_at,''), t.start_at)='' OR coalesce(nullif(d.start_at,''), t.start_at)<=?4)
+         WHERE ${sectionSql('t.sections', 'mine.section')} AND ${specialTaskSql('t', 'mine.member')}
+           AND coalesce(nullif(e.due,''), nullif(d.due,''), t.due) BETWEEN ?2 AND ?3
+           AND coalesce(nullif(e.start_at,''), nullif(d.start_at,''), t.start_at)<=?4
            AND NOT EXISTS (SELECT 1 FROM aula_submissions s WHERE s.task=t.id AND s.member=mine.member AND (s.submitted!='' OR s.grade IS NOT NULL))
          ORDER BY due LIMIT 30`,
         user.id,
@@ -100,7 +102,7 @@ export const dashboardRoutes = {
         `${ctes}, shown AS (
            SELECT r.*, max(r.updated, coalesce(json_extract(r.data,'$.publishAt'),'')) AS at
            FROM mine JOIN aula_records r ON r.course=mine.course AND r.deleted_at IS NULL AND r.kind IN ('notice','material','quiz')
-           WHERE ${publishedSql('r', '?3')} AND ${sectionSql("json_extract(r.data,'$.sections')", 'mine.section')})
+           WHERE ${publishedSql('r', '?3')} AND ${sectionSql("json_extract(r.data,'$.sections')", 'mine.section')} AND ${specialRecordSql('r', 'mine.member')})
          SELECT 'notice' AS type, r.id, r.course, c.name AS course_name, json_extract(r.data,'$.title') AS title, r.at
            FROM shown r JOIN aula_courses c ON c.id=r.course WHERE r.kind='notice' AND r.at>?2
          UNION ALL
@@ -123,6 +125,7 @@ export const dashboardRoutes = {
          SELECT 'task' AS type, t.id, t.course, c.name AS course_name, t.title, t.updated AS at
            FROM mine JOIN aula_tasks t ON t.course=mine.course AND t.visible=1 AND t.deleted_at IS NULL
            JOIN aula_courses c ON c.id=t.course WHERE t.updated>?2 AND (t.start_at='' OR t.start_at<=?3) AND ${sectionSql('t.sections', 'mine.section')}
+             AND ${specialTaskSql('t', 'mine.member')}
          UNION ALL
          SELECT 'grade', t.id, s.course, c.name, t.title, s.graded_at
            FROM mine JOIN aula_submissions s ON s.member=mine.member AND s.published=1 AND s.grade IS NOT NULL
@@ -194,14 +197,16 @@ export const dashboardRoutes = {
       all(
         db,
         `WITH mine AS (${STUDENT_COURSES})
-         SELECT t.id, t.title, t.course, coalesce(e.due, nullif(d.due,''), t.due) AS due, coalesce(e.end_at, nullif(d.end_at,''), t.end_at) AS end_at,
-                e.due IS NOT NULL AS extended, s.submitted, s.grade, s.published, s.late
+         SELECT t.id, t.title, t.course, coalesce(nullif(e.due,''), nullif(d.due,''), t.due) AS due,
+                coalesce(nullif(e.end_at,''), nullif(d.end_at,''), t.end_at) AS end_at,
+                e.task IS NOT NULL AS extended, s.submitted, s.grade, s.published, s.late
          FROM mine JOIN aula_tasks t ON t.course=mine.course AND t.visible=1 AND t.deleted_at IS NULL
          LEFT JOIN aula_extensions e ON e.task=t.id AND e.member=mine.member
          LEFT JOIN aula_section_dates d ON d.item=t.id AND d.section=mine.section
          LEFT JOIN aula_submissions s ON s.task=t.id AND s.member=mine.member
-         WHERE coalesce(e.due, nullif(d.due,''), t.due) BETWEEN ?2 AND ?3 AND ${sectionSql('t.sections', 'mine.section')}
-           AND (coalesce(nullif(d.start_at,''), t.start_at)='' OR coalesce(nullif(d.start_at,''), t.start_at)<=?4) ORDER BY due LIMIT 300`,
+         WHERE coalesce(nullif(e.due,''), nullif(d.due,''), t.due) BETWEEN ?2 AND ?3 AND ${sectionSql('t.sections', 'mine.section')}
+           AND ${specialTaskSql('t', 'mine.member')}
+           AND coalesce(nullif(e.start_at,''), nullif(d.start_at,''), t.start_at)<=?4 ORDER BY due LIMIT 300`,
         user.id,
         fromIso,
         toIso,

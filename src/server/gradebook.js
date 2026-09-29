@@ -7,7 +7,7 @@
 
 import { all, fail, isoDate, nowIso, one, optionalText, parseJson, run, text } from './http.js';
 import { withSectionDates } from './sections.js';
-import { sectionSql, taskSections } from './published.js';
+import { sectionSql, specialTaskSql, taskSections } from './published.js';
 
 // ---- Conversión fila → registro --------------------------------------------------------------
 
@@ -37,6 +37,7 @@ export function taskRecord(row) {
       rubric: row.rubric ?? null,
       groupCategory: row.group_category || '',
       sections: taskSections(row.sections),
+      specialOnly: row.special_only === 1,
     },
   };
 }
@@ -122,17 +123,18 @@ export async function loadTask(db, id, course) {
 /** Todo lo de calificaciones de un curso. Si se indica `userId`, solo lo que esa persona puede ver. */
 export async function courseGradebook(db, course, { teacher, userId, memberId = null, attemptUser = userId }) {
   // `memberId`: vista de un alumno concreto (puede no tener cuenta); si no, el alumno se busca por su cuenta (`userId`).
-  // Para el alumno, su prórroga viene en la misma consulta (ext_due / ext_end): no suma consultas.
+  // Para el alumno, su acceso especial (prórroga) viene en la misma consulta (ext_*): no suma consultas.
   const tasks = teacher
     ? await all(db, 'SELECT * FROM aula_tasks WHERE course=? AND deleted_at IS NULL ORDER BY created', course)
     : await all(
         db,
         `WITH me AS (SELECT id, section FROM aula_members WHERE course=?1 AND (id=?3 OR (?3 IS NULL AND user_id=?2)) LIMIT 1)
-         SELECT t.*, e.due AS ext_due, e.end_at AS ext_end, d.start_at AS sec_start, d.due AS sec_due, d.end_at AS sec_end FROM aula_tasks t
+         SELECT t.*, e.task AS ext_task, e.start_at AS ext_start, e.due AS ext_due, e.end_at AS ext_end,
+                d.start_at AS sec_start, d.due AS sec_due, d.end_at AS sec_end FROM aula_tasks t
          LEFT JOIN aula_extensions e ON e.task=t.id AND e.member=(SELECT id FROM me)
          LEFT JOIN aula_section_dates d ON d.item=t.id AND d.section=(SELECT section FROM me)
          WHERE t.course=?1 AND t.deleted_at IS NULL
-           AND (NOT EXISTS (SELECT 1 FROM me) OR ${sectionSql('t.sections', '(SELECT section FROM me)')})
+           AND (NOT EXISTS (SELECT 1 FROM me) OR (${sectionSql('t.sections', '(SELECT section FROM me)')} AND ${specialTaskSql('t', '(SELECT id FROM me)')}))
          ORDER BY t.created`,
         course,
         userId,
@@ -166,7 +168,7 @@ export async function courseGradebook(db, course, { teacher, userId, memberId = 
       .filter((t) => teacher || t.visible === 1)
       .map((t) => {
         if (teacher) return taskRecord(t);
-        const extension = t.ext_due ? { due: t.ext_due, end_at: t.ext_end } : null;
+        const extension = t.ext_task ? { start_at: t.ext_start, due: t.ext_due, end_at: t.ext_end } : null;
         // Primero las fechas de su sección; encima, su prórroga individual.
         const record = taskRecord(withExtension(withSectionDates(t, { start_at: t.sec_start, due: t.sec_due, end_at: t.sec_end }), extension));
         return extension ? { ...record, data: { ...record.data, extended: true } } : record;
@@ -176,7 +178,7 @@ export async function courseGradebook(db, course, { teacher, userId, memberId = 
           id: `extension:${e.task}:${e.member}`,
           kind: 'extension',
           revision: 1,
-          data: { task: e.task, member: e.member, due: e.due, end: e.end_at, reason: e.reason, created: e.created },
+          data: { task: e.task, member: e.member, start: e.start_at, due: e.due, end: e.end_at, reason: e.reason, created: e.created },
         }))
       : []),
     ...submissions.map(submissionRecord).map(hideDraft),
@@ -338,7 +340,12 @@ export async function saveTask(db, { course, userId, id, revision, fields }) {
  */
 export function withExtension(task, extension) {
   if (!extension) return task;
-  return { ...task, due: extension.due || task.due, end_at: extension.end_at || (task.end_at ? extension.due || task.end_at : '') };
+  return {
+    ...task,
+    start_at: extension.start_at || task.start_at,
+    due: extension.due || task.due,
+    end_at: extension.end_at || (task.end_at ? extension.due || task.end_at : ''),
+  };
 }
 
 /** Lanza un error si la actividad está oculta o fuera de su periodo de entrega. */
@@ -408,17 +415,18 @@ export async function saveSubmission(db, { course, user, id, revision, input, va
   if (!member || member.role !== 'student') fail('Solo un alumno inscrito puede entregar esta actividad.', 403);
   const dates = await one(
     db,
-    `SELECT e.due AS ext_due, e.end_at AS ext_end, d.start_at, d.due, d.end_at FROM (SELECT 1) x
+    `SELECT e.task AS ext_task, e.start_at AS ext_start, e.due AS ext_due, e.end_at AS ext_end, d.start_at, d.due, d.end_at FROM (SELECT 1) x
      LEFT JOIN aula_extensions e ON e.task=?1 AND e.member=?2
      LEFT JOIN aula_section_dates d ON d.item=?1 AND d.section=?3`,
     loaded.id,
     member.id,
     member.section || '',
   );
-  const task = withExtension(withSectionDates(loaded, dates), dates?.ext_due ? { due: dates.ext_due, end_at: dates.ext_end } : null);
-  // Una actividad de otras secciones no está disponible para este alumno.
+  const task = withExtension(withSectionDates(loaded, dates), dates?.ext_task ? { start_at: dates.ext_start, due: dates.ext_due, end_at: dates.ext_end } : null);
+  // Una actividad de otras secciones (o solo para quien tiene acceso especial) no está disponible para este alumno.
   const sections = taskSections(loaded.sections);
   if (sections.length && !sections.includes(member.section)) fail('La actividad no está disponible.', 403);
+  if (loaded.special_only === 1 && !dates?.ext_task) fail('La actividad no está disponible.', 403);
   assertAvailable(task);
 
   const existing = await one(db, 'SELECT * FROM aula_submissions WHERE task=? AND member=?', task.id, member.id);

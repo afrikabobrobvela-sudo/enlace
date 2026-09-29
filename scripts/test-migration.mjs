@@ -124,6 +124,7 @@ const legacyTasks = pick(before.records, 'task').map((t) => ({
     category: null, points: 1, rubric: null, groupCategory: '',
     // 12.18: para todas las secciones.
     sections: [],
+    specialOnly: false,
   },
 }));
 assert.deepEqual(pick(after.records, 'task'), legacyTasks);

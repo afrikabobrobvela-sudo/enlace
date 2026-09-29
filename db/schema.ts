@@ -314,6 +314,8 @@ export const tasks = sqliteTable(
     groupCategory: text('group_category').notNull().default(''), // '' = entrega individual
     // Migración 0025: secciones a las que va dirigida (JSON con ids de aula_sections; '' o '[]' = todas).
     sections: text('sections').notNull().default(''),
+    // Migración 0028: 1 = solo la ven los alumnos con acceso especial (una fila en aula_extensions).
+    specialOnly: integer('special_only').notNull().default(0),
     // Papelera (migración 0007): la actividad eliminada conserva entregas y calificaciones.
     deletedAt: text('deleted_at'),
     deletedBy: text('deleted_by'),
@@ -608,6 +610,8 @@ export const extensions = sqliteTable(
     reason: text('reason').notNull().default(''),
     createdBy: text('created_by').notNull(),
     created: text('created').notNull(),
+    // Migración 0028 (acceso especial): desde cuándo puede entregar ese alumno ('' = la fecha general).
+    startAt: text('start_at').notNull().default(''),
   },
   (t) => [primaryKey({ columns: [t.task, t.member] })],
 );
@@ -768,4 +772,29 @@ export const courseAccess = sqliteTable(
     lastAt: text('last_at').notNull(),
   },
   (t) => [primaryKey({ columns: [t.course, t.userId] })],
+);
+
+/**
+ * Migración 0028: acceso especial en evaluaciones (como en actividades, aula_extensions): para un alumno, otro horario
+ * ('' = el de su sección o el general), minutos extra en el tiempo límite e intentos adicionales.
+ */
+export const quizAccess = sqliteTable(
+  'aula_quiz_access',
+  {
+    quiz: text('quiz')
+      .notNull()
+      .references(() => records.id),
+    member: text('member')
+      .notNull()
+      .references(() => members.id),
+    course: text('course').notNull(),
+    startAt: text('start_at').notNull().default(''),
+    endAt: text('end_at').notNull().default(''),
+    extraMinutes: integer('extra_minutes').notNull().default(0),
+    extraAttempts: integer('extra_attempts').notNull().default(0),
+    reason: text('reason').notNull().default(''),
+    createdBy: text('created_by').notNull(),
+    created: text('created').notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.quiz, t.member] }), index('aula_quiz_access_course').on(t.course)],
 );

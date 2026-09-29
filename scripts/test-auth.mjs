@@ -183,6 +183,21 @@ assert.match(sw.headers.get('content-type'), /javascript/);
 assert.match(await sw.text(), /api\|auth/, 'El service worker excluye la API');
 checks += 5;
 
+// ---- Caché de la interfaz: se revalida con su huella (ETag) y solo se descarga si cambió ----
+const appJs = await fetchWorker('/app.js');
+const etag = appJs.headers.get('etag');
+assert.match(etag, /^"[\w-]{16}"$/);
+assert.equal(appJs.headers.get('cache-control'), 'no-cache', 'Siempre se pregunta si hay versión nueva');
+const revalidated = await fetchWorker('/app.js', { headers: { 'If-None-Match': etag } });
+assert.equal(revalidated.status, 304);
+assert.equal(await revalidated.text(), '', 'Sin volver a descargar');
+assert.equal((await fetchWorker('/app.js', { headers: { 'If-None-Match': 'W/' + etag } })).status, 304, 'También con la huella «débil» que pone la compresión');
+assert.equal((await fetchWorker('/app.js', { headers: { 'If-None-Match': '"otra"' } })).status, 200);
+assert.notEqual((await fetchWorker('/tema.css')).headers.get('etag'), etag, 'Cada archivo tiene su huella');
+const katex = await fetchWorker('/vendor/katex-0.16.45/katex.min.css');
+assert.match(katex.headers.get('cache-control'), /immutable/);
+checks += 7;
+
 // ---- Aviso de privacidad ----
 const page = await fetchWorker('/privacidad');
 assert.equal(page.status, 200);

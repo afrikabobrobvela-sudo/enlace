@@ -225,7 +225,7 @@ function renderAttendanceGrid() {
       // Una clase de otra sección no le toca: no cuenta en su porcentaje.
       const statuses = sessions.map((s) => (sessionApplies(s, m) ? attendanceRecord(s.id, m.id)?.status : 'na'));
       const summary = attendanceSummary(statuses.filter((st) => st && st !== 'na'), settings);
-      return `<tr data-search-row><td class="sticky-name"><div class="att-who">${avatarHtml(m)}<span>${esc(m.name)}</span>${percentPill(summary, settings.min_percent)}</div><div class="muted">${esc([m.matricula, sectionName(m.section)].filter(Boolean).join(' · '))}</div></td>
+      return `<tr data-search-row><td class="sticky-name"><div class="att-who">${avatarHtml(m)}<span class="att-who-name">${esc(m.name)}</span>${percentPill(summary, settings.min_percent)}</div><div class="muted">${esc([m.matricula, sectionName(m.section)].filter(Boolean).join(' · '))}</div></td>
         ${statuses
           .map((st) =>
             st === 'na'

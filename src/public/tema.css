@@ -990,3 +990,126 @@ tr.access-never td { color: var(--ink-faint); }
 .essay-review { border-top: 1px solid var(--line); padding: 12px 0; }
 .essay-review h3 { margin: 0 0 8px; font-size: 1rem; }
 .essay-answer { white-space: pre-wrap; background: var(--canvas); border-left: 3px solid var(--line-strong); margin: 8px 0; padding: 10px 12px; border-radius: var(--radius-sm); }
+
+/* ==== Pulido visual (12.22) ======================================================================== */
+
+/* Nada se mueve al pasar el mouse o presionar: el estado se nota con color y sombra, no desplazando el botón
+   (antes los botones bajaban 1 px al presionarlos y las tarjetas subían 3 px, con sus botones dentro). */
+.primary:active, .secondary:active, button:active { transform: none; }
+.primary:active, button.primary:active { background: #0a3350; box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.22); }
+.secondary:active, button.secondary:active { background: #e9eff4; box-shadow: inset 0 1px 3px rgba(16, 38, 58, 0.14); }
+article.course, .course, .module-card { transition: box-shadow 0.18s ease, border-color 0.18s ease; }
+article.course:hover, .course:hover, .module-card:hover { transform: none; box-shadow: var(--shadow); border-color: #c5d3df; }
+.primary, button.primary, .secondary, button.secondary { display: inline-flex; align-items: center; justify-content: center; gap: 6px; line-height: 1.2; text-align: center; }
+.primary:disabled, .secondary:disabled { opacity: 0.55; cursor: not-allowed; box-shadow: none; }
+/* Foco con el teclado: un anillo que no cambia el tamaño de nada. */
+button:focus-visible, a:focus-visible, summary:focus-visible, .dt-display:focus-visible { outline: 3px solid rgba(14, 159, 180, 0.45); outline-offset: 2px; }
+/* Botones de texto: mismo alto y un fondo suave al pasar, sin cambiar de tamaño. */
+.text-btn, .table-link { border-radius: 6px; transition: background 0.15s, color 0.15s; }
+.text-btn:hover, .table-link:hover { background: rgba(11, 106, 158, 0.08); text-decoration: none; }
+.badge-count { display: inline-grid; place-items: center; min-width: 20px; height: 20px; padding: 0 6px; border-radius: 999px; background: var(--accent); color: #fff; font-size: 12px; font-weight: 700; line-height: 1; }
+
+/* Tablas: todo alineado al centro de la fila. */
+.table-wrap td { vertical-align: middle; }
+.table-wrap td .row-actions { align-items: center; }
+
+/* Barra de herramientas: botones y filtros a la misma altura. */
+.toolbar { align-items: center; }
+.toolbar > * { margin-top: 0; margin-bottom: 0; }
+.toolbar .section-filter > summary, .toolbar input[type='search'], .toolbar select { min-height: 40px; }
+
+/* Material del docente: sin el hueco entre el botón y el aviso. */
+.task-materials .panel-head { margin-bottom: 6px; }
+.task-materials > p.muted:last-child { margin-bottom: 0; }
+.file-list:empty { display: none; }
+.task-materials > p.muted { margin: 4px 0 0; }
+
+/* Editor de actividad: la barra de abajo solo lleva los botones. */
+.editor-bottom { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 12px; }
+.editor-bottom .danger-link { margin-left: auto; }
+.editor-sidebar details > summary { cursor: pointer; }
+
+/* ---- Selector de fecha y hora (fecha.js) ---------------------------------------------------------- */
+.dt-field { position: relative; display: flex; align-items: stretch; width: 100%; min-width: 0; margin-top: 6px; }
+.dt-field { container-type: inline-size; min-width: 170px; }
+.dt-field.dt-kind-date { min-width: 150px; }
+.dt-field.dt-kind-time { min-width: 110px; }
+@container (max-width: 200px) { .dt-year { display: none; } }
+label > .dt-field { margin-top: 6px; }
+.dt-native { position: absolute !important; left: 12px; bottom: 0; width: 1px !important; height: 1px !important; min-height: 0 !important; padding: 0 !important; border: 0 !important; opacity: 0; pointer-events: none; }
+.dt-display {
+  flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 8px 12px; margin: 0;
+  border: 1px solid var(--line-strong); border-radius: var(--radius-sm); background: #fff; color: var(--ink);
+  font: inherit; font-weight: 500; text-align: left; cursor: pointer; transition: border-color 0.15s, box-shadow 0.15s;
+}
+.dt-display svg { flex: none; color: var(--brand-2); }
+.dt-display:hover { border-color: #aebdca; }
+.dt-field.is-empty .dt-text { color: var(--ink-faint); font-weight: 400; }
+.dt-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dt-clear { position: absolute; right: 6px; top: 0; bottom: 0; margin: auto 0; transform: none; width: 30px; height: 30px; border: 0; border-radius: 999px; background: transparent; color: var(--ink-faint); font-size: 20px; line-height: 1; cursor: pointer; }
+.dt-clear:hover { background: #eef3f7; color: var(--ink); }
+.dt-field:has(.dt-clear:not([hidden])) .dt-display { padding-right: 40px; }
+.dt-pop {
+  position: fixed; z-index: 2000; max-height: calc(100dvh - 16px); overflow: auto; width: 304px; padding: 14px; background: #fff; color: var(--ink);
+  border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 18px 44px rgba(16, 38, 58, 0.22); font-size: 14px;
+}
+.dt-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+.dt-head strong { font-size: 15px; }
+.dt-nav { width: 34px; height: 34px; border: 1px solid var(--line); border-radius: 10px; background: #fff; color: var(--ink); font-size: 18px; line-height: 1; cursor: pointer; }
+.dt-nav:hover { background: #f2f6f9; }
+.dt-week, .dt-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+.dt-week span { text-align: center; font-size: 11.5px; font-weight: 700; color: var(--ink-faint); padding: 4px 0; }
+.dt-day { aspect-ratio: 1; border: 0; border-radius: 999px; background: transparent; color: var(--ink); font: inherit; font-size: 13.5px; cursor: pointer; }
+.dt-day:hover { background: #eef4f8; }
+.dt-day.is-other { color: #b3c0cb; }
+.dt-day.is-today { box-shadow: inset 0 0 0 1.5px var(--accent); font-weight: 700; }
+.dt-day.is-selected { background: var(--brand); color: #fff; font-weight: 700; box-shadow: none; }
+.dt-time { display: flex; align-items: center; gap: 6px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
+.dt-pop > .dt-time:first-child { margin-top: 0; padding-top: 0; border-top: 0; }
+.dt-time-label { margin-right: auto; font-weight: 600; color: var(--ink-soft); }
+.dt-time select { width: auto !important; min-width: 64px; min-height: 38px; margin: 0; padding: 6px 8px; font-variant-numeric: tabular-nums; }
+.dt-quick { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.dt-quick button { flex: 1; min-height: 32px; border: 1px solid var(--line); border-radius: 999px; background: #f7fafc; color: var(--ink); font: inherit; font-size: 13px; font-variant-numeric: tabular-nums; cursor: pointer; }
+.dt-quick button:hover { background: #eef4f8; }
+.dt-quick button.is-selected { background: var(--brand); border-color: var(--brand); color: #fff; }
+.dt-actions { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
+.dt-actions .primary { margin-left: auto; min-height: 36px; padding: 6px 16px; }
+.dt-actions .text-btn { padding: 6px 8px; }
+.dt-clear-link { color: var(--ink-soft) !important; }
+.dt-sheet-title { font-weight: 700; font-size: 16px; margin: 0 0 10px; }
+
+/* ---- Acceso especial (especial.js) ---------------------------------------------------------------- */
+.special-only { margin-top: 0; font-weight: 600; }
+.special-current h3, .special-add h3 { font-size: 15px; margin: 18px 0 8px; }
+.special-list { list-style: none; margin: 0; padding: 0; border: 1px solid var(--line); border-radius: var(--radius-sm); max-height: 220px; overflow: auto; }
+.special-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; border-bottom: 1px solid var(--line); }
+.special-row:last-child { border-bottom: 0; }
+.special-row .row-actions { display: flex; gap: 6px; flex: none; }
+.special-dates { grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); }
+.special-picker { margin-top: 10px; border: 1px solid var(--line); border-radius: var(--radius-sm); overflow: hidden; }
+.special-picker-top { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px; background: #f6f9fb; border-bottom: 1px solid var(--line); }
+.special-picker-top select { width: auto; min-width: 170px; margin: 0; }
+.special-picker-top input { flex: 1 1 180px; min-width: 0; margin: 0; }
+.special-count { margin-left: auto; font-weight: 600; color: var(--ink-soft); font-size: 13px; }
+.special-table { max-height: 300px; overflow: auto; }
+.special-table .check-label { display: flex; align-items: center; gap: 10px; margin: 0; padding: 8px 12px; border-bottom: 1px solid var(--line); }
+.special-table .check-label:last-child { border-bottom: 0; }
+.special-all { background: #fbfcfd; position: sticky; top: 0; z-index: 1; }
+.special-student .person { flex: 1; min-width: 0; }
+.special-pill { background: #fff4e0 !important; color: #8a5a00 !important; }
+.special-note { color: #8a5a00; }
+
+/* Asistencia: foto, nombre y porcentaje juntos (antes el nombre quedaba separado a mitad de la celda). */
+.att-grid .att-who { justify-content: flex-start; gap: 10px; }
+.att-grid .att-who-name { flex: 1; min-width: 0; text-align: left; font-weight: 600; }
+.att-grid .sticky-name > .muted { margin: 2px 0 0 42px; padding: 0; font-size: 12.5px; }
+
+/* Paneles plegables (editor de actividad y ajustes): flecha moderna en lugar del triángulo del navegador. */
+.editor-sidebar details > summary, details.quiz-settings > summary { list-style: none; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.editor-sidebar details > summary::-webkit-details-marker, details.quiz-settings > summary::-webkit-details-marker { display: none; }
+.editor-sidebar details > summary::after, details.quiz-settings > summary::after {
+  content: ''; flex: none; width: 8px; height: 8px; margin-right: 4px; border-right: 2px solid currentColor; border-bottom: 2px solid currentColor;
+  opacity: 0.55; transform: rotate(45deg); transition: transform 0.15s;
+}
+.editor-sidebar details[open] > summary::after, details.quiz-settings[open] > summary::after { transform: rotate(-135deg); }
+.dt-sheet-title + .dt-time { margin-top: 0; padding-top: 0; border-top: 0; }

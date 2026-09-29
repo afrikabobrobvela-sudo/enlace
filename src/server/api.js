@@ -11,7 +11,7 @@ import { reportRoutes } from './reports.js';
 import { demoRoutes } from './demo.js';
 import { backupRoutes } from './backup.js';
 import { userRoutes } from './users.js';
-import { forSection, isPublished, publishAtField, publishedSql, SCHEDULABLE_KINDS, sectionSql } from './published.js';
+import { forSection, isPublished, publishAtField, publishedSql, SCHEDULABLE_KINDS, sectionSql, specialRecordSql, specialTaskSql } from './published.js';
 import {
   MAX_EXAM_EVENTS,
   MAX_PASSWORD_FAILURES,
@@ -40,9 +40,10 @@ import { bankImageVisible, bankRoutes } from './bank.js';
 import { photoRoutes, servePhoto } from './photos.js';
 import { digestRoutes } from './digest.js';
 import { accessRoutes, recordVisit } from './accesos.js';
+import { specialAccessRoutes } from './especial.js';
 import { cleanSaved } from './reactivos.js';
 import { mailConfigured } from './mail.js';
-import { quizForStudent, quizWithSectionDates, sectionIdsByName, sectionKey, sectionRoutes, sectionsField, validSection } from './sections.js';
+import { quizForStudent, quizWithAccess, quizWithSectionDates, sectionIdsByName, sectionKey, sectionRoutes, sectionsField, validSection } from './sections.js';
 import { gradingRoutes } from './grading.js';
 import { clearSessionCookie, identity, lastLogins, revokeAllStatements } from './auth.js';
 import {
@@ -138,7 +139,7 @@ export async function api(request, env) {
     assertHasPhoto(route, user, env);
     const ctx = { db: env.DB, env, user, url, request };
     const handler =
-      routes[route] || attendanceRoutes[route] || gradingRoutes[route] || directoryRoutes[route] || privacyRoutes[route] || periodRoutes[route] || dashboardRoutes[route] || reportRoutes[route] || demoRoutes[route] || backupRoutes[route] || userRoutes[route] || bankRoutes[route] || sectionRoutes[route] || photoRoutes[route] || digestRoutes[route] || accessRoutes[route];
+      routes[route] || attendanceRoutes[route] || gradingRoutes[route] || directoryRoutes[route] || privacyRoutes[route] || periodRoutes[route] || dashboardRoutes[route] || reportRoutes[route] || demoRoutes[route] || backupRoutes[route] || userRoutes[route] || bankRoutes[route] || sectionRoutes[route] || photoRoutes[route] || digestRoutes[route] || accessRoutes[route] || specialAccessRoutes[route];
     if (handler) return await handler(ctx);
     if (request.method === 'GET' && url.pathname.startsWith('/api/file/')) return await downloadFile(ctx, url.pathname.slice(10));
     if (request.method === 'GET' && url.pathname.startsWith('/api/photo/')) return await servePhoto(ctx, url.pathname.slice(11));
@@ -451,7 +452,12 @@ const routes = {
               (SELECT section FROM aula_members m WHERE m.course=?1 AND m.role='student' AND (m.id=?3 OR (?3 IS NULL AND m.user_id=?2)) LIMIT 1) AS my_section,
               (SELECT json_group_array(json_object('item',d.item,'section',d.section,'start_at',d.start_at,'due',d.due,'end_at',d.end_at,'code',d.code))
                 FROM aula_section_dates d WHERE d.course=?1 AND (?4 OR d.section=(SELECT section FROM aula_members m
-                  WHERE m.course=?1 AND m.role='student' AND (m.id=?3 OR (?3 IS NULL AND m.user_id=?2)) LIMIT 1))) AS dates`,
+                  WHERE m.course=?1 AND m.role='student' AND (m.id=?3 OR (?3 IS NULL AND m.user_id=?2)) LIMIT 1))) AS dates,
+              -- Acceso especial en evaluaciones: quien enseña recibe todos; el alumno, solo el suyo.
+              (SELECT json_group_array(json_object('quiz',qa.quiz,'member',qa.member,'start_at',qa.start_at,'end_at',qa.end_at,
+                        'extra_minutes',qa.extra_minutes,'extra_attempts',qa.extra_attempts,'reason',CASE WHEN ?4 THEN qa.reason ELSE '' END,'created',qa.created))
+                FROM aula_quiz_access qa WHERE qa.course=?1 AND (?4 OR qa.member=(SELECT id FROM aula_members m
+                  WHERE m.course=?1 AND m.role='student' AND (m.id=?3 OR (?3 IS NULL AND m.user_id=?2)) LIMIT 1))) AS grants`,
       courseId,
       viewer,
       viewing?.id ?? null,
@@ -460,11 +466,14 @@ const routes = {
     const sections = JSON.parse(sectionRow?.sections || '[]');
     const sectionDates = JSON.parse(sectionRow?.dates || '[]');
     const myDates = teach ? new Map() : new Map(sectionDates.map((d) => [d.item, d]));
+    const quizAccess = JSON.parse(sectionRow?.grants || '[]');
+    const myAccess = teach ? new Map() : new Map(quizAccess.map((g) => [g.quiz, g]));
     // Sección del alumno (null en la vista general «como alumno»: ahí se ve lo de todas las secciones).
     const mySection = teach || (!viewer && !viewing) ? null : sectionRow?.my_section ?? '';
     // Para el alumno: visible, con su fecha de publicación cumplida y dirigido a su sección.
     const now = nowIso();
-    const visible = (r) => isPublished(r, now) && forSection(r.data.sections, mySection);
+    // Una evaluación «solo con acceso especial» existe para el alumno solo si tiene acceso (la vista general la muestra).
+    const visible = (r) => isPublished(r, now) && forSection(r.data.sections, mySection) && (mySection === null || !r.data.specialOnly || myAccess.has(r.id));
     const byId = new Map(rows.map((r) => [r.id, r]));
     const content = teach
       ? rows
@@ -480,7 +489,7 @@ const routes = {
             // Del modo examen tampoco recibe la contraseña ni la ubicación del salón.
             r.kind === 'quiz'
               ? ((q) => ({ ...q, data: { ...q.data, questions: publicQuestions(q.data.questions), questionCount: questionCount(q.data), settings: publicSettings(q.data.settings) } }))(
-                  quizWithSectionDates(r, myDates.get(r.id)),
+                  quizWithAccess(quizWithSectionDates(r, myDates.get(r.id)), myAccess.get(r.id)),
                 )
               : r,
           );
@@ -566,7 +575,7 @@ const routes = {
       canDelete: !preview && (user.role === 'admin' || ownsCourse(user, a.course)),
       records,
       sections,
-      ...(teach ? { sectionDates } : {}),
+      ...(teach ? { sectionDates, quizAccess } : {}),
       members,
       files,
       progress,
@@ -939,6 +948,8 @@ const routes = {
       }
       // Una noticia ya enviada por correo lo sigue estando al editarla (no se vuelve a enviar).
       if (kind === 'notice' && previous?.data.emailedAt) data.emailedAt = previous.data.emailedAt;
+      // «Solo con acceso especial» se cambia desde su ventana, no desde el editor: se conserva.
+      if (kind === 'quiz' && previous?.data.specialOnly) data.specialOnly = true;
       if (kind === 'module') data.fileIds = await validateFiles(db, input.fileIds, body.course, user, 'material');
       if (kind === 'material') {
         data.module = input.module || null;
@@ -1493,10 +1504,12 @@ const routes = {
     const [running, blocked] = await Promise.all([
       all(
         db,
-        `SELECT s.*, coalesce(m.name, u.name) AS name, m.id AS member, m.section, d.start_at AS sec_start, d.end_at AS sec_end
+        `SELECT s.*, coalesce(m.name, u.name) AS name, m.id AS member, m.section, d.start_at AS sec_start, d.end_at AS sec_end,
+                qa.quiz AS grant_quiz, qa.start_at AS grant_start, qa.end_at AS grant_end, qa.extra_minutes, qa.extra_attempts
          FROM aula_attempt_starts s JOIN aula_users u ON u.id=s.user_id
            LEFT JOIN aula_members m ON m.course=?1 AND m.user_id=s.user_id
            LEFT JOIN aula_section_dates d ON d.item=s.quiz AND d.section=m.section
+           LEFT JOIN aula_quiz_access qa ON qa.quiz=s.quiz AND qa.member=m.id
          WHERE s.quiz=?2 AND NOT EXISTS (SELECT 1 FROM aula_attempts a WHERE a.quiz=s.quiz AND a.user_id=s.user_id AND a.attempt=s.attempt)
          ORDER BY name`,
         course,
@@ -1520,7 +1533,13 @@ const routes = {
         section: s.section || '',
         attempt: s.attempt,
         started: s.started,
-        deadline: deadlineOf(quizWithSectionDates(quiz, { start_at: s.sec_start, end_at: s.sec_end }), s.started),
+        deadline: deadlineOf(
+          quizWithAccess(
+            quizWithSectionDates(quiz, { start_at: s.sec_start, end_at: s.sec_end }),
+            s.grant_quiz ? { start_at: s.grant_start, end_at: s.grant_end, extra_minutes: s.extra_minutes, extra_attempts: s.extra_attempts } : null,
+          ),
+          s.started,
+        ),
         answered: Object.keys(JSON.parse(s.progress || '{}')).length,
         ...integritySummary(s),
         // Bloqueado al salir: el código solo lo ve quien enseña (para dictárselo en persona).
@@ -1701,6 +1720,7 @@ const routes = {
 
 /** Sección del alumno que descarga (en SQL, con ?1 = curso y ?4 = usuario). */
 const MY_SECTION = "(SELECT section FROM aula_members WHERE course=?1 AND user_id=?4 AND role='student')";
+const MY_MEMBER = "(SELECT id FROM aula_members WHERE course=?1 AND user_id=?4 AND role='student')";
 
 async function downloadFile({ db, env, user, url, request }, id) {
   const file = await one(db, 'SELECT * FROM aula_files WHERE id=?', id);
@@ -1746,12 +1766,12 @@ async function downloadFile({ db, env, user, url, request }, id) {
                            AND p.deleted_at IS NULL AND ${publishedSql('p', '?3')} AND ${sectionSql("json_extract(p.data,'$.sections')", MY_SECTION, 'sp')}))
          UNION ALL
          SELECT 1 FROM aula_tasks t, json_each(t.file_ids) j WHERE t.course=?1 AND t.visible=1 AND t.deleted_at IS NULL AND j.value=?2
-           AND ${sectionSql('t.sections', MY_SECTION)}
+           AND ${sectionSql('t.sections', MY_SECTION)} AND ${specialTaskSql('t', MY_MEMBER)}
          UNION ALL
          -- Imagen de una pregunta: evaluación publicada y, si es examen, solo después de empezarlo (no se adelantan preguntas).
          SELECT 1 FROM aula_records r, json_each(r.data,'$.questions') qq
          WHERE r.course=?1 AND r.kind='quiz' AND r.deleted_at IS NULL AND ${publishedSql('r', '?3')} AND json_extract(qq.value,'$.image')=?2
-           AND ${sectionSql("json_extract(r.data,'$.sections')", MY_SECTION)}
+           AND ${sectionSql("json_extract(r.data,'$.sections')", MY_SECTION)} AND ${specialRecordSql('r', MY_MEMBER)}
            AND (coalesce(json_extract(r.data,'$.settings.exam.enabled'),0)=0
                 OR EXISTS (SELECT 1 FROM aula_attempt_starts s WHERE s.quiz=r.id AND s.user_id=?4))
          LIMIT 1`,

@@ -1,6 +1,7 @@
 // Incrusta la interfaz (src/public, incluidas las bibliotecas de src/public/vendor) en src/generated/assets.js.
 // Los archivos binarios (fuentes, WebAssembly) se guardan en base64.
 // Wrangler empaqueta después src/worker.js con todos sus módulos al ejecutar `wrangler deploy` o `wrangler dev`.
+import { createHash } from 'node:crypto';
 import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import { join, relative } from 'node:path';
 import { gzipSync } from 'node:zlib';
@@ -20,7 +21,10 @@ const assets = {};
 for await (const path of walk(ROOT)) {
   const name = relative(ROOT, path).split('\\').join('/');
   const extension = name.split('.').pop();
-  assets[name] = BINARY.has(extension) ? { base64: (await readFile(path)).toString('base64') } : { text: await readFile(path, 'utf8') };
+  const bytes = await readFile(path);
+  // `etag`: huella del contenido. El navegador pregunta «¿cambió?» y, si no, recibe un 304 sin volver a descargarlo.
+  const etag = `"${createHash('sha256').update(bytes).digest('base64url').slice(0, 16)}"`;
+  assets[name] = BINARY.has(extension) ? { base64: bytes.toString('base64'), etag } : { text: bytes.toString('utf8'), etag };
 }
 
 await mkdir('src/generated', { recursive: true });

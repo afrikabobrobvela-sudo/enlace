@@ -65,15 +65,21 @@ export default {
     // Páginas públicas sin extensión, por ejemplo /privacidad → privacidad.html.
     if (!Object.hasOwn(assets, name) && Object.hasOwn(assets, name + '.html')) name += '.html';
     if (!Object.hasOwn(assets, name)) return new Response('Not found', { status: 404 });
-    // Las bibliotecas llevan su versión en la ruta, así que pueden guardarse en caché de forma permanente.
-    const cache = name.startsWith('vendor/') ? { 'Cache-Control': 'public, max-age=31536000, immutable' } : {};
-    return new Response(request.method === 'HEAD' ? null : body(name), {
-      headers: {
-        'Content-Type': TYPES[name.split('.').pop()] || 'application/octet-stream',
-        'Content-Security-Policy': CONTENT_SECURITY_POLICY,
-        ...SECURITY_HEADERS,
-        ...cache,
-      },
-    });
+    // Las bibliotecas llevan su versión en la ruta, así que pueden guardarse en caché de forma permanente. Lo demás
+    // (la interfaz) se revalida en cada visita con su huella (ETag): si no cambió, 304 sin cuerpo; si hay versión
+    // nueva, se descarga. Así siempre se ve la última versión sin bajar todo cada vez.
+    const cache = name.startsWith('vendor/') ? { 'Cache-Control': 'public, max-age=31536000, immutable' } : { 'Cache-Control': 'no-cache' };
+    const headers = {
+      'Content-Type': TYPES[name.split('.').pop()] || 'application/octet-stream',
+      'Content-Security-Policy': CONTENT_SECURITY_POLICY,
+      ...SECURITY_HEADERS,
+      ...cache,
+      ...(assets[name].etag ? { ETag: assets[name].etag } : {}),
+    };
+    const known = request.headers.get('If-None-Match');
+    if (known && assets[name].etag && known.split(',').some((tag) => tag.trim().replace(/^W\//, '') === assets[name].etag)) {
+      return new Response(null, { status: 304, headers });
+    }
+    return new Response(request.method === 'HEAD' ? null : body(name), { headers });
   },
 };

@@ -18,7 +18,19 @@ const PREVIEW_READONLY = 'Estás en la vista de alumno: aquí no se guardan camb
 let me = null, courses = [], current = null, section = 'hub', detail = null, moduleId = null, gradeTab = 'entry', busy = false, dirty = false;
 const records = kind => current?.records.filter(r => r.kind === kind) || [], find = id => current?.records.find(r => r.id === id), teaches = () => !!current?.canTeach;
 /** Vencimiento de una actividad para un alumno, con su prórroga si la tiene (solo el docente recibe las prórrogas). */
-const extensionOf = (taskId, memberId) => current?.records.find(r => r.kind === 'extension' && r.data.task === taskId && r.data.member === memberId);
+/**
+ * Índices sobre los registros del curso: se arman una vez por cada carga (current.records se reemplaza completo al
+ * recargar, nunca se modifica en su lugar) en vez de recorrer todo el curso en cada celda de las tablas.
+ */
+const recordIndexes = new WeakMap();
+function indexed(source, name, build) {
+  if (!source) return new Map();
+  let bucket = recordIndexes.get(source);
+  if (!bucket)
+    recordIndexes.set(source, bucket = {});
+  return bucket[name] ||= build(source);
+}
+const extensionOf = (taskId, memberId) => indexed(current?.records, 'extension', recs => new Map(recs.filter(r => r.kind === 'extension').map(r => [r.data.task + '|' + r.data.member, r]))).get(taskId + '|' + memberId);
 const dueFor = (task, memberId) => extensionOf(task.id, memberId)?.data.due || sectionDateOf(task.id, memberId)?.due || task.data.due;
 const fmt = v => v ? new Date(v).toLocaleString('es-MX', { dateStyle: 'medium', timeStyle: 'short' }) : 'Sin fecha límite';
 const localDate = v => {
@@ -155,10 +167,10 @@ function renderTask() {
   if (!t)
     return renderTasks();
   const subs = records('submission').filter(s => s.data.task === t.id), own = subs.find(s => s.data.member === myMember()?.id) || subs.find(s => s.author === viewerKey());
-  $('#main').innerHTML = `<div class="crumbs"><button data-section="tasks">Actividades</button><span>›</span><span>${teaches() ? 'Envíos en carpeta' : 'Entrega'}</span></div><h1>${esc(t.data.title)}${sectionTag(t)}</h1><p class="deadline">Vence: ${fmt(t.data.due)}</p>${t.data.extended ? '<p class="extension-note">Tienes una prórroga: esta es tu nueva fecha de entrega.</p>' : ''}${!teaches() && t.data.groupCategory ? teamBannerHtml(t) : ''}${richText(t.data.body, t.data.fileIds)}<section class="task-materials"><div class="panel-head"><h2>Material del docente</h2>${teaches() ? button('＋ Subir archivos o presentaciones', 'task-files', t.id) : ''}</div>${fileLinks(t.data.fileIds)}${!t.data.fileIds?.length ? '<p class="muted">No hay archivos adjuntos a esta actividad.</p>' : ''}</section>${teaches() ? `<div class="toolbar">${button('Editar actividad', 'edit-task', t.id, 'secondary')}${button('Descargar entregas (ZIP)', 'zip-task', t.id, 'secondary')}${sectionFilterHtml()}</div>${sectionDatesSummary(t.id)}<div class="table-wrap"><table><thead><tr><th>Alumno</th>${courseSections().length ? '<th>Sección</th>' : ''}<th>Estado</th><th>Calificación</th><th>Acción</th></tr></thead><tbody>${studentsInView().filter(m => itemApplies(t, m)).map(m => {
+  $('#main').innerHTML = `<div class="crumbs"><button data-section="tasks">Actividades</button><span>›</span><span>${teaches() ? 'Envíos en carpeta' : 'Entrega'}</span></div><h1>${esc(t.data.title)}${sectionTag(t)}</h1><p class="deadline">Vence: ${fmt(t.data.due)}</p>${t.data.extended ? `<p class="extension-note">Tienes acceso especial en esta actividad: ${esc([t.data.start && Date.parse(t.data.start) > Date.now() ? 'disponible desde ' + fmt(t.data.start) : '', t.data.due ? 'vence ' + fmt(t.data.due) : '', t.data.end ? 'cierra ' + fmt(t.data.end) : ''].filter(Boolean).join(', ') || 'puedes verla y entregarla')}.</p>` : ''}${!teaches() && t.data.groupCategory ? teamBannerHtml(t) : ''}${richText(t.data.body, t.data.fileIds)}<section class="task-materials"><div class="panel-head"><h2>Material del docente</h2>${teaches() ? button('＋ Subir archivos o presentaciones', 'task-files', t.id) : ''}</div>${fileLinks(t.data.fileIds)}${!t.data.fileIds?.length ? '<p class="muted">No hay archivos adjuntos a esta actividad.</p>' : ''}</section>${teaches() ? `<div class="toolbar">${button('Editar actividad', 'edit-task', t.id, 'secondary')}${button('Descargar entregas (ZIP)', 'zip-task', t.id, 'secondary')}${specialAccessButton('task', t.id)}${sectionFilterHtml()}</div>${sectionDatesSummary(t.id)}<div class="table-wrap"><table><thead><tr><th>Alumno</th>${courseSections().length ? '<th>Sección</th>' : ''}<th>Estado</th><th>Calificación</th><th>Acción</th></tr></thead><tbody>${studentsInView().filter(m => itemApplies(t, m)).map(m => {
     const s = subs.find(s => s.data.member === m.id);
     const ext = extensionOf(t.id, m.id);
-    return `<tr><td><span class="person">${avatarHtml(m)}<span>${esc(m.name)}</span></span>${ext ? `<div class="table-subtext">Prórroga hasta ${esc(fmt(ext.data.due))}</div>` : ''}</td>${courseSections().length ? `<td>${esc(sectionName(m.section) || '—')}</td>` : ''}<td>${s ? s.data.manual ? 'Captura manual' : s.data.late ? 'Entrega tardía' : 'Entregado' : 'Sin entrega'}</td><td>${s?.data.grade ?? '—'}</td><td><button class="table-link" data-action="review" data-id="${t.id}" data-member="${m.id}">Evaluar →</button> <button class="text-btn" data-action="extension" data-id="${t.id}" data-member="${m.id}">${ext ? 'Cambiar prórroga' : 'Prórroga'}</button></td></tr>`;
+    return `<tr><td><span class="person">${avatarHtml(m)}<span>${esc(m.name)}</span></span>${ext ? `<div class="table-subtext special-note">Acceso especial: ${esc(specialSummary({ start: ext.data.start, due: ext.data.due, end: ext.data.end }))}</div>` : ''}</td>${courseSections().length ? `<td>${esc(sectionName(m.section) || '—')}</td>` : ''}<td>${s ? s.data.manual ? 'Captura manual' : s.data.late ? 'Entrega tardía' : 'Entregado' : 'Sin entrega'}</td><td>${s?.data.grade ?? '—'}</td><td><button class="table-link" data-action="review" data-id="${t.id}" data-member="${m.id}">Evaluar →</button> <button type="button" class="text-btn" data-special-access="task" data-id="${esc(t.id)}" data-member="${esc(m.id)}">${ext ? 'Cambiar acceso' : 'Acceso especial'}</button></td></tr>`;
   }).join('') || '<tr><td colspan="4">Inscribe alumnos para revisar sus entregas.</td></tr>'}</tbody></table></div>` : `${own ? `<section class="panel"><h2>Tu entrega</h2><p class="deadline">${fmt(own.data.submitted)}${own.data.submitted ? ` <button type="button" class="text-btn" data-receipt="${esc(own.id)}">Comprobante</button>` : ''}</p>${richText(own.data.body)}${fileLinks(own.data.fileIds)}<p>Calificación: <b>${own.data.grade ?? 'Pendiente'}</b></p>${richText(own.data.feedback)}${rubricResultHtml(own.data.rubricScores)}</section>` : ''}<div class="toolbar">${button(own ? 'Actualizar entrega' : 'Realizar entrega', 'submit', t.id)}</div>`}`;
 }
 function noticeCards() {
@@ -720,20 +732,6 @@ document.addEventListener('click', async (e) => {
         await request('/api/course/teachers', { course: current.course.id, id }, 'DELETE');
         await reload();
         toast('Co-docente retirado.');
-        break;
-      case 'extension': {
-        const member = current.members.find(m => m.id === b.dataset.member), ext = extensionOf(id, b.dataset.member);
-        modal(`Prórroga · ${member?.name || 'Alumno'}`, `<p>Actividad: <strong>${esc(r.data.title)}</strong>. Vence para el grupo: ${esc(fmt(r.data.due))}.</p>` + field('Nueva fecha de vencimiento', 'due', localDate(ext?.data.due), 'datetime-local', 'required') + field('Cierre de entregas (opcional)', 'end', localDate(ext?.data.end), 'datetime-local') + field('Motivo (solo lo ven los docentes)', 'reason', ext?.data.reason || '', 'text', 'maxlength="300" placeholder="Por ejemplo: justificante médico"') + (ext ? '<p class="modal-danger"><button type="button" class="danger-link" data-action="remove-extension" data-id="' + esc(id) + '" data-member="' + esc(b.dataset.member) + '">Quitar la prórroga</button></p>' : ''), async f => {
-          await request('/api/extension', { course: current.course.id, task: id, member: b.dataset.member, due: f.get('due') ? new Date(f.get('due')).toISOString() : '', end: f.get('end') ? new Date(f.get('end')).toISOString() : '', reason: f.get('reason') });
-          return 'Prórroga guardada. El alumno ya ve su nueva fecha.';
-        });
-        break;
-      }
-      case 'remove-extension':
-        await request('/api/extension', { course: current.course.id, task: id, member: b.dataset.member }, 'DELETE');
-        $('#modal').close();
-        await reload();
-        toast('Prórroga quitada.');
         break;
       case 'copy-course':
         copyCourseModal();

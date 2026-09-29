@@ -76,20 +76,41 @@ export function quizWithSectionDates(quiz, dates) {
   return { ...quiz, data: { ...quiz.data, settings } };
 }
 
-/** La evaluación como la vive este alumno (con las fechas de su sección). Una consulta. */
+/**
+ * Acceso especial de un alumno a una evaluación: su propio horario (manda sobre el de su sección), minutos extra en
+ * el tiempo límite e intentos adicionales.
+ */
+export function quizWithAccess(quiz, grant) {
+  if (!grant) return quiz;
+  const settings = { ...(quiz.data.settings || {}) };
+  if (grant.start_at) settings.opensAt = grant.start_at;
+  if (grant.end_at) settings.closesAt = grant.end_at;
+  if (settings.timeLimit && grant.extra_minutes) settings.timeLimit += grant.extra_minutes;
+  if (grant.extra_attempts) settings.attempts = (settings.attempts || 1) + grant.extra_attempts;
+  return { ...quiz, data: { ...quiz.data, settings, specialAccess: true } };
+}
+
+/** La evaluación como la vive este alumno (fechas de su sección y, encima, su acceso especial). Una consulta. */
 export async function quizForStudent(db, quiz, userId) {
   const dates = await one(
     db,
-    `SELECT m.section, d.start_at, d.end_at, d.code FROM aula_members m LEFT JOIN aula_section_dates d ON d.section=m.section AND d.item=?1
+    `SELECT m.section, d.start_at, d.end_at, d.code, qa.quiz AS grant_quiz, qa.start_at AS grant_start, qa.end_at AS grant_end,
+            qa.extra_minutes, qa.extra_attempts
+     FROM aula_members m LEFT JOIN aula_section_dates d ON d.section=m.section AND d.item=?1
+       LEFT JOIN aula_quiz_access qa ON qa.quiz=?1 AND qa.member=m.id
      WHERE m.course=?2 AND m.user_id=?3 AND m.role='student'`,
     quiz.id,
     quiz.course,
     userId,
   );
-  // Una evaluación de otras secciones no está disponible para este alumno.
+  // Una evaluación de otras secciones, o solo para quien tiene acceso especial, no está disponible para este alumno.
   const sections = quiz.data.sections || [];
   if (sections.length && !sections.includes(dates?.section)) fail('La evaluación no está disponible.', 403);
-  return quizWithSectionDates(quiz, dates);
+  if (quiz.data.specialOnly && !dates?.grant_quiz) fail('La evaluación no está disponible.', 403);
+  const grant = dates?.grant_quiz
+    ? { start_at: dates.grant_start, end_at: dates.grant_end, extra_minutes: dates.extra_minutes, extra_attempts: dates.extra_attempts }
+    : null;
+  return quizWithAccess(quizWithSectionDates(quiz, dates), grant);
 }
 
 /** Valida las fechas por sección de una actividad o evaluación ([{ section, startAt, due, endAt }]). */

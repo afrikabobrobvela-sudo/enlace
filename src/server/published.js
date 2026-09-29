@@ -41,3 +41,16 @@ export const taskSections = (value) => {
     return [];
   }
 };
+
+// ---- Acceso especial (12.22) -------------------------------------------------------------------------
+// Una actividad (`aula_tasks.special_only`) o una evaluación (`data.specialOnly`) puede ser solo para los alumnos con
+// acceso especial: una fila en aula_extensions (actividades) o aula_quiz_access (evaluaciones). Toda comprobación de
+// «lo que ve un alumno» sobre actividades y evaluaciones suma estas condiciones a las de sección.
+
+/** ¿Ve este alumno la actividad? (`member` es una expresión SQL con el id de su inscripción). */
+export const specialTaskSql = (t, member) =>
+  `(${t}.special_only=0 OR EXISTS (SELECT 1 FROM aula_extensions sa WHERE sa.task=${t}.id AND sa.member=${member}))`;
+
+/** Lo mismo para aula_records (solo las evaluaciones pueden llevar `specialOnly`). */
+export const specialRecordSql = (r, member) =>
+  `(coalesce(json_extract(${r}.data,'$.specialOnly'),0)=0 OR EXISTS (SELECT 1 FROM aula_quiz_access qa WHERE qa.quiz=${r}.id AND qa.member=${member}))`;

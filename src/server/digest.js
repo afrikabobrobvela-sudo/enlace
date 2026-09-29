@@ -5,7 +5,7 @@
 import { access, requireAdmin, requireTeacher } from './access.js';
 import { all, fail, json, nowIso, one, readJson, run } from './http.js';
 import { dailyLimit, mailBody, mailConfigured, mailProvider, mailQuota, sendMails } from './mail.js';
-import { forSection, isPublished, publishedSql, sectionSql } from './published.js';
+import { forSection, isPublished, publishedSql, sectionSql, specialRecordSql, specialTaskSql } from './published.js';
 
 const HOUR = 3_600_000;
 const MAX_ITEMS_PER_GROUP = 8;
@@ -37,7 +37,7 @@ export async function digestMessages(db, env, now = new Date()) {
          SELECT m.uid, m.section, r.*, c.name AS course_name, max(r.updated, coalesce(json_extract(r.data,'$.publishAt'),'')) AS at, m.since
          FROM mine m JOIN aula_records r ON r.course=m.course AND r.deleted_at IS NULL AND r.kind IN ('notice','quiz','material')
          JOIN aula_courses c ON c.id=r.course
-         WHERE ${publishedSql('r', '?1')} AND ${sectionSql("json_extract(r.data,'$.sections')", 'm.section')})
+         WHERE ${publishedSql('r', '?1')} AND ${sectionSql("json_extract(r.data,'$.sections')", 'm.section')} AND ${specialRecordSql('r', 'm.member')})
        SELECT uid, kind, course_name, json_extract(data,'$.title') AS title, at FROM shown s
        WHERE at>since AND at<=?1 AND (kind<>'material' OR coalesce(json_extract(data,'$.module'),'')='' OR EXISTS (
          SELECT 1 FROM aula_records p WHERE p.id=json_extract(s.data,'$.module') AND p.deleted_at IS NULL AND ${publishedSql('p', '?1')}
@@ -49,14 +49,14 @@ export async function digestMessages(db, env, now = new Date()) {
     all(
       db,
       `WITH ${RECIPIENTS}
-       SELECT m.uid, t.id, c.name AS course_name, t.title, coalesce(e.due, nullif(d.due,''), t.due) AS due
+       SELECT m.uid, t.id, c.name AS course_name, t.title, coalesce(nullif(e.due,''), nullif(d.due,''), t.due) AS due
        FROM mine m JOIN aula_tasks t ON t.course=m.course AND t.visible=1 AND t.deleted_at IS NULL
        JOIN aula_courses c ON c.id=t.course
        LEFT JOIN aula_extensions e ON e.task=t.id AND e.member=m.member
        LEFT JOIN aula_section_dates d ON d.item=t.id AND d.section=m.section
-       WHERE ${sectionSql('t.sections', 'm.section')}
-         AND coalesce(nullif(d.start_at,''), t.start_at, '')<=?1
-         AND (t.created>m.since OR coalesce(nullif(d.start_at,''), t.start_at, '')>m.since)
+       WHERE ${sectionSql('t.sections', 'm.section')} AND ${specialTaskSql('t', 'm.member')}
+         AND coalesce(nullif(e.start_at,''), nullif(d.start_at,''), t.start_at, '')<=?1
+         AND (t.created>m.since OR coalesce(nullif(e.start_at,''), nullif(d.start_at,''), t.start_at, '')>m.since)
        LIMIT 20000`,
       ...params,
     ),
@@ -74,14 +74,14 @@ export async function digestMessages(db, env, now = new Date()) {
     all(
       db,
       `WITH ${RECIPIENTS}
-       SELECT m.uid, t.id, c.name AS course_name, t.title, coalesce(e.due, nullif(d.due,''), t.due) AS due
+       SELECT m.uid, t.id, c.name AS course_name, t.title, coalesce(nullif(e.due,''), nullif(d.due,''), t.due) AS due
        FROM mine m JOIN aula_tasks t ON t.course=m.course AND t.visible=1 AND t.deleted_at IS NULL
        JOIN aula_courses c ON c.id=t.course
        LEFT JOIN aula_extensions e ON e.task=t.id AND e.member=m.member
        LEFT JOIN aula_section_dates d ON d.item=t.id AND d.section=m.section
-       WHERE ${sectionSql('t.sections', 'm.section')} AND coalesce(e.due, nullif(d.due,''), t.due) BETWEEN ?1 AND ?4
+       WHERE ${sectionSql('t.sections', 'm.section')} AND ${specialTaskSql('t', 'm.member')} AND coalesce(nullif(e.due,''), nullif(d.due,''), t.due) BETWEEN ?1 AND ?4
          -- Lo que ya se recordó en el resumen anterior (existía y vencía dentro de sus 24 h) no se repite.
-         AND (t.created>m.since OR coalesce(e.due, nullif(d.due,''), t.due) > strftime('%Y-%m-%dT%H:%M:%fZ', m.since, '+1 day'))
+         AND (t.created>m.since OR coalesce(nullif(e.due,''), nullif(d.due,''), t.due) > strftime('%Y-%m-%dT%H:%M:%fZ', m.since, '+1 day'))
          AND NOT EXISTS (SELECT 1 FROM aula_submissions s WHERE s.task=t.id AND s.member=m.member AND (s.submitted!='' OR s.grade IS NOT NULL))
        LIMIT 20000`,
       ...params,

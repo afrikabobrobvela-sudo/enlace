@@ -65,7 +65,10 @@ function sessionsInView(sessions) {
 }
 
 /** ¿Un elemento (actividad, evaluación…) va dirigido a la sección de este alumno? Vacío = a todas. */
-const itemApplies = (record, member) => !record?.data?.sections?.length || record.data.sections.includes(member?.section);
+const itemApplies = (record, member) =>
+  (!record?.data?.sections?.length || record.data.sections.includes(member?.section)) &&
+  // «Solo con acceso especial»: quien enseña ve a todos y cuenta solo a quienes lo tienen (al alumno ya le llega filtrado).
+  (!record?.data?.specialOnly || !teaches() || (typeof hasSpecialAccess === 'function' && hasSpecialAccess(record, member)));
 
 /** Filtro de secciones para las pantallas de quien enseña (nada si el curso no tiene secciones). */
 function sectionFilterHtml() {
@@ -351,6 +354,7 @@ document.addEventListener('change', (e) => {
 /** Etiqueta «Solo 5AV, 5BV» para quien enseña en listas y encabezados. */
 function sectionTag(record) {
   const sections = record?.data?.sections || [];
-  if (!teaches() || !sections.length) return '';
-  return ` <span class="role-pill section-pill">Solo ${esc(sections.map(sectionName).filter(Boolean).join(', '))}</span>`;
+  const special = typeof specialTag === 'function' ? specialTag(record) : '';
+  if (!teaches() || !sections.length) return special;
+  return ` <span class="role-pill section-pill">Solo ${esc(sections.map(sectionName).filter(Boolean).join(', '))}</span>${special}`;
 }
