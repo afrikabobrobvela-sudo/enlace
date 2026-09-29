@@ -68,7 +68,7 @@ export function submissionRecord(row) {
 }
 
 export function attemptRecord(row) {
-  return {
+  const record = {
     id: row.id,
     course: row.course,
     kind: 'attempt',
@@ -88,6 +88,10 @@ export function attemptRecord(row) {
       integrity: parseJson(row.integrity, null),
     },
   };
+  // Respuestas escritas que el docente aún no califica (cuentan 0 mientras tanto).
+  const pending = (record.data.details || []).filter((d) => d?.manual && !d.reviewed).length;
+  if (pending) record.data.pending = pending;
+  return record;
 }
 
 /** Las ponderaciones se exponen como un único registro "weights" por curso, como en la versión 8. */

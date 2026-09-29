@@ -25,7 +25,7 @@ const context = vm.createContext({
   crypto: globalThis.crypto, structuredClone, console, setTimeout, clearTimeout, confirm: () => true, downloads,
 });
 const load = (file, transform = (s) => s) => vm.runInContext(transform(readFileSync('src/public/' + file, 'utf8')), context);
-for (const file of ['richtext.js', 'trash.js', 'evaluaciones.js', 'banco.js', 'secciones.js', 'foto.js', 'pendientes.js', 'calendario.js', 'navegacion.js', 'movil.js', 'registro.js', 'workspace.js', 'preview.js', 'attendance.js', 'teams.js', 'grading.js', 'rubrics.js']) load(file);
+for (const file of ['richtext.js', 'trash.js', 'reactivos.js', 'evaluaciones.js', 'banco.js', 'secciones.js', 'foto.js', 'pendientes.js', 'calendario.js', 'navegacion.js', 'movil.js', 'registro.js', 'workspace.js', 'preview.js', 'attendance.js', 'teams.js', 'grading.js', 'rubrics.js']) load(file);
 load('app.js', (s) => s.replace('\ninit();', '\n'));
 const run = (code) => vm.runInContext(code, context);
 let checks = 0;

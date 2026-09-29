@@ -416,3 +416,9 @@ dialog.sheet::backdrop { background: rgba(12, 28, 42, 0.45); }
 @media (max-width: 720px) {
   .quiz-section-row { grid-template-columns: 1fr; }
 }
+
+@media (max-width: 720px) {
+  .quiz-pair { grid-template-columns: 1fr auto; }
+  .quiz-pair > span { display: none; }
+  .quiz-match-row { grid-template-columns: 1fr; gap: 4px; }
+}

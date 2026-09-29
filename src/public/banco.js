@@ -5,7 +5,7 @@
 let bankState = { scope: 'mine', mine: null, shared: null, hasAcademy: true, search: '', topic: '' };
 let bankEditing = null; // pregunta del banco abierta en el editor (null = nueva)
 
-const BANK_TYPE = { choice: 'Opción múltiple', numeric: 'Numérica' };
+const BANK_TYPE = typeof QUESTION_TYPE_NAME === 'object' ? QUESTION_TYPE_NAME : { choice: 'Elección múltiple', numeric: 'Aritmética' };
 const bankImage = (id) => (id ? `<img class="quiz-image bank-thumb" src="/api/file/${esc(id)}?preview=1&bank=1" alt="Imagen de la pregunta" loading="lazy">` : '');
 const bankTopicName = (topic) => topic || 'Sin tema';
 
@@ -29,7 +29,9 @@ function bankMatches(item, search, topic) {
 function bankQuestionSummary(item) {
   const q = item.question;
   const detail =
-    q.type === 'numeric'
+    typeof isNewType === 'function' && isNewType(q.type)
+      ? newQuestionAnswerHtml(q)
+      : q.type === 'numeric'
       ? `Respuesta: <code>${esc(q.answer)}</code>${q.unit ? ' ' + esc(q.unit) : ''} · ±${esc(q.tolerance)} %${q.variables?.length ? ` · datos por alumno: ${q.variables.map((v) => esc(v.name)).join(', ')}` : ''}`
       : `<ol type="A" class="bank-options">${q.options.map((o, j) => `<li class="${j === q.correct ? 'is-correct' : ''}">${esc(o)}${j === q.correct ? ' ✓' : ''}</li>`).join('')}</ol>`;
   return `<p class="bank-text">${esc(q.text)}</p>${bankImage(q.image)}<div class="bank-detail">${detail}</div>`;

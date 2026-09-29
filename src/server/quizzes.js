@@ -1,6 +1,7 @@
 // Evaluaciones: preguntas de opción múltiple y numéricas (con tolerancia, unidades y datos aleatorios por alumno),
 // varios intentos, tiempo límite y orden aleatorio. Todo se califica en el servidor.
 import { distanceMeters } from './attendance.js';
+import { NEW_TYPES, gradeNew, instanceNew, publicNew, validateNew } from './reactivos.js';
 import { fail, isoDate, text } from './http.js';
 
 export const MAX_QUESTIONS = 100;
@@ -131,7 +132,7 @@ function validVariables(input) {
  */
 export function questionFields(q, label) {
   if (!q || typeof q !== 'object') fail(`${label}: pregunta no válida.`);
-  const type = q.type === 'numeric' ? 'numeric' : 'choice';
+  const type = NEW_TYPES.includes(q.type) ? q.type : q.type === 'numeric' ? 'numeric' : 'choice';
   const prompt = text(q.text, 3000);
   // Imagen de la pregunta (archivo del docente en el curso; el servidor comprueba que exista al guardar).
   const image = typeof q.image === 'string' && /^[A-Za-z0-9-]{1,64}$/.test(q.image) ? { image: q.image } : {};
@@ -143,6 +144,12 @@ export function questionFields(q, label) {
     if (!validOptions) fail(`${label}: agrega de 2 a 6 opciones y marca la correcta.`);
     return { type, text: prompt, options: q.options.map((o) => text(o, 1500)), correct: q.correct, ...image, ...pool };
   }
+  if (type !== 'numeric') return { type, text: prompt, ...validateNew(type, q, label, numericFields), ...image, ...pool };
+  return { type, text: prompt, ...numericFields(q, label), ...image, ...pool };
+}
+
+/** Respuesta con fórmula, datos aleatorios, tolerancia y unidad («Aritmética» y «Cifras significativas»). */
+function numericFields(q, label) {
   const variables = validVariables(q.variables);
   const answer = text(String(q.answer ?? ''), 300);
   const tolerance = Number(q.tolerance ?? 1);
@@ -156,7 +163,7 @@ export function questionFields(q, label) {
       fail(`${label}: la respuesta no se puede calcular (${error.message}).`);
     }
   }
-  return { type, text: prompt, answer, tolerance, unit: String(q.unit ?? '').trim().slice(0, 30), variables, ...image, ...pool };
+  return { answer, tolerance, unit: String(q.unit ?? '').trim().slice(0, 30), variables };
 }
 
 /**
@@ -356,7 +363,14 @@ export function finalAnswers(quiz, instance, start, submitted) {
 }
 
 /** Forma canónica de una pregunta (las de versiones anteriores no tienen `type`: son de opción múltiple). */
-const canonical = (q) => ({
+const canonical = (q) => {
+  if (NEW_TYPES.includes(q.type)) {
+    const { image: _image, ...rest } = q;
+    return rest;
+  }
+  return canonicalOld(q);
+};
+const canonicalOld = (q) => ({
   ...(q.type === 'numeric'
     ? { type: 'numeric', text: q.text, answer: q.answer, tolerance: q.tolerance, unit: q.unit, variables: q.variables }
     : { type: 'choice', text: q.text, options: q.options, correct: q.correct }),
@@ -379,7 +393,9 @@ export const questionFingerprint = async (q) => {
 /** Lo que el alumno ve de las preguntas antes de empezar (sin respuestas ni fórmulas). */
 export function publicQuestions(questions) {
   const image = (q) => (q.image ? { image: q.image } : {});
-  return questions.map((q) => (q.type === 'numeric' ? { type: q.type, text: q.text, unit: q.unit, ...image(q) } : { type: 'choice', text: q.text, options: q.options, ...image(q) }));
+  return questions.map((q) =>
+    NEW_TYPES.includes(q.type) ? publicNew(q) : q.type === 'numeric' ? { type: q.type, text: q.text, unit: q.unit, ...image(q) } : { type: 'choice', text: q.text, options: q.options, ...image(q) },
+  );
 }
 
 // ---- Intento de un alumno --------------------------------------------------------------------------
@@ -387,13 +403,18 @@ export function publicQuestions(questions) {
 /** Preguntas de un intento: valores de las variables y orden, siempre iguales para el mismo alumno e intento. */
 export function quizInstance(quiz, userId, attempt) {
   const random = generator(seedOf(`${quiz.id}:${userId}:${attempt}`));
+  const valuesOf = (q, rnd) => Object.fromEntries((q.variables || []).map((v) => [v.name, Number((v.min + rnd() * (v.max - v.min)).toFixed(v.decimals))]));
+  const showValues = (q, values) => q.text.replace(/\{([A-Za-z_][A-Za-z0-9_]*)\}/g, (all, name) => (Object.hasOwn(values, name) ? String(values[name]) : all));
   const questions = quiz.data.questions.map((q, index) => {
+    if (NEW_TYPES.includes(q.type)) {
+      // Azar propio de cada pregunta: así las evaluaciones de antes (solo opción múltiple y aritmética) conservan sus instancias.
+      const own = generator(seedOf(`${quiz.id}:${userId}:${attempt}:q${index}`));
+      const values = q.type === 'sigfig' ? valuesOf(q, own) : undefined;
+      return instanceNew(q, index, own, { shuffleOptions: quiz.data.settings?.shuffleOptions, values, shown: values ? showValues(q, values) : q.text });
+    }
     if (q.type !== 'numeric') return { index, type: 'choice', text: q.text, options: q.options, ...(q.image ? { image: q.image } : {}) };
-    const values = Object.fromEntries(
-      (q.variables || []).map((v) => [v.name, Number((v.min + random() * (v.max - v.min)).toFixed(v.decimals))]),
-    );
-    const shown = q.text.replace(/\{([A-Za-z_][A-Za-z0-9_]*)\}/g, (all, name) => (Object.hasOwn(values, name) ? String(values[name]) : all));
-    return { index, type: 'numeric', text: shown, unit: q.unit, values, ...(q.image ? { image: q.image } : {}) };
+    const values = valuesOf(q, random);
+    return { index, type: 'numeric', text: showValues(q, values), unit: q.unit, values, ...(q.image ? { image: q.image } : {}) };
   });
   if (quiz.data.settings?.shuffle) {
     for (let i = questions.length - 1; i > 0; i--) {
@@ -434,7 +455,7 @@ export function quizInstance(quiz, userId, attempt) {
 }
 
 /** Acepta "9.8", "9,8", "1.2e3" o "-3". */
-function parseNumber(value) {
+export function parseNumber(value) {
   if (typeof value === 'number') return value;
   const clean = String(value ?? '').trim().replace(/\s+/g, '').replace(',', '.');
   return /^[-+]?\d*\.?\d+(e[-+]?\d+)?$/i.test(clean) ? Number(clean) : NaN;
@@ -448,30 +469,49 @@ export function gradeAttempt(quiz, instance, answers) {
   const byIndex = Array.isArray(answers) ? Object.fromEntries(answers.map((a, i) => [i, a])) : answers && typeof answers === 'object' ? answers : null;
   if (!byIndex) fail('Responde la evaluación.');
   const questions = quiz.data.questions;
-  let correct = 0;
-  const details = instance.map((item) => {
+  const details = instance.map((item, n) => {
     const q = questions[item.index];
     const raw = byIndex[item.index];
+    const values = item.values ? { values: item.values } : {};
     // Sin respuesta (por ejemplo, si se acabó el tiempo) cuenta como incorrecta.
-    if (raw === undefined || raw === null || raw === '') return { index: item.index, answer: null, correct: false, values: item.values };
+    const empty = raw === undefined || raw === null || raw === '' || (Array.isArray(raw) && raw.every((x) => x === null || x === ''));
+    if (empty) return { index: item.index, answer: null, correct: false, credit: 0, ...values };
+    if (NEW_TYPES.includes(q.type)) {
+      const r = gradeNew(q, item, raw, { evaluateAnswer: (x, v) => evaluate(x.answer, v), parseNumber, position: n + 1 });
+      const credit = r.credit;
+      return { index: item.index, ...r, credit, correct: credit === 1, ...(r.manual ? { reviewed: false } : {}), ...values };
+    }
     if (q.type !== 'numeric') {
       if (!Number.isInteger(raw) || raw < 0 || raw >= q.options.length) fail('Respuesta no válida.');
       // El alumno responde con la posición que vio; con opciones mezcladas se traduce a la opción original.
       const original = item.perm ? item.perm[raw] : raw;
       const ok = original === q.correct;
-      if (ok) correct++;
-      return { index: item.index, answer: original, correct: ok };
+      return { index: item.index, answer: original, correct: ok, credit: ok ? 1 : 0 };
     }
     const value = parseNumber(raw);
-    if (!Number.isFinite(value)) fail(`Escribe un número en la pregunta ${instance.indexOf(item) + 1} (por ejemplo 9.8).`);
+    if (!Number.isFinite(value)) fail(`Escribe un número en la pregunta ${n + 1} (por ejemplo 9.8).`);
     const expected = evaluate(q.answer, item.values);
     const allowed = Math.max(Math.abs(expected) * (q.tolerance / 100), 1e-9);
     const ok = Math.abs(value - expected) <= allowed;
-    if (ok) correct++;
-    return { index: item.index, answer: value, correct: ok, values: item.values };
+    return { index: item.index, answer: value, correct: ok, credit: ok ? 1 : 0, ...values };
   });
-  // Con preguntas al azar, el total es lo que recibió el alumno (no todas las de la evaluación).
-  return { correct, total: instance.length, score: (correct / instance.length) * 10, details };
+  return { ...scoreOf(details), details };
+}
+
+/**
+ * Aciertos y calificación a partir del detalle: cada pregunta vale lo mismo y da crédito parcial (0 a 1). Con
+ * preguntas al azar, el total es lo que recibió el alumno. Las respuestas escritas sin revisar cuentan 0 y quedan
+ * en `pending` hasta que el docente las califique.
+ */
+export function scoreOf(details) {
+  const credit = details.reduce((sum, d) => sum + (typeof d.credit === 'number' ? d.credit : d.correct ? 1 : 0), 0);
+  const total = details.length;
+  return {
+    correct: details.filter((d) => d.correct).length,
+    total,
+    score: total ? (credit / total) * 10 : 0,
+    pending: details.filter((d) => d.manual && !d.reviewed).length,
+  };
 }
 
 /** ¿Sigue abierto el intento? Con tiempo límite, hasta el inicio + límite (+1 min de margen). */
@@ -505,8 +545,12 @@ export function studentAttemptView(record, quiz, now = Date.now()) {
     Object.assign(data, { score: null, correct: null, hidden: true, releaseAt: results.releaseAt, details: null, answers: null });
     return { ...record, data };
   }
-  if (results.score === false) Object.assign(data, { score: null, correct: null, hidden: true });
-  if (results.review === 'none' || results.score === false) Object.assign(data, { details: null, answers: null });
+  if (results.score === false) Object.assign(data, { score: null, correct: null, hidden: true, pending: undefined });
+  if (results.review === 'none' || results.score === false) {
+    // Sin «qué preguntas acertó», los comentarios del docente (respuestas escritas) sí llegan, si se ve la calificación.
+    const feedback = results.score === false ? [] : (data.details || []).filter((d) => d.feedback).map((d) => ({ index: d.index, credit: d.credit, feedback: d.feedback }));
+    Object.assign(data, { details: null, answers: null, ...(feedback.length ? { feedback } : {}) });
+  }
   return { ...record, data };
 }
 

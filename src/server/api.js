@@ -27,7 +27,9 @@ import {
   publicQuestions,
   publicSettings,
   startCodeOf,
+  scoreOf,
   quizFields,
+  MAX_QUESTIONS,
   questionCount,
   quizInstance,
   sameDraw,
@@ -38,6 +40,7 @@ import { bankImageVisible, bankRoutes } from './bank.js';
 import { photoRoutes, servePhoto } from './photos.js';
 import { digestRoutes } from './digest.js';
 import { accessRoutes, recordVisit } from './accesos.js';
+import { cleanSaved } from './reactivos.js';
 import { mailConfigured } from './mail.js';
 import { quizForStudent, quizWithSectionDates, sectionIdsByName, sectionKey, sectionRoutes, sectionsField, validSection } from './sections.js';
 import { gradingRoutes } from './grading.js';
@@ -1284,8 +1287,8 @@ const routes = {
       }
       // Retomar después de salir (por ejemplo, cerró el navegador): si pasó la tolerancia, queda bloqueado.
       const locked = exam ? await applyLock(db, quiz, start) : false;
-      // Al navegador no van los valores internos ni la permutación de opciones (solo las opciones ya en su orden).
-      const questions = quizInstance(quiz, user.id, attempt).map(({ values: _v, perm: _p, ...q }) => q);
+      // Al navegador no van los valores internos ni las permutaciones (`perm`, `key`): solo lo que se ve, ya en su orden.
+      const questions = quizInstance(quiz, user.id, attempt).map(({ values: _v, perm: _p, key: _k, ...q }) => q);
       // Al retomar un examen se devuelven las respuestas guardadas y la pregunta en la que iba.
       let saved = {};
       try {
@@ -1319,9 +1322,8 @@ const routes = {
     if (body.answers && typeof body.answers === 'object' && !Array.isArray(body.answers)) {
       const next = {};
       for (const q of quiz.data.questions.keys()) {
-        const value = body.answers[q];
-        if (Number.isInteger(value)) next[q] = value; // opción elegida
-        else if (typeof value === 'string' && value.trim()) next[q] = value.slice(0, 100); // respuesta numérica tal como se escribió
+        const value = cleanSaved(body.answers[q]); // opción, texto o lista (se valida de verdad al enviar)
+        if (value !== undefined) next[q] = value;
       }
       // Sin regresar: lo contestado en las preguntas que ya se dejaron atrás queda fijo (finalAnswers también lo usa al enviar).
       if (noBack && start.position > 0) {
@@ -1393,6 +1395,29 @@ const routes = {
       fail('Este intento ya se envió. Recarga la página.', 409);
     }
     return json(studentAttemptView(attemptRecord(await one(db, 'SELECT * FROM aula_attempts WHERE id=?', id)), quiz), 201);
+  },
+
+  // El docente califica las respuestas escritas de un intento (y puede ajustar el crédito de cualquier otra pregunta).
+  'POST /api/attempt/review': async ({ db, user, request }) => {
+    const body = await readJson(request);
+    requireTeacher(await access(db, user, body.course));
+    const row = await one(db, 'SELECT * FROM aula_attempts WHERE id=? AND course=?', String(body.id ?? ''), body.course);
+    if (!row) fail('Intento no encontrado.', 404);
+    const quiz = await contentRecord(db, row.quiz, body.course, 'quiz');
+    const reviews = Array.isArray(body.reviews) ? body.reviews : [];
+    if (!reviews.length || reviews.length > MAX_QUESTIONS) fail('No hay nada que calificar.');
+    const details = JSON.parse(row.details || '[]');
+    for (const review of reviews) {
+      const d = details.find((x) => x.index === review.index);
+      if (!d || !quiz.data.questions[d.index]) fail('Pregunta no encontrada en este intento.', 404);
+      const credit = Number(review.credit);
+      if (!Number.isFinite(credit) || credit < 0 || credit > 1) fail('El puntaje de cada pregunta va de 0 a 100 %.');
+      Object.assign(d, { credit, correct: credit === 1, reviewed: true, feedback: String(review.feedback ?? '').trim().slice(0, 2000) });
+      if (!d.manual) d.overridden = true;
+    }
+    const scored = scoreOf(details);
+    await run(db, 'UPDATE aula_attempts SET details=?, correct=?, score=? WHERE id=?', JSON.stringify(details), scored.correct, scored.score, row.id);
+    return json(attemptRecord(await one(db, 'SELECT * FROM aula_attempts WHERE id=?', row.id)));
   },
 
   // El navegador avisa que el alumno salió de la página (se envía al ocultarse, con keepalive).

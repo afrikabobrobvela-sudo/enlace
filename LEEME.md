@@ -1,9 +1,40 @@
-# Enlace · versión 12.20
+# Enlace · versión 12.21
 
 Plataforma académica independiente para docentes y alumnos de cualquier academia (nació en la Academia de Física de la BUAP), con interfaz inspirada en Brightspace.
 No es el código de D2L Brightspace ni una plataforma oficial de la BUAP.
 
 Esta versión se despliega en **tu propia cuenta de Cloudflare** (Workers + D1 + R2, plan gratuito) y ya no depende de ChatGPT Sites.
+
+## Novedades de la versión 12.21 (tipos de reactivos)
+
+El editor de evaluaciones (y el banco de preguntas) tiene ahora 11 tipos de pregunta, como Brightspace. Se elige en «Tipo» de cada pregunta:
+
+| Tipo | Cómo contesta el alumno | Cómo se califica |
+|---|---|---|
+| Elección múltiple | Una opción | Correcta o incorrecta (como antes) |
+| Verdadero o falso | Verdadero / Falso | Correcta o incorrecta |
+| Para completar | Escribe en los espacios del enunciado. El docente los marca con dobles corchetes: `el [[newton\|N]]` | Cada espacio vale lo mismo |
+| Selección múltiple | Marca todas las correctas | Todo o nada, o parcial (correctas menos incorrectas) |
+| Coincidencia | Relaciona cada elemento con su pareja; puede haber respuestas de más | Parcial (cada pareja) o todo o nada |
+| Ordenamiento | Pone el lugar de cada elemento (llegan revueltos) | Parcial (cada elemento en su lugar) o todo o nada |
+| Respuesta escrita | Escribe un texto | **La califica el docente** |
+| Respuesta corta | Escribe una palabra o frase | Contra la lista de respuestas aceptadas |
+| Aritmética | Un número (datos distintos por alumno) | Con tolerancia (como antes) |
+| Cifras significativas | Un número con cierto número de cifras | Valor con tolerancia; descuento si las cifras no son las pedidas |
+| Varias respuestas cortas | Varias respuestas, cada una en su espacio | Cada espacio vale lo mismo; repetir una no suma |
+
+Las respuestas escritas no distinguen mayúsculas ni acentos, salvo que marques «Distinguir mayúsculas y acentos».
+
+Cada pregunta vale lo mismo y ahora puede dar **crédito parcial**; la calificación sigue siendo sobre 10.
+
+**Respuestas escritas**:
+- Mientras no las califiques cuentan 0, y el alumno ve «Falta que tu docente califique…».
+- En la página de la evaluación, el botón **«Revisar respuestas escritas (n por calificar)»** muestra lo que escribió cada alumno (y tu guía, si la pusiste). Ahí pones un puntaje de 0 a 100 % y, si quieres, un comentario.
+- Al guardar, se actualiza la calificación del intento (también en el libro de calificaciones) y el alumno ve tu comentario. El comentario le llega aunque la evaluación no muestre «qué preguntas acertó», pero no si la calificación está oculta.
+
+Las evaluaciones que ya existen no cambian: mismas preguntas, mismo orden y misma calificación.
+
+No requiere migración.
 
 ## Novedades de la versión 12.20 (accesos, evaluaciones por sección con código)
 
@@ -659,6 +690,7 @@ La cookie de sesión usa el prefijo `__Host-`, que exige conexión segura. Chrom
 - `test-respaldo-archivos.mjs`: respaldo de archivos solo para administración, incremental, con índice; restauración solo de lo que falta y con el tamaño exacto.
 - `test-restaurar.mjs`: la exportación de D1 se reordena y comprueba con el esquema real; `npm run restaurar` solo escribe en bases vacías.
 - `test-bloqueo-examen.mjs`: bloqueo al salir (tolerancia, sin guardar ni enviar mientras está bloqueado, código solo para el docente, 5 intentos, desbloqueo del docente, al retomar tras cerrar el navegador).
+- `test-reactivos.mjs`: tipos de reactivos (validación de cada tipo, lo que recibe el alumno sin claves ni respuestas, crédito parcial y todo o nada, cifras significativas, respuesta escrita calificada por el docente y sus comentarios, examen retomado con respuestas de todos los tipos y banco).
 - `test-accesos.mjs`: accesos (historial de inicios que no se borra con las sesiones vencidas, inicios contados solo durante el curso, ingresos con visita nueva tras 30 min y a lo más una escritura cada 5 min, reporte solo para quien enseña).
 - `test-correo.mjs`: avisos por correo (resumen diario por sección y persona, prórrogas, lo ya entregado, preferencia en el perfil, cupo diario sin perder avisos, noticia urgente una sola vez, rutas de administración, mensaje MIME sin inyección de encabezados y la conversación SMTP con un Gmail simulado).
 - `test-secciones.mjs`: secciones (evaluación solo para algunas secciones, con horario y código de cada una sin que el código llegue al alumno; crear sin repetir, alumnos por lista, a mano o de otro curso, fechas de actividades y exámenes por sección con la prórroga encima, examen activo con el cierre de su sección, asistencia por sección, eliminar solo vacías, copia a otro periodo).

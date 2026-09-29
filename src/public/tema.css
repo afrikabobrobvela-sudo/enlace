@@ -973,3 +973,20 @@ td select[data-member-section] { min-width: 110px; margin: 0; padding: 6px 8px; 
 tr.access-never td { color: var(--ink-faint); }
 .inline-label { display: inline-flex; gap: 6px; align-items: center; margin: 0; }
 .inline-label select { width: auto; }
+
+/* Tipos de reactivos (12.21) */
+.quiz-pair { display: grid; grid-template-columns: 1fr auto 1fr auto; gap: 8px; align-items: center; margin: 6px 0; }
+.quiz-fill { line-height: 2.4; }
+.quiz-fill .quiz-blank { display: inline-block; width: 9em; margin: 0 4px; padding: 4px 8px; }
+.quiz-match { display: grid; gap: 8px; }
+.quiz-match-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(140px, 220px); gap: 10px; align-items: center; margin: 0; }
+.quiz-boxes { display: grid; gap: 8px; max-width: 420px; }
+.quiz-essay { width: 100%; min-height: 8em; }
+.quiz-hint { margin: 0 0 6px; }
+.quiz-type-tag { font-size: 0.72rem; font-weight: 600; color: var(--ink-soft); background: var(--canvas); border: 1px solid var(--line); border-radius: 999px; padding: 2px 8px; vertical-align: middle; }
+.quiz-detail li.partial { color: #8a5a00; }
+.quiz-detail li.pending { color: var(--ink-soft); }
+.quiz-feedback { margin: 6px 0 0; padding-left: 18px; color: var(--ink-soft); font-size: 0.9rem; }
+.essay-review { border-top: 1px solid var(--line); padding: 12px 0; }
+.essay-review h3 { margin: 0 0 8px; font-size: 1rem; }
+.essay-answer { white-space: pre-wrap; background: var(--canvas); border-left: 3px solid var(--line-strong); margin: 8px 0; padding: 10px 12px; border-radius: var(--radius-sm); }
