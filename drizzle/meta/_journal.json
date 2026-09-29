@@ -183,6 +183,13 @@
       "when": 1790652439747,
       "tag": "0025_secciones_contenido",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "6",
+      "when": 1790654565047,
+      "tag": "0026_correo_avisos",
+      "breakpoints": true
     }
   ]
 }

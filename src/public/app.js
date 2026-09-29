@@ -163,7 +163,7 @@ function renderTask() {
 function noticeCards() {
   // Una noticia programada lleva la fecha en que se publica (así la ven los alumnos) y, para el docente, la marca.
   const shownAt = n => (n.data.publishAt && n.data.publishAt > n.created ? n.data.publishAt : n.created);
-  return records('notice').map(n => `<article class="notice"><h3>${esc(n.data.title)}${sectionTag(n)}${teaches() && n.data.visible === false ? ' <span class="role-pill">Oculta</span>' : teaches() && scheduledFor(n) ? ' <span class="role-pill scheduled-pill">Programada</span>' : ''}</h3><p class="deadline">${fmt(shownAt(n))}</p>${richText(n.data.body)}${teaches() ? button('Editar', 'edit-notice', n.id, 'text-btn') : ''}</article>`).join('') || '<p class="muted">No hay noticias publicadas.</p>';
+  return records('notice').map(n => `<article class="notice"><h3>${esc(n.data.title)}${sectionTag(n)}${teaches() && n.data.visible === false ? ' <span class="role-pill">Oculta</span>' : teaches() && scheduledFor(n) ? ' <span class="role-pill scheduled-pill">Programada</span>' : ''}${teaches() && n.data.emailedAt ? ' <span class="role-pill">Enviada por correo</span>' : ''}</h3><p class="deadline">${fmt(shownAt(n))}</p>${richText(n.data.body)}${teaches() ? button('Editar', 'edit-notice', n.id, 'text-btn') : ''}</article>`).join('') || '<p class="muted">No hay noticias publicadas.</p>';
 }
 function renderNotices() {
   $('#main').innerHTML = `<div class="heading"><h1>Noticias</h1>${teaches() ? button('Crear publicación', 'new-notice') : ''}</div><section class="panel">${noticeCards()}</section>`;
@@ -413,6 +413,47 @@ function modal(title, html, handler, saveLabel = 'Guardar') {
   };
   $('#modal').showModal();
 }
+/** «Mi perfil»: recibir (o no) el resumen diario por correo. Solo si la administración configuró el correo. */
+function emailDigestHtml() {
+  if (!me.mailEnabled)
+    return '';
+  return `<label class="check-label email-digest"><input type="checkbox" data-email-digest ${me.emailDigest ? 'checked' : ''}> Recibir por correo un resumen diario de lo nuevo (noticias, actividades, calificaciones y lo que vence pronto)</label>`;
+}
+document.addEventListener('change', async (e) => {
+  if (!e.target.matches('[data-email-digest]'))
+    return;
+  const box = e.target;
+  box.disabled = true;
+  try {
+    const r = await request('/api/profile/notifications', { digest: box.checked });
+    me.emailDigest = r.digest;
+    toast(r.digest ? 'Recibirás el resumen diario en ' + me.email + '.' : 'Ya no recibirás el resumen por correo.');
+  }
+  catch (error) {
+    box.checked = !box.checked;
+    toast(error.message);
+  }
+  finally {
+    box.disabled = false;
+  }
+});
+/** Noticia: enviarla también por correo en ese momento (una sola vez). */
+function noticeEmailHtml(old) {
+  if (!me.mailEnabled)
+    return '';
+  if (old?.data.emailedAt)
+    return `<p class="real-status">Enviada por correo a los alumnos el ${esc(fmt(old.data.emailedAt))}.</p>`;
+  return `<label class="check-label"><input type="checkbox" name="emailNow"> Enviar también por correo ahora a los alumnos a los que va dirigida</label><p class="muted">Úsalo solo para avisos urgentes (cambio de salón, clase suspendida): se envía una sola vez. Lo demás llega en el resumen diario.</p>`;
+}
+async function emailNotice(saved) {
+  try {
+    const r = await request('/api/notice/email', { course: current.course.id, id: saved.id });
+    return r.error && !r.sent ? `Guardada, pero no se envió por correo: ${r.error}` : `Guardada y enviada por correo a ${r.sent} ${r.sent === 1 ? 'alumno' : 'alumnos'}.${r.skipped ? ` ${r.skipped} quedaron sin enviar: ${r.error || ''}` : ''}`;
+  }
+  catch (error) {
+    return `Guardada, pero no se envió por correo: ${error.message}`;
+  }
+}
 function simpleRecord(kind, old) {
   const names = {
     module: 'unidad',
@@ -422,7 +463,7 @@ function simpleRecord(kind, old) {
   // Las unidades llevan archivos (programa, presentaciones, imágenes dentro del texto); noticias y foros, solo texto.
   const withFiles = kind === 'module';
   let files = null;
-  modal(`${old ? 'Editar' : 'Crear'} ${names[kind]}`, field('Título', 'title', old?.data.title || '', 'text', 'required maxlength="200"') + richTextarea(kind === 'module' ? 'Descripción de la unidad' : 'Contenido', 'body', old?.data.body || '', { images: withFiles }) + (withFiles ? attachmentPanel(true, 'la unidad') : '') + visible(old?.data.visible, old?.data.publishAt || '', old?.data.sections) + (old ? `<p class="modal-danger">${trashButton(kind, old.id, 'Eliminar ' + names[kind])}</p>` : ''), async (f) => {
+  modal(`${old ? 'Editar' : 'Crear'} ${names[kind]}`, field('Título', 'title', old?.data.title || '', 'text', 'required maxlength="200"') + richTextarea(kind === 'module' ? 'Descripción de la unidad' : 'Contenido', 'body', old?.data.body || '', { images: withFiles }) + (withFiles ? attachmentPanel(true, 'la unidad') : '') + visible(old?.data.visible, old?.data.publishAt || '', old?.data.sections) + (kind === 'notice' ? noticeEmailHtml(old) : '') + (old ? `<p class="modal-danger">${trashButton(kind, old.id, 'Eliminar ' + names[kind])}</p>` : ''), async (f) => {
     const data = {
       title: f.get('title'),
       body: f.get('body'),
@@ -431,8 +472,10 @@ function simpleRecord(kind, old) {
     };
     if (files)
       data.fileIds = await files.upload();
-    await save(kind, data, old);
+    const saved = await save(kind, data, old);
     dirty = false;
+    if (f.get('emailNow') === 'on')
+      return emailNotice(saved);
   });
   if (withFiles)
     richAttachments = files = attachmentManager($('#fields'), old?.data.fileIds || [], 'material');
@@ -845,7 +888,7 @@ document.addEventListener('click', async (e) => {
       case 'profile':
         if (!me)
           return;
-        modal('Mi perfil', profilePhotoHtml() + (me.role === 'student' ? `<p><strong>${esc(me.name)}</strong></p>` : field('Nombre', 'name', me.name, 'text', 'required')) + `<p>${esc(me.email)}</p><p>Enlace no guarda contraseñas: entras con este correo a través de Microsoft o de Google.</p><p><button type="button" class="secondary" data-action="logout">Cerrar sesión</button></p><p>¿Perdiste un teléfono o entraste en una computadora ajena? <button type="button" class="text-btn" data-action="logout-all">Cerrar sesión en todos mis dispositivos</button></p>`, me.role === 'student' ? null : async (f) => {
+        modal('Mi perfil', profilePhotoHtml() + (me.role === 'student' ? `<p><strong>${esc(me.name)}</strong></p>` : field('Nombre', 'name', me.name, 'text', 'required')) + `<p>${esc(me.email)}</p>${emailDigestHtml()}<p>Enlace no guarda contraseñas: entras con este correo a través de Microsoft o de Google.</p><p><button type="button" class="secondary" data-action="logout">Cerrar sesión</button></p><p>¿Perdiste un teléfono o entraste en una computadora ajena? <button type="button" class="text-btn" data-action="logout-all">Cerrar sesión en todos mis dispositivos</button></p>`, me.role === 'student' ? null : async (f) => {
           await request('/api/profile', { name: f.get('name') });
           me = await request('/api/me');
         });

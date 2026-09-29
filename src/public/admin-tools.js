@@ -210,6 +210,7 @@ async function renderReports() {
       <thead><tr><th>Academia</th><th>Unidad</th><th>Cursos</th><th>Docentes</th><th>Alumnos</th><th>Actividades</th><th>Entregas</th><th>Archivos</th></tr></thead>
       <tbody>${groupRows || '<tr><td colspan="8">Todavía no hay cursos.</td></tr>'}</tbody></table></div>
     <p class="real-status">La academia y unidad de cada curso son las de quien lo creó. ${courses.length} cursos en total; el CSV incluye el detalle de cada uno.</p>
+    ${mailPanel()}
     ${backupPanel()}
     <section class="panel admin-block" id="storageAdmin">
       <h2>Archivos sin usar</h2>
@@ -217,6 +218,60 @@ async function renderReports() {
       <button class="secondary" type="button" data-orphans-scan>Buscar archivos sin usar</button>
       <div id="orphanResult"></div>
     </section>`;
+  loadMailStatus();
+}
+
+// ---- Correo de avisos (12.19) ----
+
+function mailPanel() {
+  return `<section class="panel admin-block" id="mailAdmin">
+      <h2>Correo de avisos</h2>
+      <div id="mailStatus" aria-live="polite"><p class="muted">Consultando…</p></div>
+    </section>`;
+}
+
+async function loadMailStatus() {
+  const box = document.querySelector('#mailStatus');
+  if (!box) return;
+  let s;
+  try {
+    s = await request('/api/mail/status');
+  } catch (error) {
+    box.innerHTML = `<p class="warning-note">${esc(error.message)}</p>`;
+    return;
+  }
+  if (!s.configured) {
+    box.innerHTML = `<p class="muted">Todavía no está configurado. En tu computadora, dentro de la carpeta de Enlace, ejecuta <code>npm run correo</code> (o <code>configurar.cmd</code>) y escribe la cuenta de Gmail de Enlace y su contraseña de aplicación. Nunca las escribas en otro lugar.</p>`;
+    return;
+  }
+  const provider = s.provider === 'gmail' ? 'Gmail' : s.provider === 'resend' ? 'Resend' : 'Prueba';
+  box.innerHTML = `
+      <p>Se envía desde <strong>${esc(s.from || '')}</strong> (${provider}). Cada tarde, a las 7 p.m. (hora del centro de México), cada persona recibe un resumen de lo nuevo en sus cursos; los docentes pueden además enviar una noticia urgente al publicarla. Quien no quiera recibirlos lo apaga en «Mi perfil».</p>
+      <div class="stat-tiles">
+        <div class="stat-tile"><strong>${s.sentToday}</strong><span>correos enviados hoy (de ${s.limit})</span></div>
+        <div class="stat-tile"><strong>${s.lastRun ? esc(fmt(s.lastRun)) : '—'}</strong><span>último intento de envío</span></div>
+      </div>
+      ${s.lastError ? `<p class="warning-note">Último problema: ${esc(s.lastError)}</p>` : ''}
+      ${s.url ? '' : '<p class="warning-note">Falta la dirección de Enlace para el botón «Entrar a Enlace» de los correos: vuelve a ejecutar <code>npm run correo</code>.</p>'}
+      <div class="action-row"><button class="secondary" type="button" data-mail-test>Enviarme un correo de prueba</button>
+        <button class="secondary" type="button" data-mail-digest>Enviar el resumen ahora</button></div>`;
+}
+
+async function mailAction(target) {
+  target.disabled = true;
+  try {
+    if (target.matches('[data-mail-test]')) {
+      const r = await request('/api/mail/test', {});
+      toast(`Correo de prueba enviado a ${r.to}. Revisa tu bandeja (y la carpeta de spam).`);
+    } else {
+      if (!confirm('Se enviará ahora el resumen a quien tenga avisos nuevos (y ya no se repetirá esta tarde). ¿Continuar?')) return;
+      const r = await request('/api/mail/digest', {});
+      toast(r.error ? `Resumen: ${r.sent} enviados, ${r.skipped} pendientes. ${r.error}` : `Resumen enviado a ${r.sent} ${r.sent === 1 ? 'persona' : 'personas'}.`);
+    }
+    await loadMailStatus();
+  } finally {
+    target.disabled = false;
+  }
 }
 
 function reportCsv() {
@@ -535,11 +590,12 @@ async function runBackup(mode) {
 }
 
 document.addEventListener('click', async (e) => {
-  const target = e.target.closest('[data-report-csv],[data-orphans-scan],[data-grade-history],[data-backup-files],[data-restore-files],[data-backup-cancel]');
+  const target = e.target.closest('[data-report-csv],[data-orphans-scan],[data-grade-history],[data-backup-files],[data-restore-files],[data-backup-cancel],[data-mail-test],[data-mail-digest]');
   if (!target) return;
   try {
     if (target.matches('[data-report-csv]')) return reportCsv();
     if (target.matches('[data-orphans-scan]')) return await scanOrphans();
+    if (target.matches('[data-mail-test],[data-mail-digest]')) return await mailAction(target);
     if (target.matches('[data-backup-files]')) return await runBackup('backup');
     if (target.matches('[data-restore-files]')) return await runBackup('restore');
     if (target.matches('[data-backup-cancel]')) return backupRunning?.abort();

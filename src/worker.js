@@ -7,6 +7,7 @@ import { api } from './server/api.js';
 import { auth } from './server/auth.js';
 import { CONTENT_SECURITY_POLICY, SECURITY_HEADERS } from './server/http.js';
 import { assets } from './generated/assets.js';
+import { runDigest } from './server/digest.js';
 
 const TYPES = {
   html: 'text/html; charset=utf-8',
@@ -29,6 +30,10 @@ function body(name) {
 }
 
 export default {
+  // Resumen diario de avisos por correo (el horario está en [triggers] de wrangler.toml).
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(runDigest(env.DB, env).catch((error) => console.error('aula-mail resumen', error)));
+  },
   async fetch(request, env) {
     const url = new URL(request.url);
     if (url.pathname.startsWith('/api/')) return api(request, env);

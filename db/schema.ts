@@ -30,6 +30,9 @@ export const users = sqliteTable(
     // Migración 0024: foto de perfil (objeto en R2, pequeño y ya reducido en el navegador) y cuándo se cambió.
     photo: text('photo'),
     photoUpdated: text('photo_updated'),
+    // Migración 0026: resumen diario de avisos por correo (1 = sí; se apaga en «Mi perfil») y hasta cuándo se envió.
+    emailDigest: integer('email_digest').notNull().default(1),
+    digestSentAt: text('digest_sent_at'),
   },
   (t) => [uniqueIndex('aula_users_email').on(t.email)],
 );
@@ -730,3 +733,11 @@ export const sectionDates = sqliteTable(
   },
   (t) => [primaryKey({ columns: [t.item, t.section] }), index('aula_section_dates_course').on(t.course)],
 );
+
+/** Migración 0026: correos enviados por día (para no pasar el límite diario de Gmail) y la última corrida del resumen. */
+export const mailLog = sqliteTable('aula_mail_log', {
+  day: text('day').primaryKey(), // AAAA-MM-DD (UTC)
+  sent: integer('sent').notNull().default(0),
+  lastRun: text('last_run'),
+  lastError: text('last_error'),
+});

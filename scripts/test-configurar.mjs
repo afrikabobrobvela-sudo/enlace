@@ -50,7 +50,7 @@ else if (cmd.startsWith('d1 execute')) {
   console.log(JSON.stringify([{ results: [{ users: known.length, found: known.includes(email) ? 1 : 0 }] }]));
 } else if (cmd.startsWith('d1 migrations list')) console.log('No migrations to apply');
 else if (cmd === 'deploy') writeFileSync(process.env.FAKE_DEPLOYED, readFileSync('wrangler.toml', 'utf8'));
-else if (cmd.startsWith('secret list')) console.log(JSON.stringify([{ name: 'SESSION_SECRET' }, { name: 'GOOGLE_CLIENT_ID' }, { name: 'GOOGLE_CLIENT_SECRET' }]));
+else if (cmd.startsWith('secret list')) console.log(JSON.stringify([{ name: 'SESSION_SECRET' }, { name: 'GOOGLE_CLIENT_ID' }, { name: 'GOOGLE_CLIENT_SECRET' }, { name: 'ENLACE_URL' }, { name: 'CORREO_AVISOS' }, { name: 'GMAIL_APP_PASSWORD' }]));
 `,
 );
 const memoryDir = mkdtempSync(join(tmpdir(), 'enlace-memoria-'));
@@ -96,8 +96,11 @@ assert.deepEqual(JSON.parse(readFileSync(join(memoryDir, 'configuracion.json'), 
   databaseId: DB_ID,
   owner: 'rodrigo@correo.buap.mx',
   url: 'https://enlace.enlace-academia.workers.dev',
+  // La dirección que llevan los botones de los correos de avisos (se guarda como secreto ENLACE_URL).
+  mailUrl: 'https://enlace.enlace-academia.workers.dev',
 });
-checks += 5;
+assert.match(primera.calls, /secret put ENLACE_URL/);
+checks += 6;
 
 // Versión nueva descomprimida en otra carpeta: no pregunta nada y publica con los mismos datos.
 const nueva = configurar(freshFolder(), [], ['rodrigo@correo.buap.mx']);

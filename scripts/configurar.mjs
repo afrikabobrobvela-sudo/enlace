@@ -147,9 +147,51 @@ function putSecret(name, value) {
   ok(`${name} guardado`);
 }
 
+/**
+ * Correo de avisos (resumen diario y noticias urgentes): una cuenta de Gmail solo para Enlace y su contraseña de
+ * aplicación, guardadas como secretos (nunca en wrangler.toml, que es público). `force`: volver a preguntar (para
+ * cambiar de cuenta con `npm run correo`).
+ */
+async function configureMail({ force = false, siteUrl = '' } = {}) {
+  const secrets = secretNames();
+  const url = siteUrl || memory.url || '';
+  // La dirección de Enlace va en los botones de los correos.
+  if (url && (force || !secrets.has('ENLACE_URL') || memory.mailUrl !== url)) {
+    putSecret('ENLACE_URL', url);
+    remember({ mailUrl: url });
+  }
+  if (!force && secrets.has('CORREO_AVISOS') && secrets.has('GMAIL_APP_PASSWORD')) {
+    ok(`Ya estaba configurado${memory.mailFrom ? ` (${memory.mailFrom})` : ''}. Para cambiar la cuenta: npm run correo`);
+    return;
+  }
+  console.log(`
+   Enlace puede enviar por correo un resumen diario de avisos (actividades, calificaciones, noticias y lo que vence)
+   desde una cuenta de Gmail creada solo para Enlace. Necesitas:
+   · la cuenta (por ejemplo avisos.mi-academia@gmail.com) con la verificación en dos pasos activada, y
+   · una contraseña de aplicación: https://myaccount.google.com/apppasswords → nombre "Enlace" → Create.
+`);
+  const from = await ask('Correo de Gmail que envía los avisos, o escribe "después":', (a) =>
+    /^despu[eé]s$/i.test(a) || (validEmail(a) && /@(gmail|googlemail)\.com$/i.test(a)) ? '' : 'Escribe una dirección de Gmail (termina en @gmail.com) o "después".',
+  );
+  if (/^despu/i.test(from)) {
+    ok('Sin correo de avisos por ahora (Enlace funciona igual). Para configurarlo después: npm run correo');
+    return;
+  }
+  const password = (
+    await ask('Pega la contraseña de aplicación de 16 letras (no se mostrará al escribir):', (a) =>
+      /^[a-z]{16}$/i.test(a.replace(/\s+/g, '')) ? '' : 'Son 16 letras (Google las muestra en 4 grupos de 4).',
+    { hidden: true })
+  ).replace(/\s+/g, '');
+  putSecret('CORREO_AVISOS', from.toLowerCase());
+  putSecret('GMAIL_APP_PASSWORD', password);
+  remember({ mailFrom: from.toLowerCase() });
+  ok(`Los avisos saldrán de ${from.toLowerCase()}. Pruébalo en Enlace → Administración → Correo de avisos → «Enviar correo de prueba».`);
+}
+
 // ────────────────────────────────────────────────────────────────────────────────────────────
 
-console.log('Enlace · configuración en tu cuenta de Cloudflare');
+const onlyMail = process.argv.includes('--correo');
+console.log(onlyMail ? 'Enlace · correo de avisos' : 'Enlace · configuración en tu cuenta de Cloudflare');
 
 step('Comprobando esta computadora');
 const [major, minor] = process.versions.node.split('.').map(Number);
@@ -169,6 +211,13 @@ if (needsLogin()) {
   if (needsLogin()) stop('No se completó el inicio de sesión en Cloudflare.');
 }
 ok('Sesión iniciada');
+
+if (onlyMail) {
+  step('Correo de avisos');
+  await configureMail({ force: true });
+  console.log('\n✓ Listo. El cambio aplica de inmediato (no hace falta volver a publicar).');
+  process.exit(0);
+}
 
 step('Base de datos');
 let databaseId = tomlValue(readToml(), 'database_id');
@@ -259,6 +308,9 @@ step('Claves');
 let secrets = secretNames();
 if (secrets.has('SESSION_SECRET')) ok('SESSION_SECRET ya existía (no se cambia para no cerrar sesiones)');
 else putSecret('SESSION_SECRET', randomBytes(48).toString('base64url'));
+
+step('Correo de avisos');
+await configureMail({ siteUrl });
 
 step('Acceso con Google');
 secrets = secretNames();

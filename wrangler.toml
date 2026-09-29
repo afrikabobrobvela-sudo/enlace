@@ -38,6 +38,12 @@ AULA_OWNER_EMAIL = "tu-correo@gmail.com"
 # Para quitar la obligación (por ejemplo, un grupo sin cámara), cámbialo a "0" y vuelve a publicar.
 FOTO_OBLIGATORIA = "1"
 
+# Correo de avisos: el resumen diario sale todos los días a las 7:00 p. m. de la Ciudad de México (01:00 UTC).
+# Para cambiar la hora, cambia el número de la hora UTC (por ejemplo "0 14 * * *" = 8:00 a. m.) y vuelve a publicar.
+# La cuenta de Gmail y su contraseña de aplicación NO van aquí: configurar.cmd (o npm run correo) las guarda como secretos.
+[triggers]
+crons = ["0 1 * * *"]
+
 # ── Entorno de pruebas ──────────────────────────────────────────────────────────────────────────
 # Una copia independiente (enlace-pruebas.TU-SUBDOMINIO.workers.dev) con su propia base y archivos,
 # para probar cambios antes de publicarlos a tus alumnos. Instrucciones en LEEME.md.

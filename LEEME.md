@@ -1,9 +1,38 @@
-# Enlace · versión 12.18.1
+# Enlace · versión 12.19
 
 Plataforma académica independiente para docentes y alumnos de cualquier academia (nació en la Academia de Física de la BUAP), con interfaz inspirada en Brightspace.
 No es el código de D2L Brightspace ni una plataforma oficial de la BUAP.
 
 Esta versión se despliega en **tu propia cuenta de Cloudflare** (Workers + D1 + R2, plan gratuito) y ya no depende de ChatGPT Sites.
+
+## Novedades de la versión 12.19 (avisos por correo con Gmail)
+
+Enlace ahora puede mandar correos a alumnos y docentes desde una cuenta de Gmail solo para Enlace (por ejemplo `avisos.mi-academia@gmail.com`).
+
+- **Resumen diario**: cada tarde a las **7 p.m.** (hora del centro de México) cada persona recibe **un solo correo** con lo nuevo en sus cursos:
+  - noticias, materiales, evaluaciones y actividades publicadas;
+  - calificaciones publicadas;
+  - lo que vence en las próximas 24 horas y aún no entrega;
+  - para los docentes, las entregas nuevas por calificar.
+  
+  Respeta secciones, publicación programada y prórrogas, igual que la campana de avisos. Quien no tiene nada nuevo no recibe correo.
+- **Noticia urgente**: al crear o editar una noticia, el docente puede marcar «Enviar también por correo ahora». Le llega de inmediato solo a los alumnos a los que va dirigida (su sección), y **una sola vez**: editarla después no la vuelve a enviar.
+- **Apagarlo**: cada persona lo desactiva en «Mi perfil» → «Recibir por correo un resumen diario».
+- **Panel en Reportes** (solo administración): muestra la cuenta remitente, los correos enviados hoy y el último problema. Tiene dos botones: «Enviarme un correo de prueba» y «Enviar el resumen ahora».
+
+Requiere la migración **0026**: crea una tabla pequeña (conteo de correos por día) y agrega dos columnas a los usuarios (si quieren el resumen y cuándo se envió el último). No borra ni modifica datos.
+
+**Cómo activarlo (una vez)**:
+1. En la cuenta de Gmail de Enlace, activa la verificación en dos pasos y crea una **contraseña de aplicación** (16 letras).
+2. En tu computadora, en la carpeta de Enlace, ejecuta `configurar.cmd` como siempre (o solo `npm run correo`).
+3. Cuando lo pida, escribe la cuenta de Gmail y pega la contraseña de aplicación. Se guardan como secretos de Cloudflare (`CORREO_AVISOS`, `GMAIL_APP_PASSWORD`); la contraseña no se muestra, no queda en el repositorio y **no debe enviarse por chat ni correo**.
+4. Entra a Enlace → Reportes → «Enviarme un correo de prueba».
+
+**Cambiar de cuenta**: crea la contraseña de aplicación en la cuenta nueva y vuelve a ejecutar `npm run correo`. Si revocas la contraseña en Google, los envíos se detienen hasta que pongas otra.
+
+**Límites**: Gmail permite unos 500 destinatarios al día. Enlace se detiene en **450** (puedes cambiarlo con la variable `MAIL_DAILY_LIMIT`). Si no alcanza, quienes se quedaron sin correo lo reciben al día siguiente sin perder avisos. Si algún día tienes dominio propio, con `RESEND_API_KEY` y `EMAIL_FROM` se usa Resend en lugar de Gmail.
+
+**Horario**: está en `wrangler.toml`, en `[triggers] crons = ["0 1 * * *"]` (hora UTC: 01:00 UTC = 7 p.m. en la Ciudad de México). Por ejemplo, `"0 13 * * *"` sería a las 7 a.m.
 
 ## Novedades de la versión 12.18.1 (secciones, contenido por sección y foto de perfil)
 
@@ -394,7 +423,7 @@ La pantalla muestra en vivo cuántos se han registrado y quiénes acaban de hace
 
 1. Descarga la versión nueva en una carpeta **nueva** (no encima de la anterior), o `git pull` si trabajas desde GitHub.
 2. Haz un respaldo desde esa carpeta: `npm run respaldo`, y de los archivos desde Enlace (ver *Respaldos*).
-3. Doble clic en `configurar.cmd` (Windows) o `configurar.command` (Mac), o `npm run configurar`. Encuentra tu base `enlace-db` y tu almacenamiento, usa el correo de administración y la dirección `.workers.dev` de la vez anterior (desde la versión 12.11 los recuerda; la primera vez te los pregunta y revisa que el correo ya haya entrado a Enlace), descarga un respaldo, aplica las migraciones pendientes (0003: asistencia y borradores; 0004: registro con QR; 0005: categorías, rúbricas y equipos; 0006: sesiones; 0007: papelera; 0008: registro de docentes; 0009: aviso de privacidad; 0010: periodos y archivo; 0011: prórrogas; 0012: intentos de evaluaciones; 0013: avisos; 0014: historial de calificaciones; 0015: asistencia con código; 0016: modo examen; 0017: usuarios y registro de acciones; 0018: avisos leídos; 0019: seguimiento del contenido; 0020: bloqueo del examen; 0021: examen estricto; 0022: banco de preguntas; 0023: secciones; 0024: foto de perfil; 0025: contenido por sección) y publica. No cambia tus claves. Al pasar a la versión 12.1 cada persona vuelve a entrar con Google una vez (las sesiones ahora se registran en el servidor).
+3. Doble clic en `configurar.cmd` (Windows) o `configurar.command` (Mac), o `npm run configurar`. Encuentra tu base `enlace-db` y tu almacenamiento, usa el correo de administración y la dirección `.workers.dev` de la vez anterior (desde la versión 12.11 los recuerda; la primera vez te los pregunta y revisa que el correo ya haya entrado a Enlace), descarga un respaldo, aplica las migraciones pendientes (0003: asistencia y borradores; 0004: registro con QR; 0005: categorías, rúbricas y equipos; 0006: sesiones; 0007: papelera; 0008: registro de docentes; 0009: aviso de privacidad; 0010: periodos y archivo; 0011: prórrogas; 0012: intentos de evaluaciones; 0013: avisos; 0014: historial de calificaciones; 0015: asistencia con código; 0016: modo examen; 0017: usuarios y registro de acciones; 0018: avisos leídos; 0019: seguimiento del contenido; 0020: bloqueo del examen; 0021: examen estricto; 0022: banco de preguntas; 0023: secciones; 0024: foto de perfil; 0025: contenido por sección; 0026: correo de avisos), pregunta la cuenta de Gmail para los avisos (si aún no está) y publica. No cambia tus claves. Al pasar a la versión 12.1 cada persona vuelve a entrar con Google una vez (las sesiones ahora se registran en el servidor).
 
 **No publiques con `npx wrangler deploy` directamente**: el `wrangler.toml` del ZIP trae valores de ejemplo y quedarías sin la cuenta de administración (`npm run deploy` y `npm run db:migrate` ya lo impiden). Si prefieres hacerlo a mano: copia tu `database_id` y tu correo del `wrangler.toml` anterior al nuevo (y `ALLOWED_EMAIL_DOMAINS` si lo usabas) y ejecuta `npm install`, `npm run db:migrate` y `npm run deploy`, **en ese orden**: si publicas antes de migrar, Asistencia y Calificaciones fallarán hasta que apliques la migración.
 
@@ -604,6 +633,7 @@ La cookie de sesión usa el prefijo `__Host-`, que exige conexión segura. Chrom
 - `test-respaldo-archivos.mjs`: respaldo de archivos solo para administración, incremental, con índice; restauración solo de lo que falta y con el tamaño exacto.
 - `test-restaurar.mjs`: la exportación de D1 se reordena y comprueba con el esquema real; `npm run restaurar` solo escribe en bases vacías.
 - `test-bloqueo-examen.mjs`: bloqueo al salir (tolerancia, sin guardar ni enviar mientras está bloqueado, código solo para el docente, 5 intentos, desbloqueo del docente, al retomar tras cerrar el navegador).
+- `test-correo.mjs`: avisos por correo (resumen diario por sección y persona, prórrogas, lo ya entregado, preferencia en el perfil, cupo diario sin perder avisos, noticia urgente una sola vez, rutas de administración, mensaje MIME sin inyección de encabezados y la conversación SMTP con un Gmail simulado).
 - `test-secciones.mjs`: secciones (crear sin repetir, alumnos por lista, a mano o de otro curso, fechas de actividades y exámenes por sección con la prórroga encima, examen activo con el cierre de su sección, asistencia por sección, eliminar solo vacías, copia a otro periodo).
 - `test-foto.mjs`: foto de perfil (obligatoria para alumnos con `FOTO_OBLIGATORIA`, solo imágenes reales y pequeñas, quién la ve, cambiarla borra la anterior, el docente puede quitarla).
 - `test-banco.mjs`: banco de preguntas (guardar sin duplicar, compartir solo con la propia academia, usar preguntas de un colega en otro curso con su imagen, editar y borrar sin tocar evaluaciones), preguntas al azar por grupo, el alumno sin preguntas antes de contestar e imágenes de preguntas que no cuentan como archivos sin uso.

@@ -35,6 +35,8 @@ import {
 } from './quizzes.js';
 import { bankImageVisible, bankRoutes } from './bank.js';
 import { photoRoutes, servePhoto } from './photos.js';
+import { digestRoutes } from './digest.js';
+import { mailConfigured } from './mail.js';
 import { quizForStudent, quizWithSectionDates, sectionIdsByName, sectionKey, sectionRoutes, sectionsField, validSection } from './sections.js';
 import { gradingRoutes } from './grading.js';
 import { clearSessionCookie, identity, lastLogins, revokeAllStatements } from './auth.js';
@@ -131,7 +133,7 @@ export async function api(request, env) {
     assertHasPhoto(route, user, env);
     const ctx = { db: env.DB, env, user, url, request };
     const handler =
-      routes[route] || attendanceRoutes[route] || gradingRoutes[route] || directoryRoutes[route] || privacyRoutes[route] || periodRoutes[route] || dashboardRoutes[route] || reportRoutes[route] || demoRoutes[route] || backupRoutes[route] || userRoutes[route] || bankRoutes[route] || sectionRoutes[route] || photoRoutes[route];
+      routes[route] || attendanceRoutes[route] || gradingRoutes[route] || directoryRoutes[route] || privacyRoutes[route] || periodRoutes[route] || dashboardRoutes[route] || reportRoutes[route] || demoRoutes[route] || backupRoutes[route] || userRoutes[route] || bankRoutes[route] || sectionRoutes[route] || photoRoutes[route] || digestRoutes[route];
     if (handler) return await handler(ctx);
     if (request.method === 'GET' && url.pathname.startsWith('/api/file/')) return await downloadFile(ctx, url.pathname.slice(10));
     if (request.method === 'GET' && url.pathname.startsWith('/api/photo/')) return await servePhoto(ctx, url.pathname.slice(11));
@@ -348,6 +350,9 @@ const routes = {
       activeExam: user.activeExam || null,
       // Alumno sin foto de perfil: la interfaz le pide tomársela antes de mostrar lo demás.
       needsPhoto: photoRequired(env, user),
+      // Correos de avisos: si están configurados y si esta persona recibe el resumen diario.
+      mailEnabled: mailConfigured(env),
+      emailDigest: user.email_digest !== 0,
     }),
 
   // Cierra la sesión en todos los dispositivos de la persona (por ejemplo, si perdió su teléfono).
@@ -926,6 +931,8 @@ const routes = {
         const sections = await sectionsField(db, body.course, input.sections);
         if (sections.length) data.sections = sections;
       }
+      // Una noticia ya enviada por correo lo sigue estando al editarla (no se vuelve a enviar).
+      if (kind === 'notice' && previous?.data.emailedAt) data.emailedAt = previous.data.emailedAt;
       if (kind === 'module') data.fileIds = await validateFiles(db, input.fileIds, body.course, user, 'material');
       if (kind === 'material') {
         data.module = input.module || null;
