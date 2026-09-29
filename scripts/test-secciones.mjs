@@ -231,5 +231,35 @@ assert.deepEqual(nuevo.records.find((r) => r.data.title === 'Solo 5BV').data.sec
 assert.deepEqual(nuevo.records.find((r) => r.data.title === 'Tarea 5AV').data.sections, [nuevo.sections.find((x) => x.name === '5AV').id]);
 checks++;
 
+// ---- Evaluación por sección con horario y código de cada sección (12.20) ----
+const pregunta = [{ type: 'choice', text: 'Unidad de carga', options: ['C', 'V'], correct: 0 }];
+const porSeccion = await rec('quiz', { title: 'Parcial 2', sections: [av, bv], questions: pregunta, settings: { attempts: 1 } });
+await call('docente', '/api/sections/dates', { course: c, kind: 'quiz', item: porSeccion.id, dates: [{ section: av, code: 'abc' }] }, 400);
+await call('docente', '/api/sections/dates', { course: c, kind: 'quiz', item: porSeccion.id, dates: [{ section: av, startAt: iso(-min), endAt: iso(60 * min), code: 'AV7K2Q' }, { section: bv, startAt: iso(-min), code: 'BV9XP4' }] });
+// El docente ve los códigos; los alumnos solo saben que hace falta uno.
+const delDocente = await course();
+assert.deepEqual(delDocente.sectionDates.filter((d) => d.item === porSeccion.id).map((d) => d.code).sort(), ['AV7K2Q', 'BV9XP4']);
+const deEva = await call('eva', '/api/course?id=' + c);
+assert(!JSON.stringify(deEva).includes('BV9XP4') && !JSON.stringify(deEva).includes('AV7K2Q'), 'Ningún código llega al alumno');
+assert.equal(deEva.records.find((r) => r.id === porSeccion.id).data.settings.needsCode, true);
+assert(!(await call('carla', '/api/course?id=' + c)).records.some((r) => r.id === porSeccion.id), '5CV no presenta');
+await call('carla', '/api/attempt/start', { course: c, quiz: porSeccion.id }, 403);
+assert.match((await call('eva', '/api/attempt/start', { course: c, quiz: porSeccion.id }, 400)).error, /Código incorrecto/);
+await call('eva', '/api/attempt/start', { course: c, quiz: porSeccion.id, password: 'AV7K2Q' }, 400); // el de otra sección no sirve
+const deEvaIntento = await call('eva', '/api/attempt/start', { course: c, quiz: porSeccion.id, password: ' BV9XP4 ' });
+assert.equal(deEvaIntento.attempt, 1);
+assert.equal(deEvaIntento.deadline, null, '5BV sin cierre ni tiempo límite');
+checks += 6;
+// Modo examen: el código de la sección manda sobre la contraseña general; sin código de sección, la general.
+const examenCodigo = await rec('quiz', { title: 'Parcial 3', questions: pregunta, settings: { attempts: 1, exam: { enabled: true, password: 'gauss' } } });
+await call('docente', '/api/sections/dates', { course: c, kind: 'quiz', item: examenCodigo.id, dates: [{ section: bv, code: 'BVEXAM' }] });
+await call('beto', '/api/attempt/start', { course: c, quiz: examenCodigo.id, password: 'gauss' }, 400);
+await call('beto', '/api/attempt/start', { course: c, quiz: examenCodigo.id, password: 'BVEXAM' });
+await call('carla', '/api/attempt/start', { course: c, quiz: examenCodigo.id, password: 'BVEXAM' }, 400);
+await call('carla', '/api/attempt/start', { course: c, quiz: examenCodigo.id, password: 'gauss' });
+const settingsCarla = (await call('dani', '/api/course?id=' + c)).records.find((r) => r.id === examenCodigo.id).data.settings;
+assert.deepEqual([settingsCarla.exam.needsPassword, 'password' in settingsCarla.exam, 'startCode' in settingsCarla], [true, false, false]);
+checks += 2;
+
 assert.deepEqual(store.raw().prepare('PRAGMA foreign_key_check').all(), []);
 console.log(`PASS: ${checks} verificaciones de secciones — un curso para varios grupos, alumnos por sección (lista, a mano o de otro curso), fechas de actividades y exámenes por sección con prórroga encima, asistencia por sección y copia a otro periodo.`);

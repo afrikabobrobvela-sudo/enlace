@@ -67,10 +67,12 @@ export function withSectionDates(task, dates) {
 
 /** Evaluación con las fechas de la sección del alumno: se abre (`start_at`) y se cierra (`end_at`). */
 export function quizWithSectionDates(quiz, dates) {
-  if (!dates || (!dates.start_at && !dates.end_at)) return quiz;
+  if (!dates || (!dates.start_at && !dates.end_at && !dates.code)) return quiz;
   const settings = { ...(quiz.data.settings || {}) };
   if (dates.start_at) settings.opensAt = dates.start_at;
   if (dates.end_at) settings.closesAt = dates.end_at;
+  // Código para empezar de esa sección (manda sobre la contraseña general del modo examen). publicSettings() lo quita.
+  if (dates.code) settings.startCode = dates.code;
   return { ...quiz, data: { ...quiz.data, settings } };
 }
 
@@ -78,7 +80,7 @@ export function quizWithSectionDates(quiz, dates) {
 export async function quizForStudent(db, quiz, userId) {
   const dates = await one(
     db,
-    `SELECT m.section, d.start_at, d.end_at FROM aula_members m LEFT JOIN aula_section_dates d ON d.section=m.section AND d.item=?1
+    `SELECT m.section, d.start_at, d.end_at, d.code FROM aula_members m LEFT JOIN aula_section_dates d ON d.section=m.section AND d.item=?1
      WHERE m.course=?2 AND m.user_id=?3 AND m.role='student'`,
     quiz.id,
     quiz.course,
@@ -105,10 +107,12 @@ async function validDates(db, course, input, kind) {
     const due = kind === 'task' ? isoDate(entry.due || '') : '';
     const endAt = isoDate(entry.endAt || '');
     const name = sections.get(section);
+    const code = kind === 'quiz' ? String(entry.code ?? '').trim() : '';
+    if (code && (code.length < 4 || code.length > 30)) fail(`Sección ${name}: el código para empezar debe tener de 4 a 30 caracteres.`);
     if (startAt && endAt && endAt <= startAt) fail(`Sección ${name}: el cierre debe ser posterior al inicio.`);
     if (due && startAt && due < startAt) fail(`Sección ${name}: el vencimiento debe ser posterior al inicio.`);
     if (due && endAt && endAt < due) fail(`Sección ${name}: el cierre no puede ser antes del vencimiento.`);
-    if (startAt || due || endAt) rows.push({ section, start_at: startAt, due, end_at: endAt });
+    if (startAt || due || endAt || code) rows.push({ section, start_at: startAt, due, end_at: endAt, code });
   }
   return rows;
 }
@@ -175,7 +179,7 @@ export const sectionRoutes = {
     return json({ changed: result.meta.changes || 0 });
   },
 
-  // Fechas de una actividad o evaluación por sección: reemplaza todas las de ese elemento.
+  // Fechas de una actividad o evaluación por sección (y, en evaluaciones, su código para empezar): reemplaza todas las de ese elemento.
   'POST /api/sections/dates': async ({ db, user, request }) => {
     const body = await readJson(request);
     requireTeacher(await access(db, user, body.course));
@@ -192,9 +196,9 @@ export const sectionRoutes = {
       db.prepare('DELETE FROM aula_section_dates WHERE item=? AND course=?').bind(item, body.course),
       db
         .prepare(
-          `INSERT INTO aula_section_dates (item,section,course,start_at,due,end_at,updated)
+          `INSERT INTO aula_section_dates (item,section,course,start_at,due,end_at,updated,code)
            SELECT ?1, json_extract(value,'$.section'), ?2, json_extract(value,'$.start_at'), json_extract(value,'$.due'),
-                  json_extract(value,'$.end_at'), ?3 FROM json_each(?4)`,
+                  json_extract(value,'$.end_at'), ?3, json_extract(value,'$.code') FROM json_each(?4)`,
         )
         .bind(item, body.course, now, JSON.stringify(rows)),
     ]);

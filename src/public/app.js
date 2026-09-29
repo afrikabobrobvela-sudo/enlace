@@ -38,9 +38,9 @@ const visibilityToggle = (kind, r) => {
   return `<button type="button" class="visibility-toggle ${on ? '' : 'is-hidden'}" data-action="toggle-visible" data-kind="${kind}" data-id="${esc(r.id)}" aria-pressed="${on}" title="Toca para ${on ? 'ocultarlo a' : 'mostrarlo a'} los alumnos">${on ? 'Visible para alumnos' : 'Oculto para alumnos'}</button>`;
 };
 // Con `publishAt` (aunque sea vacío) agrega la publicación programada: visible, pero solo a partir de esa fecha.
-const visible = (v, publishAt, sections = []) => `<label class="check-label"><input name="visible" type="checkbox" ${v !== false ? 'checked' : ''}> Visible para alumnos</label>${
+const visible = (v, publishAt, sections = [], chooser = true) => `<label class="check-label"><input name="visible" type="checkbox" ${v !== false ? 'checked' : ''}> Visible para alumnos</label>${
   publishAt === undefined ? '' : `<label>Publicar a partir de (opcional)<input name="publishAt" type="datetime-local" value="${esc(localDate(publishAt))}"><small class="muted">Vacío = en cuanto esté visible. Con fecha, los alumnos lo ven (y reciben el aviso) desde ese momento.</small></label>`
-}${typeof sectionChooserHtml === 'function' ? sectionChooserHtml(sections || []) : ''}`;
+}${chooser && typeof sectionChooserHtml === 'function' ? sectionChooserHtml(sections || []) : ''}`;
 /** ¿Está programado para más adelante? (visible, pero su fecha de publicación aún no llega). */
 const scheduledFor = (r) => (r?.data.visible !== false && r?.data.publishAt && Date.parse(r.data.publishAt) > Date.now() ? r.data.publishAt : '');
 const button = (label, action, id = '', style = 'primary') => `<button class="${style}" data-action="${action}" ${id ? `data-id="${esc(id)}"` : ''}>${label}</button>`;
@@ -119,6 +119,7 @@ function render() {
     grades: renderGrades,
     review: renderReview,
     members: renderMembers,
+    access: renderAccess,
     attendance: renderAttendance,
     progress: renderProgress,
     admin: renderAdmin,
@@ -331,10 +332,72 @@ function renderGroups() {
   return workspaceGroups();
 }
 function renderMembers() {
-  $('#main').innerHTML = `<h1>Listado de alumnos</h1><div class="toolbar">${teaches() ? button('Inscribir alumno', 'new-member') + button('Importar lista', 'bulk-members', '', 'secondary') + button(courseSections().length ? 'Secciones' : 'Crear secciones', 'sections', '', 'secondary') : ''}<input data-search type="search" placeholder="Buscar…" aria-label="Buscar alumno">${sectionFilterHtml()}</div>${teaches() ? '<p class="real-status">La inscripción vincula el curso al correo del alumno: verá el curso cuando entre con ese mismo correo (su cuenta de Microsoft o de Google). No se envían invitaciones. «Ver lo que ve» muestra el curso exactamente como lo ve ese alumno (solo lectura; la consulta queda registrada).</p>' : ''}${coTeachersPanel()}<div class="table-wrap"><table><thead><tr><th>Nombre</th>${teaches() ? `<th>Matrícula</th>${courseSections().length ? '<th>Sección</th>' : ''}<th>Correo</th><th>Estado</th><th>Acción</th>` : courseSections().length ? '<th>Sección</th>' : ''}</tr></thead><tbody>${(teaches() ? studentsInView() : current.members.filter(m => m.role === 'student')).map(m => `<tr data-search-row><td>${teaches() ? `<span class="person">${avatarHtml(m)}<span>${esc(m.name)}</span></span>` : esc(m.name)}</td>${!teaches() && courseSections().length ? `<td>${esc(sectionName(m.section) || '—')}</td>` : ''}${teaches() ? `<td>${esc(m.matricula)}</td>${courseSections().length ? `<td>${memberSectionSelect(m)}</td>` : ''}<td>${esc(m.email)}</td><td>${m.user_id ? 'Cuenta vinculada' : 'Pendiente de ingreso'}</td><td><div class="row-actions">${button('Ver lo que ve', 'view-member', m.id, 'text-btn')}${button('Retirar', 'remove-member', m.id, 'text-btn')}${m.photo ? `<button type="button" class="text-btn" data-member-photo-delete="${esc(m.id)}">Quitar foto</button>` : ''}</div></td>` : ''}</tr>`).join('') || '<tr><td>No hay alumnos inscritos.</td></tr>'}</tbody></table></div>`;
+  $('#main').innerHTML = `<h1>Listado de alumnos</h1><div class="toolbar">${teaches() ? button('Inscribir alumno', 'new-member') + button('Importar lista', 'bulk-members', '', 'secondary') + button(courseSections().length ? 'Secciones' : 'Crear secciones', 'sections', '', 'secondary') + '<button class="secondary" type="button" data-section="access">Accesos</button>' : ''}<input data-search type="search" placeholder="Buscar…" aria-label="Buscar alumno">${sectionFilterHtml()}</div>${teaches() ? '<p class="real-status">La inscripción vincula el curso al correo del alumno: verá el curso cuando entre con ese mismo correo (su cuenta de Microsoft o de Google). No se envían invitaciones. «Ver lo que ve» muestra el curso exactamente como lo ve ese alumno (solo lectura; la consulta queda registrada).</p>' : ''}${coTeachersPanel()}<div class="table-wrap"><table><thead><tr><th>Nombre</th>${teaches() ? `<th>Matrícula</th>${courseSections().length ? '<th>Sección</th>' : ''}<th>Correo</th><th>Estado</th><th>Acción</th>` : courseSections().length ? '<th>Sección</th>' : ''}</tr></thead><tbody>${(teaches() ? studentsInView() : current.members.filter(m => m.role === 'student')).map(m => `<tr data-search-row><td>${teaches() ? `<span class="person">${avatarHtml(m)}<span>${esc(m.name)}</span></span>` : esc(m.name)}</td>${!teaches() && courseSections().length ? `<td>${esc(sectionName(m.section) || '—')}</td>` : ''}${teaches() ? `<td>${esc(m.matricula)}</td>${courseSections().length ? `<td>${memberSectionSelect(m)}</td>` : ''}<td>${esc(m.email)}</td><td>${m.user_id ? 'Cuenta vinculada' : 'Pendiente de ingreso'}</td><td><div class="row-actions">${button('Ver lo que ve', 'view-member', m.id, 'text-btn')}${button('Retirar', 'remove-member', m.id, 'text-btn')}${m.photo ? `<button type="button" class="text-btn" data-member-photo-delete="${esc(m.id)}">Quitar foto</button>` : ''}</div></td>` : ''}</tr>`).join('') || '<tr><td>No hay alumnos inscritos.</td></tr>'}</tbody></table></div>`;
 }
+// ---- Accesos (12.20): inicios de sesión durante el curso e ingresos al curso de alumnos y docentes ----
+let accessData = null;
+let accessSort = 'name';
+const accessWhen = v => v ? fmt(v) : '—';
+async function renderAccess() {
+  const courseId = current.course.id;
+  if (!accessData || accessData.course !== courseId || Date.now() - accessData.at > 60000) {
+    $('#main').innerHTML = '<p class="empty">Cargando accesos…</p>';
+    try {
+      accessData = { course: courseId, at: Date.now(), ...(await request('/api/course/access?id=' + encodeURIComponent(courseId))) };
+    }
+    catch (error) {
+      $('#main').innerHTML = `<section class="error"><h2>No se pudieron cargar los accesos</h2><p>${esc(error.message)}</p></section>`;
+      return;
+    }
+    if (section !== 'access' || current?.course.id !== courseId)
+      return;
+  }
+  const inView = new Set(studentsInView().map(m => m.id));
+  const teachers = accessData.people.filter(p => p.role === 'teacher');
+  const order = {
+    name: (a, b) => a.name.localeCompare(b.name, 'es'),
+    fewest: (a, b) => a.visits - b.visits || a.logins - b.logins || a.name.localeCompare(b.name, 'es'),
+    most: (a, b) => b.visits - a.visits || b.logins - a.logins || a.name.localeCompare(b.name, 'es'),
+    recent: (a, b) => String(b.lastVisit || '').localeCompare(String(a.lastVisit || '')) || a.name.localeCompare(b.name, 'es')
+  }[accessSort] || ((a, b) => a.name.localeCompare(b.name, 'es'));
+  const students = accessData.people.filter(p => p.role === 'student' && inView.has(p.member)).sort(order);
+  const never = students.filter(p => !p.visits).length;
+  const week = students.filter(p => p.lastVisit && Date.now() - Date.parse(p.lastVisit) < 7 * 86400000).length;
+  const cells = p => `<td>${p.account ? p.logins : '<span class="muted">Sin cuenta</span>'}</td><td>${accessWhen(p.lastLogin)}</td><td>${p.visits}</td><td>${accessWhen(p.lastVisit)}</td>`;
+  const head = first => `<thead><tr><th>${first}</th>${courseSections().length && first === 'Alumno' ? '<th>Sección</th>' : ''}<th>Inicios de sesión</th><th>Último inicio</th><th>Ingresos al curso</th><th>Último ingreso</th></tr></thead>`;
+  const tile = (value, label) => `<div class="stat-tile"><strong>${value}</strong><span>${label}</span></div>`;
+  $('#main').innerHTML = `<button class="back" data-section="members">❮ Listado de alumnos</button>
+    <div class="home-title-row"><div><h1>Accesos</h1><p class="muted">Desde que se creó el curso (${esc(fmt(accessData.since))})${accessData.until ? ` hasta que se archivó (${esc(fmt(accessData.until))})` : ' hasta hoy'}.</p></div>
+      <div class="action-row"><button class="secondary" type="button" data-access-csv>Descargar CSV</button></div></div>
+    <div class="stat-tiles">${tile(students.length, 'alumnos')}${tile(week, 'entraron al curso en los últimos 7 días')}${tile(never, 'nunca han entrado al curso')}</div>
+    <p class="real-status"><b>Inicios de sesión</b>: veces que la persona entró a Enlace con su cuenta (Google o Microsoft) mientras el curso ha estado activo; cada sesión dura 14 días en ese dispositivo, así que quien no cierra sesión tiene pocos inicios aunque entre a diario. <b>Ingresos al curso</b>: veces que abrió este curso (volver después de 30 minutos cuenta como otro ingreso).</p>
+    <section class="panel"><h2>Docentes</h2><div class="table-wrap"><table>${head('Docente')}<tbody>${teachers.map(p => `<tr><td>${esc(p.name)}${p.owner ? ' <span class="role-pill">Titular</span>' : ''}</td>${cells(p)}</tr>`).join('')}</tbody></table></div></section>
+    <section class="panel"><h2>Alumnos</h2><div class="toolbar"><input data-search type="search" placeholder="Buscar alumno…" aria-label="Buscar alumno">${sectionFilterHtml()}
+      <label class="inline-label">Ordenar <select data-access-sort>${[['name', 'Por nombre'], ['fewest', 'Menos ingresos primero'], ['most', 'Más ingresos primero'], ['recent', 'Ingreso más reciente']].map(([v, l]) => `<option value="${v}" ${accessSort === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label></div>
+      <div class="table-wrap"><table>${head('Alumno')}<tbody>${students.map(p => {
+        const m = current.members.find(x => x.id === p.member);
+        return `<tr data-search-row${p.visits ? '' : ' class="access-never"'}><td><span class="person">${m ? avatarHtml(m) : ''}<span>${esc(p.name)}</span></span></td>${courseSections().length ? `<td>${esc(sectionName(p.section) || '—')}</td>` : ''}${cells(p)}</tr>`;
+      }).join('') || '<tr><td colspan="6">No hay alumnos en esta vista.</td></tr>'}</tbody></table></div></section>`;
+}
+function accessCsv() {
+  const inView = new Set(studentsInView().map(m => m.id));
+  const rows = [['Nombre', 'Rol', 'Sección', 'Inicios de sesión durante el curso', 'Último inicio de sesión', 'Ingresos al curso', 'Primer ingreso', 'Último ingreso']];
+  for (const p of accessData.people.filter(p => p.role === 'teacher' || inView.has(p.member)))
+    rows.push([p.name, p.role === 'teacher' ? (p.owner ? 'Docente titular' : 'Co-docente') : 'Alumno', sectionName(p.section), p.account ? p.logins : 'Sin cuenta', accessWhen(p.lastLogin), p.visits, accessWhen(p.firstVisit), accessWhen(p.lastVisit)]);
+  download(`accesos-${current.course.name}-${current.course.group_name}.csv`, '﻿' + rows.map(r => r.map(csvCell).join(',')).join('\r\n'), 'text/csv;charset=utf-8');
+}
+document.addEventListener('change', e => {
+  if (!e.target.matches('[data-access-sort]'))
+    return;
+  accessSort = e.target.value;
+  render();
+});
+document.addEventListener('click', e => {
+  if (e.target.closest('[data-access-csv]') && accessData)
+    accessCsv();
+});
 function renderAdmin() {
-  $('#main').innerHTML = `<h1>Administración del curso</h1><section class="admin-section"><h2>Configuración</h2><div class="admin-links">${button('Información del curso', 'edit-course', '', 'table-link')}${button('Copiar a un nuevo periodo', 'copy-course', '', 'table-link')}${current.canDelete ? button(current.course.archived_at ? 'Desarchivar curso' : 'Archivar curso', 'archive-course', '', 'table-link') : ''}${button('Exportar respaldo del curso', 'backup', '', 'table-link')}${current.canDelete ? button('Eliminar curso / grupo', 'delete-course', current.course.id, 'danger-link') : ''}</div></section><section class="admin-section"><h2>Administración de estudiantes</h2><div class="admin-links"><button class="table-link" data-section="members">Listado de alumnos</button><button class="table-link" data-section="groups">Equipos de trabajo</button><button class="table-link" data-section="progress">Progreso de la clase</button></div></section><section class="admin-section"><h2>Evaluación</h2><div class="admin-links"><button class="table-link" data-section="tasks">Actividades</button><button class="table-link" data-section="grades">Calificaciones</button><button class="table-link" data-section="quizzes">Evaluaciones</button></div></section><section class="admin-section"><h2>Papelera</h2><div class="admin-links"><button class="table-link" data-section="trash">Elementos eliminados</button></div><p class="muted">Lo que eliminas del curso se puede restaurar desde aquí con todo su contenido, entregas y calificaciones.</p></section><p class="real-status">El respaldo exporta registros y metadatos en JSON. Descarga los archivos adjuntos por separado. Conserva copias periódicas fuera de la plataforma.</p>`;
+  $('#main').innerHTML = `<h1>Administración del curso</h1><section class="admin-section"><h2>Configuración</h2><div class="admin-links">${button('Información del curso', 'edit-course', '', 'table-link')}${button('Copiar a un nuevo periodo', 'copy-course', '', 'table-link')}${current.canDelete ? button(current.course.archived_at ? 'Desarchivar curso' : 'Archivar curso', 'archive-course', '', 'table-link') : ''}${button('Exportar respaldo del curso', 'backup', '', 'table-link')}${current.canDelete ? button('Eliminar curso / grupo', 'delete-course', current.course.id, 'danger-link') : ''}</div></section><section class="admin-section"><h2>Administración de estudiantes</h2><div class="admin-links"><button class="table-link" data-section="members">Listado de alumnos</button><button class="table-link" data-section="groups">Equipos de trabajo</button><button class="table-link" data-section="progress">Progreso de la clase</button><button class="table-link" data-section="access">Accesos de alumnos y docentes</button></div></section><section class="admin-section"><h2>Evaluación</h2><div class="admin-links"><button class="table-link" data-section="tasks">Actividades</button><button class="table-link" data-section="grades">Calificaciones</button><button class="table-link" data-section="quizzes">Evaluaciones</button></div></section><section class="admin-section"><h2>Papelera</h2><div class="admin-links"><button class="table-link" data-section="trash">Elementos eliminados</button></div><p class="muted">Lo que eliminas del curso se puede restaurar desde aquí con todo su contenido, entregas y calificaciones.</p></section><p class="real-status">El respaldo exporta registros y metadatos en JSON. Descarga los archivos adjuntos por separado. Conserva copias periódicas fuera de la plataforma.</p>`;
 }
 async function save(kind, data, old) {
   // «¿Para qué secciones?» del editor abierto (si el curso tiene secciones).

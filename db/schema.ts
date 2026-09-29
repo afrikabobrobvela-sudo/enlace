@@ -730,6 +730,8 @@ export const sectionDates = sqliteTable(
     due: text('due').notNull().default(''),
     endAt: text('end_at').notNull().default(''),
     updated: text('updated').notNull(),
+    // Migración 0027: código para empezar la evaluación en esa sección (lo dicta el docente; nunca llega al alumno).
+    code: text('code').notNull().default(''),
   },
   (t) => [primaryKey({ columns: [t.item, t.section] }), index('aula_section_dates_course').on(t.course)],
 );
@@ -741,3 +743,29 @@ export const mailLog = sqliteTable('aula_mail_log', {
   lastRun: text('last_run'),
   lastError: text('last_error'),
 });
+
+/**
+ * Migración 0027 (también): historial de inicios de sesión (aula_logins solo conserva las sesiones vigentes; esta tabla guarda
+ * cada inicio para siempre) y los ingresos de cada persona a cada curso (una visita nueva tras 30 min sin actividad).
+ */
+export const loginLog = sqliteTable(
+  'aula_login_log',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id').notNull(),
+    at: text('at').notNull(),
+  },
+  (t) => [index('aula_login_log_user').on(t.userId, t.at)],
+);
+
+export const courseAccess = sqliteTable(
+  'aula_course_access',
+  {
+    course: text('course').notNull(),
+    userId: text('user_id').notNull(),
+    visits: integer('visits').notNull().default(1),
+    firstAt: text('first_at').notNull(),
+    lastAt: text('last_at').notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.course, t.userId] })],
+);

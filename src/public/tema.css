@@ -960,3 +960,16 @@ td select[data-member-section] { min-width: 110px; margin: 0; padding: 6px 8px; 
   .section-filter > summary { width: 100%; justify-content: space-between; }
   .section-filter-panel { left: 0; right: auto; width: 100%; }
 }
+
+/* Evaluaciones: secciones que presentan, con su horario y su código (12.20) */
+.quiz-section-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px 12px; align-items: end; padding: 10px 0; border-top: 1px solid var(--line); }
+.quiz-section-row .quiz-section-name { grid-column: 1 / -1; }
+.quiz-section-row label { margin: 0; font-size: 0.85rem; }
+.quiz-section-row .quiz-section-name { font-weight: 600; font-size: 0.95rem; }
+.quiz-section-row[data-off] > label:not(.quiz-section-name) { opacity: 0.4; pointer-events: none; }
+.quiz-code-input { display: flex; gap: 6px; align-items: center; }
+.quiz-code-input input { flex: 1; min-width: 0; font-family: ui-monospace, monospace; letter-spacing: 0.08em; }
+.quiz-code-form { max-width: 360px; }
+tr.access-never td { color: var(--ink-faint); }
+.inline-label { display: inline-flex; gap: 6px; align-items: center; margin: 0; }
+.inline-label select { width: auto; }

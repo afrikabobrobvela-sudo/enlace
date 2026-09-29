@@ -411,3 +411,8 @@ dialog.sheet::backdrop { background: rgba(12, 28, 42, 0.45); }
   .cal-daynum { align-self: center; }
   .notice-filters select { flex: 1 1 100%; }
 }
+
+/* Evaluaciones por sección en el teléfono: cada sección en su propia tarjeta */
+@media (max-width: 720px) {
+  .quiz-section-row { grid-template-columns: 1fr; }
+}

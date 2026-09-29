@@ -246,14 +246,66 @@ function readSectionDates(f) {
     startAt: iso(f.get('sd_start_' + s.id)),
     due: iso(f.get('sd_due_' + s.id)),
     endAt: iso(f.get('sd_end_' + s.id)),
+    code: String(f.get('sd_code_' + s.id) || '').trim(),
   }));
 }
+
+// ---- Evaluaciones: qué secciones la presentan, a qué hora y con qué código (un solo bloque en el editor) ----------
+
+/** Bloque «Secciones y horarios» del editor de evaluaciones. Nada si el curso no tiene secciones. */
+function quizSectionsHtml(old) {
+  if (!courseSections().length) return '';
+  const chosen = old?.data.sections || [];
+  const dates = (current.sectionDates || []).filter((d) => d.item === old?.id);
+  const rows = courseSections()
+    .map((s) => {
+      const d = dates.find((x) => x.section === s.id) || {};
+      const on = !chosen.length || chosen.includes(s.id);
+      return `<div class="quiz-section-row" data-quiz-section-row ${on ? '' : 'data-off'}>
+        <label class="check-label quiz-section-name"><input type="checkbox" name="quizSection" value="${esc(s.id)}" ${on ? 'checked' : ''}> ${esc(s.name)}</label>
+        <label>Se abre<input type="datetime-local" name="sd_start_${esc(s.id)}" value="${esc(localDate(d.start_at))}"></label>
+        <label>Se cierra<input type="datetime-local" name="sd_end_${esc(s.id)}" value="${esc(localDate(d.end_at))}"></label>
+        <label>Código para empezar<span class="quiz-code-input"><input name="sd_code_${esc(s.id)}" value="${esc(d.code || '')}" maxlength="30" autocomplete="off" placeholder="Opcional"><button type="button" class="text-btn" data-code-generate="${esc(s.id)}">Generar</button></span></label>
+      </div>`;
+    })
+    .join('');
+  return `<fieldset class="quiz-settings quiz-sections"><legend>Secciones y horarios</legend>
+    <p class="muted">Marca las secciones que presentan esta evaluación; las demás no la ven ni les cuenta en la calificación. Si cada sección presenta a otra hora, pon su horario (lo vacío usa las fechas generales). Con un código, el alumno solo puede empezar si escribe el que tú le das en el salón; cada sección puede tener el suyo.</p>
+    ${rows}</fieldset>`;
+}
+
+/** Secciones marcadas en el bloque: [] = todas. */
+function readQuizSections(f) {
+  const ids = f.getAll('quizSection');
+  if (!ids.length) throw new Error('Marca al menos una sección que presente la evaluación.');
+  return ids.length === courseSections().length ? [] : ids;
+}
+
+/** Horarios y códigos por sección; las secciones que no presentan se quedan sin nada. */
+function readQuizSectionDates(f) {
+  const on = new Set(f.getAll('quizSection'));
+  return readSectionDates(f).map((d) => (on.has(d.section) ? d : { section: d.section, startAt: '', due: '', endAt: '', code: '' }));
+}
+
+document.addEventListener('change', (e) => {
+  if (!e.target.matches('input[name="quizSection"]')) return;
+  e.target.closest('[data-quiz-section-row]').toggleAttribute('data-off', !e.target.checked);
+});
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('[data-code-generate]');
+  if (!b) return;
+  // Sin letras que se confunden al dictarlas (0/O, 1/I/L).
+  const letters = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+  const random = crypto.getRandomValues(new Uint32Array(6));
+  b.previousElementSibling.value = [...random].map((n) => letters[n % letters.length]).join('');
+  dirty = true;
+});
 
 /** Guarda las fechas por sección de un elemento recién guardado (solo si el curso tiene secciones). */
 async function saveSectionDates(kind, itemId, dates) {
   if (!courseSections().length || !itemId) return;
   const had = (current.sectionDates || []).some((d) => d.item === itemId);
-  const has = dates.some((d) => d.startAt || d.due || d.endAt);
+  const has = dates.some((d) => d.startAt || d.due || d.endAt || d.code);
   if (!had && !has) return;
   await request('/api/sections/dates', { course: current.course.id, kind, item: itemId, dates });
 }
@@ -262,8 +314,8 @@ async function saveSectionDates(kind, itemId, dates) {
 function sectionDatesSummary(itemId) {
   const dates = (current.sectionDates || []).filter((d) => d.item === itemId);
   if (!dates.length) return '';
-  return `<p class="section-dates-note">Fechas por sección: ${dates
-    .map((d) => `<b>${esc(sectionName(d.section))}</b> ${[d.start_at ? 'desde ' + fmt(d.start_at) : '', d.due ? 'vence ' + fmt(d.due) : '', d.end_at ? 'cierra ' + fmt(d.end_at) : ''].filter(Boolean).map(esc).join(', ')}`)
+  return `<p class="section-dates-note">Por sección: ${dates
+    .map((d) => `<b>${esc(sectionName(d.section))}</b> ${[d.start_at ? 'desde ' + fmt(d.start_at) : '', d.due ? 'vence ' + fmt(d.due) : '', d.end_at ? 'cierra ' + fmt(d.end_at) : '', d.code ? 'código ' + d.code : ''].filter(Boolean).map(esc).join(', ')}`)
     .join(' · ')}</p>`;
 }
 

@@ -270,10 +270,16 @@ function examFields(input) {
 
 /** Lo que el alumno sabe del modo examen: si pide contraseña o ubicación, pero no cuáles son. */
 export function publicSettings(settings) {
-  if (!settings?.exam) return settings;
-  const { password, place, ...exam } = settings.exam;
-  return { ...settings, exam: { ...exam, needsPassword: Boolean(password), checksLocation: Boolean(place) } };
+  if (!settings) return settings;
+  // El código de la sección del alumno (startCode) tampoco llega: solo se avisa que hace falta uno.
+  const { startCode, ...rest } = settings;
+  if (!rest.exam) return startCode ? { ...rest, needsCode: true } : rest;
+  const { password, place, ...exam } = rest.exam;
+  return { ...rest, ...(startCode || password ? { needsCode: true } : {}), exam: { ...exam, needsPassword: Boolean(startCode || password), checksLocation: Boolean(place) } };
 }
+
+/** Código que el alumno debe escribir para empezar: el de su sección o, si no hay, la contraseña del modo examen. */
+export const startCodeOf = (settings) => settings?.startCode || settings?.exam?.password || '';
 
 /** Eventos que envía el navegador durante el examen (salir de la pantalla, de pantalla completa, copiar o pegar, captura de pantalla). */
 export function validEvents(input) {

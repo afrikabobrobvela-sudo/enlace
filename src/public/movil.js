@@ -54,6 +54,7 @@ function activeSection() {
   if (section === 'forum') return 'forums';
   if (section === 'quiz' || section === 'bank') return 'quizzes';
   if (section === 'trash') return 'admin';
+  if (section === 'access') return 'members';
   return section;
 }
 

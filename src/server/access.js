@@ -22,7 +22,8 @@ export async function access(db, user, courseId) {
   if (!isAdmin && !isOwner && !coTeacher && (!memberRole || memberRole === 'removed' || memberRole === 'teacher')) {
     fail('No tienes acceso a este curso.', 403);
   }
-  return { course, teach: isAdmin || isOwner || coTeacher };
+  // `visitor`: su ingreso cuenta en los accesos del curso (la administración que solo revisa no cuenta).
+  return { course, teach: isAdmin || isOwner || coTeacher, visitor: isOwner || coTeacher || memberRole === 'student' };
 }
 
 export function requireTeacher(access) {

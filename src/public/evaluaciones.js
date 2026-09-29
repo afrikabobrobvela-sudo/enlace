@@ -206,6 +206,7 @@ function quizModal(old) {
     old ? 'Editar evaluación' : 'Nueva evaluación',
     field('Título', 'title', old?.data.title || '', 'text', 'required') +
       richTextarea('Instrucciones', 'body', old?.data.body || '') +
+      quizSectionsHtml(old) +
       `<fieldset class="quiz-settings"><legend>Configuración</legend><div class="quiz-grid">
         <label>Intentos por alumno<input name="attempts" type="number" min="1" max="10" value="${settings.attempts}"></label>
         <label>Tiempo límite (minutos, 0 = sin límite)<input name="timeLimit" type="number" min="0" max="300" value="${settings.timeLimit}"></label>
@@ -216,7 +217,7 @@ function quizModal(old) {
         <label>Fecha final (opcional)<input name="closesAt" type="datetime-local" value="${esc(localDate(settings.closesAt))}"></label></div>
         <label class="check-label"><input type="checkbox" name="timerFixed" ${settings.timerMode === 'fixed' ? 'checked' : ''}> El tiempo empieza a la hora de inicio, igual para todos (quien entra tarde tiene menos tiempo)</label>
         <p class="muted">Antes del inicio no se puede empezar; en la fecha final termina todo lo que esté en curso y se califica lo que cada alumno dejó guardado.</p>
-        ${sectionDatesHtml(old?.id, 'quiz')}</fieldset>
+        ${courseSections().length ? '<p class="muted">El horario de cada sección está arriba, en «Secciones y horarios».</p>' : ''}</fieldset>
       <fieldset class="quiz-settings"><legend>Qué ve el alumno al terminar</legend>
         <label class="check-label"><input type="checkbox" name="showScore" ${settings.results?.score !== false ? 'checked' : ''}> Su calificación (si lo desmarcas, ve «pendiente» hasta que lo actives)</label>
         <label class="check-label"><input type="checkbox" name="showReview" ${old && settings.results?.review !== 'none' ? 'checked' : ''}> Qué preguntas acertó (ve los enunciados que le tocaron con ✓ y ✗, sin las respuestas correctas)</label>
@@ -224,7 +225,7 @@ function quizModal(old) {
         <p class="muted">Si otros grupos aún no presentan, desmarca «Qué preguntas acertó» o pon aquí la fecha y hora en que termina el último grupo: hasta entonces nadie ve su calificación ni sus aciertos, y después se muestran solos.</p></fieldset>` +
       examSettingsHtml(settings.exam) +
       quizGradeHtml(old?.data.grade) +
-      visible(old?.data.visible ?? false, old?.data.publishAt || '', old?.data.sections) +
+      visible(old?.data.visible ?? false, old?.data.publishAt || '', [], false) +
       `<div id="quizQuestions"></div><datalist id="quizPools"></datalist>
        <div class="quiz-add-row"><button type="button" class="secondary" data-quiz="add-question">＋ Agregar pregunta</button>${bankPickerHtml()}</div>
        <fieldset class="quiz-settings" id="quizDrawBox"></fieldset>
@@ -238,6 +239,7 @@ function quizModal(old) {
           body: f.get('body'),
           visible: f.get('visible') === 'on',
           publishAt: iso(f.get('publishAt')),
+          sections: courseSections().length ? readQuizSections(f) : [],
           grade: f.get('gradeCategory') ? { category: f.get('gradeCategory'), points: Number(f.get('gradePoints')), policy: f.get('gradePolicy') } : null,
           settings: {
             attempts: Number(f.get('attempts')),
@@ -255,7 +257,7 @@ function quizModal(old) {
         },
         old,
       );
-      await saveSectionDates('quiz', saved.id, readSectionDates(f));
+      await saveSectionDates('quiz', saved.id, readQuizSectionDates(f));
     },
   );
   renderQuizQuestions();
@@ -268,7 +270,7 @@ function examSettingsHtml(exam) {
   return `<fieldset class="quiz-settings exam-settings"><legend>Modo examen</legend>
     <label class="check-label"><input type="checkbox" name="exam" ${exam?.enabled ? 'checked' : ''}> Activar: pantalla completa, sin copiar ni pegar, y registro de cada vez que el alumno sale de la página</label>
     <div class="exam-options" ${exam?.enabled ? '' : 'hidden'}>
-      <label>Contraseña para empezar (opcional; la dictas en el salón)<input name="examPassword" value="${esc(exam?.password || '')}" maxlength="30" autocomplete="off" placeholder="Por ejemplo: gauss"></label>
+      <label>Contraseña para empezar (opcional; la dictas en el salón. Si pones un código por sección, manda el de la sección)<input name="examPassword" value="${esc(exam?.password || '')}" maxlength="30" autocomplete="off" placeholder="Por ejemplo: gauss"></label>
       <label class="check-label"><input type="checkbox" name="oneByOne" ${exam?.oneByOne ? 'checked' : ''}> Una pregunta a la vez</label>
       <label class="check-label"><input type="checkbox" name="noBack" ${exam?.noBack ? 'checked' : ''}> Sin regresar a preguntas anteriores (requiere "una pregunta a la vez")</label>
       <label class="check-label"><input type="checkbox" name="lockPlatform" ${exam?.lockPlatform || !exam ? 'checked' : ''}> Bloquear el resto de Enlace mientras contesta: no puede abrir otros cursos, materiales, foros ni avisos, aunque abra otra pestaña o vuelva a iniciar sesión</label>
@@ -478,7 +480,9 @@ function renderQuiz() {
       ? examIntroHtml(exam, attempts.length)
       : left > 0
       ? `<p class="real-status">${attempts.length ? `Te quedan ${left} intento${left === 1 ? '' : 's'}.` : 'Revisa tus respuestas antes de enviar.'}${settings.timeLimit ? ` El tiempo empieza a contar al comenzar y no se detiene si cierras la página.` : ''}</p>
-         <button class="primary" data-quiz-start="${esc(q.id)}">${attempts.length ? 'Comenzar otro intento' : 'Comenzar evaluación'}</button>`
+         ${settings.needsCode
+           ? `<form class="real-form quiz-code-form" data-quiz-code="${esc(q.id)}"><label>Código que dio tu docente<input name="password" required autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="30"></label><p class="form-error error" hidden></p><button class="primary">${attempts.length ? 'Comenzar otro intento' : 'Comenzar evaluación'}</button></form>`
+           : `<button class="primary" data-quiz-start="${esc(q.id)}">${attempts.length ? 'Comenzar otro intento' : 'Comenzar evaluación'}</button>`}`
       : attempts.length
         ? '<p class="muted">Ya usaste todos tus intentos.</p>'
         : ''
@@ -500,6 +504,7 @@ async function startQuizAttempt(quizId, extra = {}) {
     )
     .join('');
   document.querySelector('[data-quiz-start]')?.remove();
+  document.querySelector('[data-quiz-code]')?.remove();
   document.querySelector('.exam-intro')?.remove();
   $('#quizAttemptBox').innerHTML = `<form id="quizAttempt" class="quiz-attempt ${exam ? 'is-exam' : ''}">
       <div class="quiz-attempt-head"><strong>Intento ${data.attempt}</strong>${exam?.oneByOne ? '<span id="examProgress" class="muted"></span>' : ''}${data.deadline ? '<span class="quiz-clock" id="quizClock" role="timer"></span>' : ''}</div>
@@ -709,7 +714,7 @@ function examIntroHtml(exam, used) {
     <li>Tus respuestas se guardan mientras contestas: si se cierra la página, vuelve a entrar y continúa donde ibas.</li></ul>
     <form id="examStart" class="real-form">
       ${resuming ? '<p class="real-status">Tienes este examen en curso: continúa donde ibas.</p>' : ''}
-      ${exam.needsPassword && !resuming ? '<label>Contraseña que dio tu docente<input name="password" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="30"></label>' : ''}
+      ${exam.needsPassword && !resuming ? '<label>Código que dio tu docente<input name="password" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="30"></label>' : ''}
       <p class="form-error error" hidden></p>
       <button class="primary">${resuming ? 'Continuar examen' : used ? 'Comenzar otro intento' : 'Comenzar examen'}</button>
     </form></section>`;
@@ -1080,6 +1085,23 @@ document.addEventListener('click', (e) => {
   const nav = e.target.closest('[data-exam-nav]');
   if (nav) examNavigate(nav.dataset.examNav);
   if (e.target.closest('[data-exam-fullscreen]')) enterFullscreen();
+});
+
+// Evaluación (sin modo examen) que pide el código de la sección.
+document.addEventListener('submit', async (e) => {
+  const form = e.target.closest('[data-quiz-code]');
+  if (!form) return;
+  e.preventDefault();
+  const error = form.querySelector('.form-error');
+  const button = form.querySelector('button');
+  button.disabled = true;
+  try {
+    await startQuizAttempt(form.dataset.quizCode, { password: form.password.value.trim() });
+  } catch (err) {
+    error.textContent = err.message;
+    error.hidden = false;
+    button.disabled = false;
+  }
 });
 
 document.addEventListener('click', async (e) => {

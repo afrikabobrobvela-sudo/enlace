@@ -1,9 +1,35 @@
-# Enlace · versión 12.19
+# Enlace · versión 12.20
 
 Plataforma académica independiente para docentes y alumnos de cualquier academia (nació en la Academia de Física de la BUAP), con interfaz inspirada en Brightspace.
 No es el código de D2L Brightspace ni una plataforma oficial de la BUAP.
 
 Esta versión se despliega en **tu propia cuenta de Cloudflare** (Workers + D1 + R2, plan gratuito) y ya no depende de ChatGPT Sites.
+
+## Novedades de la versión 12.20 (accesos, evaluaciones por sección con código)
+
+**Accesos** (Listado de alumnos → «Accesos», o Administración del curso → «Accesos de alumnos y docentes»). Para cada docente y cada alumno del curso muestra:
+- **Inicios de sesión**: veces que entró a Enlace con su cuenta mientras el curso ha estado activo, desde que se creó hasta hoy o hasta que se archivó. Una sesión dura 14 días en cada dispositivo, así que quien no cierra sesión tiene pocos inicios aunque entre a diario.
+- **Ingresos al curso**: veces que abrió el curso. Volver después de 30 minutos cuenta como otro ingreso.
+- La fecha del último inicio de sesión y del último ingreso.
+- Cuántos alumnos entraron en los últimos 7 días y cuántos nunca han entrado.
+
+Tiene filtro por sección, orden (por ejemplo, «Menos ingresos primero» para encontrar a quien no entra) y descarga en CSV. Solo lo ven quienes enseñan el curso y la administración.
+
+Hasta ahora Enlace solo guardaba las sesiones de los últimos 14 días. Desde esta versión guarda cada inicio de sesión, y al publicar copia al historial los inicios que todavía existen. Lo anterior no se puede recuperar, así que los números empiezan a crecer desde hoy.
+
+**Evaluaciones por sección**: en el editor de la evaluación, arriba, está el bloque **«Secciones y horarios»**. En cada sección:
+- marcas si la presenta (las demás no la ven ni les cuenta en la calificación);
+- pones su horario («Se abre», «Se cierra»);
+- opcionalmente, un **código para empezar**. El botón «Generar» crea uno de 6 caracteres fácil de dictar.
+
+Con código, el alumno solo puede empezar si escribe el de **su** sección (el de otra sección no sirve). Tras 10 errores se bloquea hasta que el docente lo desbloquee, igual que la contraseña del examen. El código nunca llega al navegador del alumno. En la página de la evaluación, el docente ve el horario y el código de cada sección. Funciona con o sin modo examen; en modo examen, el código de la sección manda sobre la contraseña general.
+
+Requiere la migración **0027**:
+- crea dos tablas (historial de inicios de sesión e ingresos por curso);
+- agrega una columna a las fechas por sección (el código);
+- copia al historial las sesiones actuales.
+
+No borra ni modifica datos.
 
 ## Novedades de la versión 12.19 (avisos por correo con Gmail)
 
@@ -423,7 +449,7 @@ La pantalla muestra en vivo cuántos se han registrado y quiénes acaban de hace
 
 1. Descarga la versión nueva en una carpeta **nueva** (no encima de la anterior), o `git pull` si trabajas desde GitHub.
 2. Haz un respaldo desde esa carpeta: `npm run respaldo`, y de los archivos desde Enlace (ver *Respaldos*).
-3. Doble clic en `configurar.cmd` (Windows) o `configurar.command` (Mac), o `npm run configurar`. Encuentra tu base `enlace-db` y tu almacenamiento, usa el correo de administración y la dirección `.workers.dev` de la vez anterior (desde la versión 12.11 los recuerda; la primera vez te los pregunta y revisa que el correo ya haya entrado a Enlace), descarga un respaldo, aplica las migraciones pendientes (0003: asistencia y borradores; 0004: registro con QR; 0005: categorías, rúbricas y equipos; 0006: sesiones; 0007: papelera; 0008: registro de docentes; 0009: aviso de privacidad; 0010: periodos y archivo; 0011: prórrogas; 0012: intentos de evaluaciones; 0013: avisos; 0014: historial de calificaciones; 0015: asistencia con código; 0016: modo examen; 0017: usuarios y registro de acciones; 0018: avisos leídos; 0019: seguimiento del contenido; 0020: bloqueo del examen; 0021: examen estricto; 0022: banco de preguntas; 0023: secciones; 0024: foto de perfil; 0025: contenido por sección; 0026: correo de avisos), pregunta la cuenta de Gmail para los avisos (si aún no está) y publica. No cambia tus claves. Al pasar a la versión 12.1 cada persona vuelve a entrar con Google una vez (las sesiones ahora se registran en el servidor).
+3. Doble clic en `configurar.cmd` (Windows) o `configurar.command` (Mac), o `npm run configurar`. Encuentra tu base `enlace-db` y tu almacenamiento, usa el correo de administración y la dirección `.workers.dev` de la vez anterior (desde la versión 12.11 los recuerda; la primera vez te los pregunta y revisa que el correo ya haya entrado a Enlace), descarga un respaldo, aplica las migraciones pendientes (0003: asistencia y borradores; 0004: registro con QR; 0005: categorías, rúbricas y equipos; 0006: sesiones; 0007: papelera; 0008: registro de docentes; 0009: aviso de privacidad; 0010: periodos y archivo; 0011: prórrogas; 0012: intentos de evaluaciones; 0013: avisos; 0014: historial de calificaciones; 0015: asistencia con código; 0016: modo examen; 0017: usuarios y registro de acciones; 0018: avisos leídos; 0019: seguimiento del contenido; 0020: bloqueo del examen; 0021: examen estricto; 0022: banco de preguntas; 0023: secciones; 0024: foto de perfil; 0025: contenido por sección; 0026: correo de avisos; 0027: accesos y código por sección), pregunta la cuenta de Gmail para los avisos (si aún no está) y publica. No cambia tus claves. Al pasar a la versión 12.1 cada persona vuelve a entrar con Google una vez (las sesiones ahora se registran en el servidor).
 
 **No publiques con `npx wrangler deploy` directamente**: el `wrangler.toml` del ZIP trae valores de ejemplo y quedarías sin la cuenta de administración (`npm run deploy` y `npm run db:migrate` ya lo impiden). Si prefieres hacerlo a mano: copia tu `database_id` y tu correo del `wrangler.toml` anterior al nuevo (y `ALLOWED_EMAIL_DOMAINS` si lo usabas) y ejecuta `npm install`, `npm run db:migrate` y `npm run deploy`, **en ese orden**: si publicas antes de migrar, Asistencia y Calificaciones fallarán hasta que apliques la migración.
 
@@ -633,8 +659,9 @@ La cookie de sesión usa el prefijo `__Host-`, que exige conexión segura. Chrom
 - `test-respaldo-archivos.mjs`: respaldo de archivos solo para administración, incremental, con índice; restauración solo de lo que falta y con el tamaño exacto.
 - `test-restaurar.mjs`: la exportación de D1 se reordena y comprueba con el esquema real; `npm run restaurar` solo escribe en bases vacías.
 - `test-bloqueo-examen.mjs`: bloqueo al salir (tolerancia, sin guardar ni enviar mientras está bloqueado, código solo para el docente, 5 intentos, desbloqueo del docente, al retomar tras cerrar el navegador).
+- `test-accesos.mjs`: accesos (historial de inicios que no se borra con las sesiones vencidas, inicios contados solo durante el curso, ingresos con visita nueva tras 30 min y a lo más una escritura cada 5 min, reporte solo para quien enseña).
 - `test-correo.mjs`: avisos por correo (resumen diario por sección y persona, prórrogas, lo ya entregado, preferencia en el perfil, cupo diario sin perder avisos, noticia urgente una sola vez, rutas de administración, mensaje MIME sin inyección de encabezados y la conversación SMTP con un Gmail simulado).
-- `test-secciones.mjs`: secciones (crear sin repetir, alumnos por lista, a mano o de otro curso, fechas de actividades y exámenes por sección con la prórroga encima, examen activo con el cierre de su sección, asistencia por sección, eliminar solo vacías, copia a otro periodo).
+- `test-secciones.mjs`: secciones (evaluación solo para algunas secciones, con horario y código de cada una sin que el código llegue al alumno; crear sin repetir, alumnos por lista, a mano o de otro curso, fechas de actividades y exámenes por sección con la prórroga encima, examen activo con el cierre de su sección, asistencia por sección, eliminar solo vacías, copia a otro periodo).
 - `test-foto.mjs`: foto de perfil (obligatoria para alumnos con `FOTO_OBLIGATORIA`, solo imágenes reales y pequeñas, quién la ve, cambiarla borra la anterior, el docente puede quitarla).
 - `test-banco.mjs`: banco de preguntas (guardar sin duplicar, compartir solo con la propia academia, usar preguntas de un colega en otro curso con su imagen, editar y borrar sin tocar evaluaciones), preguntas al azar por grupo, el alumno sin preguntas antes de contestar e imágenes de preguntas que no cuentan como archivos sin uso.
 - `test-examen-estricto.mjs`: contraseña con bloqueo, plataforma bloqueada mientras contesta (ni otros cursos, materiales, avisos ni archivos), un solo dispositivo (volver a iniciar sesión bloquea y la sesión anterior ya no guarda), opciones aleatorias bien calificadas, imágenes que no se adelantan, capturas registradas, fechas, temporizador fijo y qué ve el alumno al terminar.

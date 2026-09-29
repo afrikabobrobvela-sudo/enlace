@@ -439,6 +439,8 @@ async function sessionCookie(user, env) {
     db
       .prepare('INSERT INTO aula_logins (id,user_id,created,expires) VALUES (?,?,?,?)')
       .bind(sid, user.id, now.toISOString(), new Date(exp * 1000).toISOString()),
+    // Historial permanente (aula_logins solo conserva las sesiones vigentes): cuenta los inicios de sesión.
+    db.prepare('INSERT INTO aula_login_log (id,user_id,at) VALUES (?,?,?)').bind(sid, user.id, now.toISOString()),
   ]);
   const token = await signToken({ uid: user.id, sid, ver: user.session_version ?? 1, exp }, env.SESSION_SECRET);
   return cookie(SESSION_COOKIE, token, SESSION_DAYS * 86400);

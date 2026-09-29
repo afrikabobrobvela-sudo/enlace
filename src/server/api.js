@@ -26,6 +26,7 @@ import {
   integritySummary,
   publicQuestions,
   publicSettings,
+  startCodeOf,
   quizFields,
   questionCount,
   quizInstance,
@@ -36,6 +37,7 @@ import {
 import { bankImageVisible, bankRoutes } from './bank.js';
 import { photoRoutes, servePhoto } from './photos.js';
 import { digestRoutes } from './digest.js';
+import { accessRoutes, recordVisit } from './accesos.js';
 import { mailConfigured } from './mail.js';
 import { quizForStudent, quizWithSectionDates, sectionIdsByName, sectionKey, sectionRoutes, sectionsField, validSection } from './sections.js';
 import { gradingRoutes } from './grading.js';
@@ -133,7 +135,7 @@ export async function api(request, env) {
     assertHasPhoto(route, user, env);
     const ctx = { db: env.DB, env, user, url, request };
     const handler =
-      routes[route] || attendanceRoutes[route] || gradingRoutes[route] || directoryRoutes[route] || privacyRoutes[route] || periodRoutes[route] || dashboardRoutes[route] || reportRoutes[route] || demoRoutes[route] || backupRoutes[route] || userRoutes[route] || bankRoutes[route] || sectionRoutes[route] || photoRoutes[route] || digestRoutes[route];
+      routes[route] || attendanceRoutes[route] || gradingRoutes[route] || directoryRoutes[route] || privacyRoutes[route] || periodRoutes[route] || dashboardRoutes[route] || reportRoutes[route] || demoRoutes[route] || backupRoutes[route] || userRoutes[route] || bankRoutes[route] || sectionRoutes[route] || photoRoutes[route] || digestRoutes[route] || accessRoutes[route];
     if (handler) return await handler(ctx);
     if (request.method === 'GET' && url.pathname.startsWith('/api/file/')) return await downloadFile(ctx, url.pathname.slice(10));
     if (request.method === 'GET' && url.pathname.startsWith('/api/photo/')) return await servePhoto(ctx, url.pathname.slice(11));
@@ -427,6 +429,7 @@ const routes = {
     const a = await access(db, user, courseId);
     const { teach, preview, viewer, member: viewing, attemptUser } = await viewAs(db, a, user, url);
     if (viewing) await viewAudit(db, user, courseId, viewing);
+    await recordVisit(db, a, user); // ingresos al curso (accesos)
     const rows = (
       await all(
         db,
@@ -443,7 +446,7 @@ const routes = {
       `SELECT (SELECT json_group_array(json_object('id',id,'name',name,'position',position))
                 FROM (SELECT * FROM aula_sections WHERE course=?1 ORDER BY position, name)) AS sections,
               (SELECT section FROM aula_members m WHERE m.course=?1 AND m.role='student' AND (m.id=?3 OR (?3 IS NULL AND m.user_id=?2)) LIMIT 1) AS my_section,
-              (SELECT json_group_array(json_object('item',d.item,'section',d.section,'start_at',d.start_at,'due',d.due,'end_at',d.end_at))
+              (SELECT json_group_array(json_object('item',d.item,'section',d.section,'start_at',d.start_at,'due',d.due,'end_at',d.end_at,'code',d.code))
                 FROM aula_section_dates d WHERE d.course=?1 AND (?4 OR d.section=(SELECT section FROM aula_members m
                   WHERE m.course=?1 AND m.role='student' AND (m.id=?3 OR (?3 IS NULL AND m.user_id=?2)) LIMIT 1))) AS dates`,
       courseId,
@@ -1204,11 +1207,13 @@ const routes = {
       let start = await one(db, 'SELECT * FROM aula_attempt_starts WHERE quiz=? AND user_id=? AND attempt=?', quiz.id, user.id, attempt);
       if (!start) {
         assertOpen(quiz); // fechas de disponibilidad: solo para empezar; lo que está en curso lo corta el límite de tiempo
-        // Modo examen: la contraseña (la dicta el docente en el salón) solo se pide al empezar; retomar tras recargar no la pide.
-        if (exam?.password) {
+        // El código de su sección o la contraseña del modo examen (los dicta el docente en el salón) solo se pide al
+        // empezar; retomar tras recargar no lo pide.
+        const code = startCodeOf(quiz.data.settings);
+        if (code) {
           const tries = await one(db, 'SELECT failures FROM aula_exam_tries WHERE quiz=? AND user_id=?', quiz.id, user.id);
-          if ((tries?.failures || 0) >= MAX_PASSWORD_FAILURES) fail('Demasiadas contraseñas equivocadas. Pide a tu docente que te desbloquee.', 429);
-          if (!sameSecret(String(body.password ?? '').trim(), exam.password)) {
+          if ((tries?.failures || 0) >= MAX_PASSWORD_FAILURES) fail('Demasiados códigos equivocados. Pide a tu docente que te desbloquee.', 429);
+          if (!sameSecret(String(body.password ?? '').trim(), code)) {
             await run(
               db,
               'INSERT INTO aula_exam_tries (quiz,user_id,failures) VALUES (?,?,1) ON CONFLICT(quiz,user_id) DO UPDATE SET failures=failures+1',
@@ -1216,7 +1221,7 @@ const routes = {
               user.id,
             );
             const left = MAX_PASSWORD_FAILURES - (tries?.failures || 0) - 1;
-            fail(left > 0 ? `Contraseña incorrecta. Te ${left === 1 ? 'queda 1 intento' : `quedan ${left} intentos`}.` : 'Demasiadas contraseñas equivocadas. Pide a tu docente que te desbloquee.', left > 0 ? 400 : 429);
+            fail(left > 0 ? `Código incorrecto. Te ${left === 1 ? 'queda 1 intento' : `quedan ${left} intentos`}.` : 'Demasiados códigos equivocados. Pide a tu docente que te desbloquee.', left > 0 ? 400 : 429);
           }
         }
         const place = exam ? examPlaceCheck(quiz, body.location, String(body.locationError || '')) : { flag: '', distance: null };
