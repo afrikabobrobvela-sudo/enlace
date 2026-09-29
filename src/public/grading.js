@@ -140,8 +140,10 @@ const countedQuizzes = () => {
 };
 
 function studentGrade(memberId, { final = false } = {}) {
-  const tasks = records('task');
-  const quizzes = countedQuizzes();
+  // Solo lo dirigido a su sección (lo de otras secciones no le cuenta).
+  const member = current.members.find((m) => m.id === memberId);
+  const tasks = records('task').filter((t) => itemApplies(t, member));
+  const quizzes = countedQuizzes().filter((q) => itemApplies(q, member));
   return computeGrade({
     quizzes,
     quizGrades: new Map(quizzes.map((q) => [q.id, quizScore(q, memberId)])),

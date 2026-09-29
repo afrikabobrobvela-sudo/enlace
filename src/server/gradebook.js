@@ -7,6 +7,7 @@
 
 import { all, fail, isoDate, nowIso, one, optionalText, parseJson, run, text } from './http.js';
 import { withSectionDates } from './sections.js';
+import { sectionSql, taskSections } from './published.js';
 
 // ---- Conversión fila → registro --------------------------------------------------------------
 
@@ -35,6 +36,7 @@ export function taskRecord(row) {
       points: row.points ?? 1,
       rubric: row.rubric ?? null,
       groupCategory: row.group_category || '',
+      sections: taskSections(row.sections),
     },
   };
 }
@@ -125,7 +127,9 @@ export async function courseGradebook(db, course, { teacher, userId, memberId = 
          SELECT t.*, e.due AS ext_due, e.end_at AS ext_end, d.start_at AS sec_start, d.due AS sec_due, d.end_at AS sec_end FROM aula_tasks t
          LEFT JOIN aula_extensions e ON e.task=t.id AND e.member=(SELECT id FROM me)
          LEFT JOIN aula_section_dates d ON d.item=t.id AND d.section=(SELECT section FROM me)
-         WHERE t.course=?1 AND t.deleted_at IS NULL ORDER BY t.created`,
+         WHERE t.course=?1 AND t.deleted_at IS NULL
+           AND (NOT EXISTS (SELECT 1 FROM me) OR ${sectionSql('t.sections', '(SELECT section FROM me)')})
+         ORDER BY t.created`,
         course,
         userId,
         memberId,
@@ -290,6 +294,7 @@ export async function saveTask(db, { course, userId, id, revision, fields }) {
     fields.end,
     fields.rubric,
     fields.groupCategory,
+    fields.sections?.length ? JSON.stringify(fields.sections) : '',
   ];
   if (id) {
     const current = await loadTask(db, id, course);
@@ -297,7 +302,7 @@ export async function saveTask(db, { course, userId, id, revision, fields }) {
     const result = await run(
       db,
       `UPDATE aula_tasks SET title=?,body=?,visible=?,submission_mode=?,max_files=?,extensions=?,file_ids=?,
-         allow_resubmit=?,due=?,start_at=?,end_at=?,rubric=?,group_category=?,revision=revision+1,updated=?
+         allow_resubmit=?,due=?,start_at=?,end_at=?,rubric=?,group_category=?,sections=?,revision=revision+1,updated=?
        WHERE id=? AND course=? AND revision=?`,
       ...values,
       now,
@@ -312,7 +317,7 @@ export async function saveTask(db, { course, userId, id, revision, fields }) {
   await run(
     db,
     `INSERT INTO aula_tasks (id,course,author,title,body,visible,submission_mode,max_files,extensions,file_ids,
-       allow_resubmit,due,start_at,end_at,rubric,group_category,revision,created,updated) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,?,?)`,
+       allow_resubmit,due,start_at,end_at,rubric,group_category,sections,revision,created,updated) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,?,?)`,
     newId,
     course,
     userId,
@@ -407,6 +412,9 @@ export async function saveSubmission(db, { course, user, id, revision, input, va
     member.section || '',
   );
   const task = withExtension(withSectionDates(loaded, dates), dates?.ext_due ? { due: dates.ext_due, end_at: dates.ext_end } : null);
+  // Una actividad de otras secciones no está disponible para este alumno.
+  const sections = taskSections(loaded.sections);
+  if (sections.length && !sections.includes(member.section)) fail('La actividad no está disponible.', 403);
   assertAvailable(task);
 
   const existing = await one(db, 'SELECT * FROM aula_submissions WHERE task=? AND member=?', task.id, member.id);

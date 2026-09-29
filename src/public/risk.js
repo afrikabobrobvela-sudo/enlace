@@ -9,7 +9,8 @@ function riskReport({ students, tasks, submissions, averages, attendance, now = 
   return students
     .map((member) => {
       // Vencidas para este alumno (con su prórroga, si la tiene).
-      const overdue = tasks.filter((t) => t.data.visible !== false && dueOf(t, member.id) && Date.parse(dueOf(t, member.id)) < now);
+      // Solo actividades dirigidas a su sección (si la actividad es para algunas secciones).
+      const overdue = tasks.filter((t) => t.data.visible !== false && (!t.data.sections?.length || t.data.sections.includes(member.section)) && dueOf(t, member.id) && Date.parse(dueOf(t, member.id)) < now);
       const mine = submissions.filter((s) => s.data.member === member.id);
       const done = (task) => mine.some((s) => s.data.task === task.id && (s.data.submitted || (s.data.grade !== null && s.data.grade !== undefined)));
       const missing = overdue.filter((task) => !done(task));

@@ -57,7 +57,7 @@ export const periodRoutes = {
     const period = optionalText(body.period, 60);
     const keepDates = body.keepDates === true;
 
-    const [records, tasks, files, categories] = await Promise.all([
+    const [records, tasks, files, categories, sections] = await Promise.all([
       all(
         db,
         `SELECT * FROM aula_records WHERE course=? AND deleted_at IS NULL AND kind IN (${COPY_KINDS.map(() => '?').join(',')}) ORDER BY created`,
@@ -67,6 +67,7 @@ export const periodRoutes = {
       all(db, 'SELECT * FROM aula_tasks WHERE course=? AND deleted_at IS NULL ORDER BY created', source),
       all(db, "SELECT * FROM aula_files WHERE course=? AND scope='material'", source),
       all(db, 'SELECT * FROM aula_grade_categories WHERE course=?', source),
+      all(db, 'SELECT * FROM aula_sections WHERE course=?', source),
     ]);
 
     const id = crypto.randomUUID();
@@ -77,6 +78,9 @@ export const periodRoutes = {
     for (const r of records) map.set(r.id, r.id === 'courseguide:' + source ? 'courseguide:' + id : crypto.randomUUID());
     for (const t of tasks) map.set(t.id, crypto.randomUUID());
     for (const c of categories) map.set(c.id, crypto.randomUUID());
+    // Secciones nuevas: lo dirigido a una sección queda dirigido a la misma sección del curso copiado.
+    for (const x of sections) map.set(x.id, crypto.randomUUID());
+    const sectionRows = sections.map((x) => ({ id: map.get(x.id), name: x.name, position: x.position }));
 
     const clearDates = (data) => (keepDates ? data : { ...data, start: '', end: '', due: '' });
     const recordRows = records.map((r) => {
@@ -98,6 +102,7 @@ export const periodRoutes = {
       end_at: keepDates ? t.end_at : '',
       weight: t.weight,
       category: t.category ? map.get(t.category) ?? null : null,
+      sections: remap(t.sections || '', map),
       points: t.points,
       rubric: t.rubric,
     }));
@@ -124,9 +129,9 @@ export const periodRoutes = {
       db
         .prepare(
           `INSERT INTO aula_sections (id,course,name,position,created)
-           SELECT lower(hex(randomblob(16))),?1,name,position,?2 FROM aula_sections WHERE course=?3`,
+           SELECT json_extract(value,'$.id'), ?1, json_extract(value,'$.name'), json_extract(value,'$.position'), ?2 FROM json_each(?3)`,
         )
-        .bind(id, now, source),
+        .bind(id, now, JSON.stringify(sectionRows)),
       db
         .prepare(
           `INSERT INTO aula_grade_categories (id,course,name,weight,source,position,updated)
@@ -144,13 +149,13 @@ export const periodRoutes = {
       db
         .prepare(
           `INSERT INTO aula_tasks (id,course,author,title,body,visible,submission_mode,max_files,extensions,file_ids,allow_resubmit,
-             due,start_at,end_at,weight,category,points,rubric,group_category,revision,created,updated)
+             due,start_at,end_at,weight,category,points,rubric,group_category,sections,revision,created,updated)
            SELECT json_extract(value,'$.id'), ?1, ?2, json_extract(value,'$.title'), json_extract(value,'$.body'),
                   json_extract(value,'$.visible'), json_extract(value,'$.submission_mode'), json_extract(value,'$.max_files'),
                   json_extract(value,'$.extensions'), json_extract(value,'$.file_ids'), json_extract(value,'$.allow_resubmit'),
                   json_extract(value,'$.due'), json_extract(value,'$.start_at'), json_extract(value,'$.end_at'),
                   json_extract(value,'$.weight'), json_extract(value,'$.category'), json_extract(value,'$.points'),
-                  json_extract(value,'$.rubric'), '', 1, ?3, ?3 FROM json_each(?4)`,
+                  json_extract(value,'$.rubric'), '', coalesce(json_extract(value,'$.sections'),''), 1, ?3, ?3 FROM json_each(?4)`,
         )
         .bind(id, user.id, now, JSON.stringify(taskRows)),
       db

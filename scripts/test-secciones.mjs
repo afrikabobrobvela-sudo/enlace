@@ -151,6 +151,54 @@ const abierto = await call('docente', '/api/attendance/checkin/open', { course: 
 assert.match((await call('beto', '/api/attendance/checkin/code', { code: abierto.code, device: 'tel-beto-0001' }, 403)).error, /otra sección/);
 checks += 3;
 
+// ---- Contenido para todas las secciones o solo para algunas ----
+const upload = async (name) => {
+  const res = await api(
+    new Request(`https://t.local/api/upload?course=${c}&scope=material`, {
+      method: 'POST',
+      headers: { cookie: cookies.docente, Origin: 'https://t.local', 'X-Aula-Request': '1', 'x-file-name': name, 'content-type': 'application/pdf' },
+      body: '%PDF-1.4 ' + name,
+    }),
+    env,
+  );
+  assert.equal(res.status, 201);
+  return (await res.json()).id;
+};
+const rec = (kind, data, status = 201) => call('docente', '/api/record', { course: c, kind, data: { visible: true, ...data } }, status);
+await rec('notice', { title: 'X', sections: ['no-existe'] }, 400);
+const aviso = await rec('notice', { title: 'Solo 5BV', body: 'Traigan bata', sections: [bv] });
+const foro = await rec('forum', { title: 'Foro 5AV', sections: [av] });
+const unidad = await rec('module', { title: 'Unidad común' });
+const archivo = await upload('guia-5bv.pdf');
+const material = await rec('material', { title: 'Guía 5BV', module: unidad.id, fileIds: [archivo], sections: [bv] });
+const deAV = await rec('task', { title: 'Tarea 5AV', due: manana, sections: [av] });
+const quizBV = await rec('quiz', { title: 'Quiz 5BV', sections: [bv], questions: [{ type: 'choice', text: '¿?', options: ['a', 'b'], correct: 0 }], settings: { attempts: 1 } });
+const paraTodos = await rec('task', { title: 'Tarea de todos', due: manana });
+assert.deepEqual([aviso.data.sections, deAV.data.sections, paraTodos.data.sections], [[bv], [av], []]);
+const ve = async (who) => new Set((await call(who, '/api/course?id=' + c)).records.map((r) => r.id));
+const deAna2 = await ve('ana');
+const deBeto2 = await ve('beto');
+assert.deepEqual([aviso, foro, material, deAV, quizBV, paraTodos, unidad].map((x) => deAna2.has(x.id)), [false, true, false, true, false, true, true], '5AV');
+assert.deepEqual([aviso, foro, material, deAV, quizBV, paraTodos, unidad].map((x) => deBeto2.has(x.id)), [true, false, true, false, true, true, true], '5BV');
+// El docente (y la vista general como alumno) ven todo.
+assert(await ve('docente').then((v) => [aviso, foro, material, deAV, quizBV].every((x) => v.has(x.id))));
+// Y no se puede llegar por otro camino: publicar en el foro, descargar, entregar, contestar, marcar avance.
+await call('beto', '/api/record', { course: c, kind: 'post', data: { forum: foro.id, title: 'Hola', body: 'x' } }, 403);
+await call('ana', '/api/record', { course: c, kind: 'post', data: { forum: foro.id, title: 'Hola', body: 'x' } }, 201);
+const baja = async (who) => (await api(new Request(`https://t.local/api/file/${archivo}`, { headers: { cookie: cookies[who] } }), env)).status;
+assert.deepEqual([await baja('ana'), await baja('beto')], [403, 200]);
+await call('beto', '/api/record', { course: c, kind: 'submission', data: { task: deAV.id, body: 'no me toca' } }, 403);
+await call('ana', '/api/attempt/start', { course: c, quiz: quizBV.id }, 403);
+await call('ana', '/api/progress', { course: c, record: material.id, action: 'complete' }, 403);
+await call('beto', '/api/progress', { course: c, record: material.id, action: 'complete' });
+// Avisos y pendientes, solo lo suyo.
+const avisosAna = (await call('ana', '/api/notifications')).items.map((i) => i.id);
+assert(!avisosAna.includes(aviso.id) && !avisosAna.includes(material.id));
+assert((await call('beto', '/api/notifications')).items.some((i) => i.id === aviso.id));
+assert(!(await call('beto', '/api/dashboard')).pending.some((p) => p.id === deAV.id));
+assert((await call('ana', '/api/dashboard')).pending.some((p) => p.id === deAV.id));
+checks += 9;
+
 // ---- Eliminar secciones: solo vacías y sin clases ----
 await call('docente', '/api/sections/delete', { course: c, id: bv }, 409);
 const vacia = (await call('docente', '/api/sections', { course: c, name: '5DV' }, 201)).id;
@@ -177,6 +225,10 @@ const copia = (await call('docente', '/api/course/copy', { course: c, name: 'Fí
 const nuevo = await call('docente', '/api/course?id=' + copia);
 assert.deepEqual(nuevo.sections.map((s) => s.name), ['5AV', '5BV', '5CV', '5EV']);
 assert.deepEqual([nuevo.sectionDates.length, nuevo.members.filter((m) => m.role === 'student').length], [0, 0]);
+// Lo dirigido a una sección queda dirigido a la sección equivalente del curso nuevo.
+const bvNuevo = nuevo.sections.find((x) => x.name === '5BV').id;
+assert.deepEqual(nuevo.records.find((r) => r.data.title === 'Solo 5BV').data.sections, [bvNuevo]);
+assert.deepEqual(nuevo.records.find((r) => r.data.title === 'Tarea 5AV').data.sections, [nuevo.sections.find((x) => x.name === '5AV').id]);
 checks++;
 
 assert.deepEqual(store.raw().prepare('PRAGMA foreign_key_check').all(), []);

@@ -176,6 +176,13 @@
       "when": 1790650339351,
       "tag": "0024_foto_perfil",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "6",
+      "when": 1790652439747,
+      "tag": "0025_secciones_contenido",
+      "breakpoints": true
     }
   ]
 }

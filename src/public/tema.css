@@ -938,3 +938,25 @@ td select[data-member-section] { min-width: 110px; margin: 0; padding: 6px 8px; 
 .camera-guide { position: absolute; inset: 12%; border: 2px dashed rgba(255, 255, 255, 0.55); border-radius: 50% 50% 46% 46%; pointer-events: none; }
 .camera-box img:not([hidden]) ~ .camera-guide { display: none; }
 .photo-actions { justify-content: center; flex-wrap: wrap; }
+
+/* Filtro de varias secciones y contenido por sección (12.18) */
+.section-filter { position: relative; display: inline-block; }
+.section-filter > summary { list-style: none; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; padding: 9px 14px; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); background: var(--surface); white-space: nowrap; min-height: 42px; }
+.section-filter > summary::-webkit-details-marker { display: none; }
+.section-filter > summary::after { content: '▾'; color: var(--ink-soft); }
+.section-filter .badge-count { margin: 0; }
+.section-filter-panel { position: absolute; z-index: 30; top: calc(100% + 6px); right: 0; width: min(320px, 90vw); padding: 12px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: 0 12px 32px rgba(21, 37, 54, 0.16); }
+.section-filter-top { display: flex; gap: 8px; }
+.section-filter-top input { flex: 1; min-width: 0; margin: 0; }
+.section-filter-panel ul { list-style: none; margin: 6px 0 10px; padding: 0; max-height: 260px; overflow: auto; border-top: 1px solid var(--line); }
+.section-filter-panel li { padding: 6px 2px; border-bottom: 1px solid var(--line); }
+.section-filter-panel .primary { width: 100%; }
+.section-chooser { margin: 10px 0; }
+.section-chooser-list { display: flex; flex-wrap: wrap; gap: 4px 16px; padding: 4px 0 0 28px; }
+.section-pill { background: #eef6fa !important; color: var(--brand-2) !important; margin-left: 6px; font-size: 0.72rem; vertical-align: middle; }
+.grade-na { color: var(--ink-faint); background: repeating-linear-gradient(135deg, transparent 0 6px, var(--canvas) 6px 7px); text-align: center; }
+@media (max-width: 720px) {
+  .section-filter { width: 100%; }
+  .section-filter > summary { width: 100%; justify-content: space-between; }
+  .section-filter-panel { left: 0; right: auto; width: 100%; }
+}

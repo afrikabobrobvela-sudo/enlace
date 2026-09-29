@@ -1,0 +1,1 @@
+ALTER TABLE `aula_tasks` ADD `sections` text DEFAULT '' NOT NULL;

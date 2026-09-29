@@ -224,7 +224,7 @@ function quizModal(old) {
         <p class="muted">Si otros grupos aún no presentan, desmarca «Qué preguntas acertó» o pon aquí la fecha y hora en que termina el último grupo: hasta entonces nadie ve su calificación ni sus aciertos, y después se muestran solos.</p></fieldset>` +
       examSettingsHtml(settings.exam) +
       quizGradeHtml(old?.data.grade) +
-      visible(old?.data.visible ?? false, old?.data.publishAt || '') +
+      visible(old?.data.visible ?? false, old?.data.publishAt || '', old?.data.sections) +
       `<div id="quizQuestions"></div><datalist id="quizPools"></datalist>
        <div class="quiz-add-row"><button type="button" class="secondary" data-quiz="add-question">＋ Agregar pregunta</button>${bankPickerHtml()}</div>
        <fieldset class="quiz-settings" id="quizDrawBox"></fieldset>
@@ -395,7 +395,7 @@ function renderQuiz() {
   if (!q) return renderQuizzes();
   const settings = quizSettings(q);
   const attempts = records('attempt').filter((a) => a.data.quiz === q.id);
-  const head = `<button class="back" data-section="quizzes">❮ Evaluaciones</button><h1>${esc(q.data.title)}</h1>${richText(q.data.body)}<p class="quiz-meta">${esc(quizSettingsText(settings))}</p>`;
+  const head = `<button class="back" data-section="quizzes">❮ Evaluaciones</button><h1>${esc(q.data.title)}${sectionTag(q)}</h1>${richText(q.data.body)}<p class="quiz-meta">${esc(quizSettingsText(settings))}</p>`;
   if (teaches()) {
     const questions = q.data.questions
       .map((x, i) =>

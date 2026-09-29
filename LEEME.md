@@ -1,15 +1,16 @@
-# Enlace · versión 12.18
+# Enlace · versión 12.18.1
 
 Plataforma académica independiente para docentes y alumnos de cualquier academia (nació en la Academia de Física de la BUAP), con interfaz inspirada en Brightspace.
 No es el código de D2L Brightspace ni una plataforma oficial de la BUAP.
 
 Esta versión se despliega en **tu propia cuenta de Cloudflare** (Workers + D1 + R2, plan gratuito) y ya no depende de ChatGPT Sites.
 
-## Novedades de la versión 12.18 (secciones y foto de perfil)
+## Novedades de la versión 12.18.1 (secciones, contenido por sección y foto de perfil)
 
-Requiere las migraciones **0023** y **0024**:
+Requiere las migraciones **0023**, **0024** y **0025**:
 - **0023** crea dos tablas (secciones y fechas por sección) y agrega una columna a los alumnos y otra a las clases de asistencia. Además, cambia un índice de la asistencia para que dos secciones puedan tener clase a la misma hora. No borra ni modifica datos.
 - **0024** agrega dos columnas a los usuarios (su foto).
+- **0025** agrega una columna a las actividades (para qué secciones son).
 
 `npm run configurar` descarga un respaldo y las aplica.
 
@@ -23,7 +24,12 @@ Requiere las migraciones **0023** y **0024**:
   - al inscribir a uno;
   - al importar la lista: elige la sección para toda la lista, o agrega una fila de encabezado con una columna **Sección** (las que no existan se crean solas).
 - **Juntar cursos que ya tenías separados:** en «Secciones» → «Traer alumnos de otro curso como sección». Solo se copia la lista. Las entregas, calificaciones y asistencia de ese curso se quedan en él; archívalo para conservarlas.
-- **Filtro «Sección»** en las pantallas del docente (se recuerda por curso):
+- **Cada docente registra sus propias secciones** en cada uno de sus cursos (las que tenga, con el nombre que quiera): no hay secciones fijas.
+- **Para todas las secciones o solo para algunas:** al crear o editar una unidad, un material, una noticia, un foro, una actividad o una evaluación, en «¿Para qué secciones?» eliges «Para todas» o marcas algunas.
+  - Los alumnos de otras secciones no lo ven ni les llega el aviso; tampoco pueden descargarlo, entregarlo, contestarlo ni publicar en ese foro (lo revisa el servidor).
+  - En la calificación solo cuenta a los alumnos de esas secciones: en el libro de calificaciones las demás celdas aparecen rayadas y en la exportación dicen «n/a».
+  - En las listas del docente se ve la etiqueta «Solo 5AV, 5BV».
+- **Filtro «Secciones»** (con casillas y buscador, como en Brightspace: elige una, varias o todas, y pulsa «Aplicar») en las pantallas del docente, recordado por curso:
   - Alumnos, Calificaciones (y su exportación, con columna Sección), Envíos de cada actividad, Revisión en secuencia.
   - Asistencia, Progreso, Equipos en lote.
   - Resultados y monitor de los exámenes.
@@ -37,7 +43,7 @@ Requiere las migraciones **0023** y **0024**:
   - Cada clase puede ser de una sección (o de todo el curso); dos secciones pueden tener clase a la misma hora.
   - Al pasar lista solo aparecen sus alumnos, y el registro con código o QR rechaza a alumnos de otra sección.
   - El porcentaje de cada alumno cuenta solo sus clases.
-- **Al copiar el curso a otro periodo** se copian los nombres de las secciones (sin alumnos ni fechas).
+- **Al copiar el curso a otro periodo** se copian los nombres de las secciones (sin alumnos ni fechas), y lo que era solo para una sección sigue siendo solo para ella en el curso nuevo.
 - **Los cursos sin secciones funcionan igual que antes.**
 
 ### Foto de perfil
@@ -388,7 +394,7 @@ La pantalla muestra en vivo cuántos se han registrado y quiénes acaban de hace
 
 1. Descarga la versión nueva en una carpeta **nueva** (no encima de la anterior), o `git pull` si trabajas desde GitHub.
 2. Haz un respaldo desde esa carpeta: `npm run respaldo`, y de los archivos desde Enlace (ver *Respaldos*).
-3. Doble clic en `configurar.cmd` (Windows) o `configurar.command` (Mac), o `npm run configurar`. Encuentra tu base `enlace-db` y tu almacenamiento, usa el correo de administración y la dirección `.workers.dev` de la vez anterior (desde la versión 12.11 los recuerda; la primera vez te los pregunta y revisa que el correo ya haya entrado a Enlace), descarga un respaldo, aplica las migraciones pendientes (0003: asistencia y borradores; 0004: registro con QR; 0005: categorías, rúbricas y equipos; 0006: sesiones; 0007: papelera; 0008: registro de docentes; 0009: aviso de privacidad; 0010: periodos y archivo; 0011: prórrogas; 0012: intentos de evaluaciones; 0013: avisos; 0014: historial de calificaciones; 0015: asistencia con código; 0016: modo examen; 0017: usuarios y registro de acciones; 0018: avisos leídos; 0019: seguimiento del contenido; 0020: bloqueo del examen; 0021: examen estricto; 0022: banco de preguntas; 0023: secciones; 0024: foto de perfil) y publica. No cambia tus claves. Al pasar a la versión 12.1 cada persona vuelve a entrar con Google una vez (las sesiones ahora se registran en el servidor).
+3. Doble clic en `configurar.cmd` (Windows) o `configurar.command` (Mac), o `npm run configurar`. Encuentra tu base `enlace-db` y tu almacenamiento, usa el correo de administración y la dirección `.workers.dev` de la vez anterior (desde la versión 12.11 los recuerda; la primera vez te los pregunta y revisa que el correo ya haya entrado a Enlace), descarga un respaldo, aplica las migraciones pendientes (0003: asistencia y borradores; 0004: registro con QR; 0005: categorías, rúbricas y equipos; 0006: sesiones; 0007: papelera; 0008: registro de docentes; 0009: aviso de privacidad; 0010: periodos y archivo; 0011: prórrogas; 0012: intentos de evaluaciones; 0013: avisos; 0014: historial de calificaciones; 0015: asistencia con código; 0016: modo examen; 0017: usuarios y registro de acciones; 0018: avisos leídos; 0019: seguimiento del contenido; 0020: bloqueo del examen; 0021: examen estricto; 0022: banco de preguntas; 0023: secciones; 0024: foto de perfil; 0025: contenido por sección) y publica. No cambia tus claves. Al pasar a la versión 12.1 cada persona vuelve a entrar con Google una vez (las sesiones ahora se registran en el servidor).
 
 **No publiques con `npx wrangler deploy` directamente**: el `wrangler.toml` del ZIP trae valores de ejemplo y quedarías sin la cuenta de administración (`npm run deploy` y `npm run db:migrate` ya lo impiden). Si prefieres hacerlo a mano: copia tu `database_id` y tu correo del `wrangler.toml` anterior al nuevo (y `ALLOWED_EMAIL_DOMAINS` si lo usabas) y ejecuta `npm install`, `npm run db:migrate` y `npm run deploy`, **en ese orden**: si publicas antes de migrar, Asistencia y Calificaciones fallarán hasta que apliques la migración.
 

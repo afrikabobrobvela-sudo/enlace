@@ -309,6 +309,8 @@ export const tasks = sqliteTable(
     points: real('points').notNull().default(1), // valor dentro de su categoría
     rubric: text('rubric').references(() => rubrics.id, { onDelete: 'set null' }),
     groupCategory: text('group_category').notNull().default(''), // '' = entrega individual
+    // Migración 0025: secciones a las que va dirigida (JSON con ids de aula_sections; '' o '[]' = todas).
+    sections: text('sections').notNull().default(''),
     // Papelera (migración 0007): la actividad eliminada conserva entregas y calificaciones.
     deletedAt: text('deleted_at'),
     deletedBy: text('deleted_by'),

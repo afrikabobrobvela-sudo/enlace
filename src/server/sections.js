@@ -78,12 +78,15 @@ export function quizWithSectionDates(quiz, dates) {
 export async function quizForStudent(db, quiz, userId) {
   const dates = await one(
     db,
-    `SELECT d.start_at, d.end_at FROM aula_members m JOIN aula_section_dates d ON d.section=m.section AND d.item=?1
-     WHERE m.course=?2 AND m.user_id=?3 AND m.role='student' AND m.section<>''`,
+    `SELECT m.section, d.start_at, d.end_at FROM aula_members m LEFT JOIN aula_section_dates d ON d.section=m.section AND d.item=?1
+     WHERE m.course=?2 AND m.user_id=?3 AND m.role='student'`,
     quiz.id,
     quiz.course,
     userId,
   );
+  // Una evaluación de otras secciones no está disponible para este alumno.
+  const sections = quiz.data.sections || [];
+  if (sections.length && !sections.includes(dates?.section)) fail('La evaluación no está disponible.', 403);
   return quizWithSectionDates(quiz, dates);
 }
 
@@ -223,3 +226,14 @@ export const sectionRoutes = {
     return json({ imported: result.meta.changes || 0, section }, 201);
   },
 };
+
+/** Secciones a las que va dirigido un elemento: [] = todas; si no, ids de secciones de este curso. */
+export async function sectionsField(db, course, input) {
+  if (input === undefined || input === null || input === '') return [];
+  if (!Array.isArray(input) || input.length > MAX_SECTIONS) fail('Revisa las secciones elegidas.');
+  const ids = [...new Set(input.map(String))];
+  if (!ids.length) return [];
+  const valid = new Set((await sectionsOf(db, course)).map((s) => s.id));
+  if (ids.some((id) => !valid.has(id))) fail('Una de las secciones elegidas ya no existe. Recarga la página.');
+  return ids.sort();
+}

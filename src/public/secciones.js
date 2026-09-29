@@ -10,32 +10,43 @@ function sectionStorageKey() {
   return 'enlace-seccion-' + (current?.course?.id || '');
 }
 
-/** Sección elegida en el filtro: '' (todas), 'none' (sin sección) o el id de una sección. Se recuerda por curso. */
-function selectedSection() {
-  if (!current || !teaches() || !courseSections().length) return '';
-  let value = '';
+/**
+ * Secciones elegidas en el filtro (varias a la vez, como en Brightspace): [] = todas; 'none' = alumnos sin sección.
+ * Se recuerdan por curso en este navegador.
+ */
+function selectedSections() {
+  if (!current || !teaches() || !courseSections().length) return [];
+  let value = [];
   try {
-    value = localStorage.getItem(sectionStorageKey()) || '';
+    const raw = localStorage.getItem(sectionStorageKey()) || '[]';
+    value = raw.startsWith('[') ? JSON.parse(raw) : [raw]; // versiones anteriores guardaban una sola
   } catch {
-    value = '';
+    value = [];
   }
-  return value === SECTION_NONE || courseSections().some((s) => s.id === value) ? value : '';
+  const valid = new Set([SECTION_NONE, ...courseSections().map((x) => x.id)]);
+  return (Array.isArray(value) ? value : []).filter((id) => valid.has(id));
 }
 
-function setSelectedSection(value) {
+/** La sección elegida si es exactamente una (para proponerla al crear una clase o inscribir), si no ''. */
+function selectedSection() {
+  const chosen = selectedSections();
+  return chosen.length === 1 && chosen[0] !== SECTION_NONE ? chosen[0] : '';
+}
+
+function setSelectedSections(list) {
   try {
-    if (value) localStorage.setItem(sectionStorageKey(), value);
+    if (list.length) localStorage.setItem(sectionStorageKey(), JSON.stringify(list));
     else localStorage.removeItem(sectionStorageKey());
   } catch {
     // Sin almacenamiento (ventana privada): el filtro dura hasta recargar.
   }
 }
 
-/** ¿Este alumno está en la sección elegida? */
+/** ¿Este alumno está en alguna de las secciones elegidas? */
 function inSelectedSection(member) {
-  const chosen = selectedSection();
-  if (!chosen) return true;
-  return chosen === SECTION_NONE ? !member?.section : member?.section === chosen;
+  const chosen = selectedSections();
+  if (!chosen.length) return true;
+  return chosen.includes(member?.section || SECTION_NONE);
 }
 
 /** Alumnos que se ven con el filtro de sección actual (para quien enseña). */
@@ -46,30 +57,56 @@ function studentsInView() {
 /** ¿La clase es para este alumno? (las de todo el curso son para todos). */
 const sessionApplies = (session, member) => !session.section || session.section === member?.section;
 
-/** Clases que se ven con el filtro de sección: las de esa sección y las de todo el curso. */
+/** Clases que se ven con el filtro de sección: las de las secciones elegidas y las de todo el curso. */
 function sessionsInView(sessions) {
-  const chosen = selectedSection();
-  if (!chosen) return sessions;
-  return sessions.filter((s) => !s.section || (chosen !== SECTION_NONE && s.section === chosen));
+  const chosen = selectedSections();
+  if (!chosen.length) return sessions;
+  return sessions.filter((s) => !s.section || chosen.includes(s.section));
 }
 
-/** Filtro de sección para las pantallas de quien enseña (nada si el curso no tiene secciones). */
+/** ¿Un elemento (actividad, evaluación…) va dirigido a la sección de este alumno? Vacío = a todas. */
+const itemApplies = (record, member) => !record?.data?.sections?.length || record.data.sections.includes(member?.section);
+
+/** Filtro de secciones para las pantallas de quien enseña (nada si el curso no tiene secciones). */
 function sectionFilterHtml() {
   if (!teaches() || !courseSections().length) return '';
-  const chosen = selectedSection();
-  const count = (id) => current.members.filter((m) => m.role === 'student' && (id === SECTION_NONE ? !m.section : m.section === id)).length;
-  const none = count(SECTION_NONE);
-  return `<label class="section-filter"><span>Sección</span><select data-section-filter aria-label="Filtrar por sección">
-    <option value="">Todas (${current.members.filter((m) => m.role === 'student').length})</option>
-    ${courseSections().map((s) => `<option value="${esc(s.id)}" ${chosen === s.id ? 'selected' : ''}>${esc(s.name)} (${count(s.id)})</option>`).join('')}
-    ${none ? `<option value="${SECTION_NONE}" ${chosen === SECTION_NONE ? 'selected' : ''}>Sin sección (${none})</option>` : ''}
-  </select></label>`;
+  const chosen = selectedSections();
+  const students = current.members.filter((m) => m.role === 'student');
+  const count = (id) => students.filter((m) => (id === SECTION_NONE ? !m.section : m.section === id)).length;
+  const options = [...courseSections().map((x) => [x.id, x.name]), ...(count(SECTION_NONE) ? [[SECTION_NONE, 'Sin sección']] : [])];
+  const label = !chosen.length ? 'Todas' : chosen.length === 1 ? (chosen[0] === SECTION_NONE ? 'Sin sección' : sectionName(chosen[0])) : `${chosen.length} secciones`;
+  return `<details class="section-filter" data-section-picker>
+    <summary><span class="muted">Secciones:</span> <b>${esc(label)}</b>${chosen.length ? ` <span class="badge-count">${chosen.length}</span>` : ''}</summary>
+    <div class="section-filter-panel" role="group" aria-label="Filtrar por secciones">
+      <div class="section-filter-top"><button type="button" class="secondary" data-section-clear>Borrar</button>
+        <input type="search" data-section-search placeholder="Buscar…" aria-label="Buscar sección"></div>
+      <p class="muted">${chosen.length ? `${chosen.length} ${chosen.length === 1 ? 'seleccionada' : 'seleccionadas'}` : `Todas las secciones (${students.length} alumnos)`}</p>
+      <ul>${options
+        .map(([id, name]) => `<li data-section-option="${esc(name.toLowerCase())}"><label class="check-label"><input type="checkbox" value="${esc(id)}" ${chosen.includes(id) ? 'checked' : ''}> ${esc(name)} <span class="muted">(${count(id)})</span></label></li>`)
+        .join('')}</ul>
+      <button type="button" class="primary" data-section-apply>Aplicar</button>
+    </div></details>`;
 }
 
-document.addEventListener('change', (e) => {
-  if (!e.target.matches('[data-section-filter]')) return;
-  setSelectedSection(e.target.value);
-  render();
+document.addEventListener('click', (e) => {
+  const picker = e.target.closest('[data-section-picker]');
+  if (!picker) return;
+  if (e.target.closest('[data-section-clear]')) {
+    setSelectedSections([]);
+    return render();
+  }
+  if (e.target.closest('[data-section-apply]')) {
+    setSelectedSections([...picker.querySelectorAll('input[type=checkbox]:checked')].map((x) => x.value));
+    render();
+  }
+});
+document.addEventListener('input', (e) => {
+  if (!e.target.matches('[data-section-search]')) return;
+  const term = e.target.value.trim().toLowerCase();
+  e.target.closest('[data-section-picker]').querySelectorAll('[data-section-option]').forEach((li) => (li.hidden = Boolean(term) && !li.dataset.sectionOption.includes(term)));
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && e.target.matches('[data-section-search]')) e.preventDefault();
 });
 
 /** Fechas de un elemento para la sección de un alumno (quien enseña recibe todas en `current.sectionDates`). */
@@ -228,4 +265,40 @@ function sectionDatesSummary(itemId) {
   return `<p class="section-dates-note">Fechas por sección: ${dates
     .map((d) => `<b>${esc(sectionName(d.section))}</b> ${[d.start_at ? 'desde ' + fmt(d.start_at) : '', d.due ? 'vence ' + fmt(d.due) : '', d.end_at ? 'cierra ' + fmt(d.end_at) : ''].filter(Boolean).map(esc).join(', ')}`)
     .join(' · ')}</p>`;
+}
+
+// ---- ¿Para qué secciones es? (unidades, materiales, noticias, foros, actividades y evaluaciones) ----------------
+
+/** Selector en los editores (junto a «Visible para alumnos»). Nada si el curso no tiene secciones. */
+function sectionChooserHtml(sections = []) {
+  if (!teaches() || !courseSections().length) return '';
+  const some = sections.length > 0;
+  return `<fieldset class="section-chooser" data-section-chooser><legend>¿Para qué secciones?</legend>
+    <label class="check-label"><input type="radio" name="sectionsMode" value="all" ${some ? '' : 'checked'}> Para todas las secciones</label>
+    <label class="check-label"><input type="radio" name="sectionsMode" value="some" ${some ? 'checked' : ''}> Solo para algunas:</label>
+    <div class="section-chooser-list" ${some ? '' : 'hidden'}>${courseSections()
+      .map((x) => `<label class="check-label"><input type="checkbox" name="forSection" value="${esc(x.id)}" ${sections.includes(x.id) ? 'checked' : ''}> ${esc(x.name)}</label>`)
+      .join('')}</div>
+    <p class="muted">Los alumnos de otras secciones no lo ven, no les llega el aviso y no les cuenta en la calificación.</p></fieldset>`;
+}
+
+/** Lee el selector: [] = todas. */
+function readSectionChooser(box) {
+  if (box.querySelector('input[name="sectionsMode"]:checked')?.value !== 'some') return [];
+  const ids = [...box.querySelectorAll('input[name="forSection"]:checked')].map((x) => x.value);
+  if (!ids.length) throw new Error('Elige al menos una sección, o marca «Para todas las secciones».');
+  return ids;
+}
+
+document.addEventListener('change', (e) => {
+  if (!e.target.matches('[data-section-chooser] input[name="sectionsMode"]')) return;
+  const list = e.target.closest('[data-section-chooser]').querySelector('.section-chooser-list');
+  list.hidden = e.target.value !== 'some';
+});
+
+/** Etiqueta «Solo 5AV, 5BV» para quien enseña en listas y encabezados. */
+function sectionTag(record) {
+  const sections = record?.data?.sections || [];
+  if (!teaches() || !sections.length) return '';
+  return ` <span class="role-pill section-pill">Solo ${esc(sections.map(sectionName).filter(Boolean).join(', '))}</span>`;
 }

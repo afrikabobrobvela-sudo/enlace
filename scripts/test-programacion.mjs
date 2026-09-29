@@ -141,6 +141,7 @@ await call('docente', '/api/grade', { course: c, task: examen.id, member: member
 // Cálculo real de la interfaz (grading.js) con los datos que recibe el docente.
 curso = await call('docente', '/api/course?id=' + c);
 const context = vm.createContext({ document: { addEventListener() {} }, Date, Math, Number, Map, Set });
+vm.runInContext(readFileSync('src/public/secciones.js', 'utf8'), context);
 vm.runInContext(readFileSync('src/public/grading.js', 'utf8'), context);
 vm.runInContext('var current, attendanceData = null; var records = (k) => current.records.filter((r) => r.kind === k); var dueFor = (t) => t.data.due; var gradeOf = (m, t) => records("submission").find((s) => s.data.member === m && s.data.task === t);', context);
 context.courseData = curso;

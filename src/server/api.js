@@ -11,7 +11,7 @@ import { reportRoutes } from './reports.js';
 import { demoRoutes } from './demo.js';
 import { backupRoutes } from './backup.js';
 import { userRoutes } from './users.js';
-import { isPublished, publishAtField, publishedSql, SCHEDULABLE_KINDS } from './published.js';
+import { forSection, isPublished, publishAtField, publishedSql, SCHEDULABLE_KINDS, sectionSql } from './published.js';
 import {
   MAX_EXAM_EVENTS,
   MAX_PASSWORD_FAILURES,
@@ -35,7 +35,7 @@ import {
 } from './quizzes.js';
 import { bankImageVisible, bankRoutes } from './bank.js';
 import { photoRoutes, servePhoto } from './photos.js';
-import { quizForStudent, quizWithSectionDates, sectionIdsByName, sectionKey, sectionRoutes, sectionsOf, validSection } from './sections.js';
+import { quizForStudent, quizWithSectionDates, sectionIdsByName, sectionKey, sectionRoutes, sectionsField, validSection } from './sections.js';
 import { gradingRoutes } from './grading.js';
 import { clearSessionCookie, identity, lastLogins, revokeAllStatements } from './auth.js';
 import {
@@ -437,6 +437,7 @@ const routes = {
       db,
       `SELECT (SELECT json_group_array(json_object('id',id,'name',name,'position',position))
                 FROM (SELECT * FROM aula_sections WHERE course=?1 ORDER BY position, name)) AS sections,
+              (SELECT section FROM aula_members m WHERE m.course=?1 AND m.role='student' AND (m.id=?3 OR (?3 IS NULL AND m.user_id=?2)) LIMIT 1) AS my_section,
               (SELECT json_group_array(json_object('item',d.item,'section',d.section,'start_at',d.start_at,'due',d.due,'end_at',d.end_at))
                 FROM aula_section_dates d WHERE d.course=?1 AND (?4 OR d.section=(SELECT section FROM aula_members m
                   WHERE m.course=?1 AND m.role='student' AND (m.id=?3 OR (?3 IS NULL AND m.user_id=?2)) LIMIT 1))) AS dates`,
@@ -448,9 +449,11 @@ const routes = {
     const sections = JSON.parse(sectionRow?.sections || '[]');
     const sectionDates = JSON.parse(sectionRow?.dates || '[]');
     const myDates = teach ? new Map() : new Map(sectionDates.map((d) => [d.item, d]));
-    // Para el alumno: visible y con su fecha de publicación cumplida (publicación programada).
+    // Sección del alumno (null en la vista general «como alumno»: ahí se ve lo de todas las secciones).
+    const mySection = teach || (!viewer && !viewing) ? null : sectionRow?.my_section ?? '';
+    // Para el alumno: visible, con su fecha de publicación cumplida y dirigido a su sección.
     const now = nowIso();
-    const visible = (r) => isPublished(r, now);
+    const visible = (r) => isPublished(r, now) && forSection(r.data.sections, mySection);
     const byId = new Map(rows.map((r) => [r.id, r]));
     const content = teach
       ? rows
@@ -565,12 +568,14 @@ const routes = {
     const a = await access(db, user, body.course);
     if (a.teach) fail('El seguimiento es de los alumnos.', 403);
     if (!['open', 'complete', 'undo'].includes(body.action)) fail('Acción no válida.');
-    const member = await one(db, "SELECT id FROM aula_members WHERE course=? AND user_id=? AND role='student'", body.course, user.id);
+    const member = await one(db, "SELECT id, section FROM aula_members WHERE course=? AND user_id=? AND role='student'", body.course, user.id);
     if (!member) fail('No estás inscrito como alumno en este curso.', 403);
     const material = await contentRecord(db, body.record, body.course, 'material');
     const unit = material.data.module ? await one(db, "SELECT data FROM aula_records WHERE id=? AND course=? AND deleted_at IS NULL", material.data.module, body.course) : null;
     const now = nowIso();
-    if (!isPublished(material, now) || (material.data.module && !isPublished(unit && { data: JSON.parse(unit.data) }, now))) fail('Material no disponible.', 403);
+    const unitData = unit && { data: JSON.parse(unit.data) };
+    const seen = (r) => isPublished(r, now) && forSection(r.data.sections, member.section);
+    if (!seen(material) || (material.data.module && !seen(unitData))) fail('Material no disponible.', 403);
     const completed = body.action === 'complete' ? now : null;
     await run(
       db,
@@ -873,6 +878,7 @@ const routes = {
       requireTeacher(a);
       const fields = taskFields(input, []);
       fields.fileIds = await validateFiles(db, input.fileIds, body.course, user, 'material');
+      fields.sections = await sectionsField(db, body.course, input.sections);
       const { record, created } = await saveTask(db, {
         course: body.course,
         userId: user.id,
@@ -916,6 +922,9 @@ const routes = {
       if (SCHEDULABLE_KINDS.includes(kind)) {
         const publishAt = publishAtField(input.publishAt);
         if (publishAt) data.publishAt = publishAt;
+        // Para qué secciones es (vacío = todas).
+        const sections = await sectionsField(db, body.course, input.sections);
+        if (sections.length) data.sections = sections;
       }
       if (kind === 'module') data.fileIds = await validateFiles(db, input.fileIds, body.course, user, 'material');
       if (kind === 'material') {
@@ -970,7 +979,8 @@ const routes = {
       const forum = await contentRecord(db, input.forum, body.course, 'forum');
       if (!a.teach && !isPublished(forum)) fail('Foro no disponible.', 403);
       // Un alumno publica con su nombre de la lista del curso, no con el de su cuenta.
-      const enrolled = a.teach ? null : await one(db, "SELECT name FROM aula_members WHERE course=? AND user_id=? AND role='student'", body.course, user.id);
+      const enrolled = a.teach ? null : await one(db, "SELECT name, section FROM aula_members WHERE course=? AND user_id=? AND role='student'", body.course, user.id);
+      if (!a.teach && !forSection(forum.data.sections, enrolled?.section || '')) fail('Foro no disponible.', 403);
       data = { forum: forum.id, title: text(input.title, 200), body: text(input.body, 15000), name: enrolled?.name || user.name };
     }
     const saved = await saveContentRecord(db, previous, data, user.id, body.course, kind);
@@ -1652,6 +1662,9 @@ const routes = {
 
 // ---- Descarga de archivos ----------------------------------------------------------------------
 
+/** Sección del alumno que descarga (en SQL, con ?1 = curso y ?4 = usuario). */
+const MY_SECTION = "(SELECT section FROM aula_members WHERE course=?1 AND user_id=?4 AND role='student')";
+
 async function downloadFile({ db, env, user, url, request }, id) {
   const file = await one(db, 'SELECT * FROM aula_files WHERE id=?', id);
   if (!file) fail('Archivo no encontrado.', 404);
@@ -1687,18 +1700,21 @@ async function downloadFile({ db, env, user, url, request }, id) {
       file.scope === 'material' &&
       (await one(
         db,
+        // Y dirigido a su sección (lo que es para otras secciones no se descarga).
         `SELECT 1 AS ok FROM aula_records r, json_each(r.data,'$.fileIds') j
          WHERE r.course=?1 AND r.kind IN ('material','module') AND j.value=?2 AND ${publishedSql('r', '?3')}
-           AND r.deleted_at IS NULL
+           AND r.deleted_at IS NULL AND ${sectionSql("json_extract(r.data,'$.sections')", MY_SECTION)}
            AND (r.kind='module' OR coalesce(json_extract(r.data,'$.module'),'')=''
                 OR EXISTS (SELECT 1 FROM aula_records p WHERE p.id=json_extract(r.data,'$.module') AND p.course=?1
-                           AND p.deleted_at IS NULL AND ${publishedSql('p', '?3')}))
+                           AND p.deleted_at IS NULL AND ${publishedSql('p', '?3')} AND ${sectionSql("json_extract(p.data,'$.sections')", MY_SECTION, 'sp')}))
          UNION ALL
          SELECT 1 FROM aula_tasks t, json_each(t.file_ids) j WHERE t.course=?1 AND t.visible=1 AND t.deleted_at IS NULL AND j.value=?2
+           AND ${sectionSql('t.sections', MY_SECTION)}
          UNION ALL
          -- Imagen de una pregunta: evaluación publicada y, si es examen, solo después de empezarlo (no se adelantan preguntas).
          SELECT 1 FROM aula_records r, json_each(r.data,'$.questions') qq
          WHERE r.course=?1 AND r.kind='quiz' AND r.deleted_at IS NULL AND ${publishedSql('r', '?3')} AND json_extract(qq.value,'$.image')=?2
+           AND ${sectionSql("json_extract(r.data,'$.sections')", MY_SECTION)}
            AND (coalesce(json_extract(r.data,'$.settings.exam.enabled'),0)=0
                 OR EXISTS (SELECT 1 FROM aula_attempt_starts s WHERE s.quiz=r.id AND s.user_id=?4))
          LIMIT 1`,

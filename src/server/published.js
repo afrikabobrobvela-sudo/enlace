@@ -19,3 +19,25 @@ export function publishAtField(value) {
   if (!date) fail('Fecha de publicación no válida.');
   return date;
 }
+
+// ---- Contenido por sección (12.18) -----------------------------------------------------------------------
+// Unidades, materiales, noticias, foros y evaluaciones llevan `data.sections`; las actividades, la columna
+// `sections` (JSON). Vacío = para todas las secciones. Un alumno sin sección solo ve lo que es para todas.
+// `section` null = no filtrar (la vista general «como alumno» de quien enseña).
+
+/** ¿Va dirigido a la sección de este alumno? */
+export const forSection = (sections, section) => section === null || section === undefined || !sections?.length || (Boolean(section) && sections.includes(section));
+
+/** Lo mismo en SQL: `json` es una expresión con el arreglo (o NULL/''), `section` la sección del alumno. */
+export const sectionSql = (json, section, alias = 'sx') =>
+  `(coalesce(json_array_length(nullif(${json},'')),0)=0 OR EXISTS (SELECT 1 FROM json_each(nullif(${json},'')) ${alias} WHERE ${alias}.value=${section}))`;
+
+/** Arreglo de secciones guardado en una actividad ('' o JSON). */
+export const taskSections = (value) => {
+  try {
+    const list = JSON.parse(value || '[]');
+    return Array.isArray(list) ? list : [];
+  } catch {
+    return [];
+  }
+};
