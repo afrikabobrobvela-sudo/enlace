@@ -64,6 +64,29 @@ function feedbackListHtml(a, q) {
 const pendingResultText = (data) => (data?.releaseAt ? `Verás tu resultado a partir del ${fmt(data.releaseAt)}` : 'Tu docente publicará la calificación.');
 
 const poolTag = (x) => (x.pool ? ` <span class="quiz-pool-tag">${esc(x.pool)}</span>` : '');
+/** Valor de la pregunta (solo si no es 1 punto). */
+const pointsTag = (x) => (x?.points && x.points !== 1 ? ` <span class="quiz-points-tag">${x.points} pts</span>` : '');
+/** Retroalimentación escrita por el docente (vista del docente). */
+function teacherFeedbackHtml(x) {
+  const letters = x.type === 'multi' ? MULTI_LETTERS : QUIZ_LETTERS;
+  const notes = (x.optionFeedback || []).map((n, k) => (n ? `<li><b>${letters[k]}:</b> ${esc(n)}</li>` : '')).join('');
+  if (!x.explanation && !notes) return '';
+  return `<div class="quiz-explanation">${x.explanation ? `<p><b>Retroalimentación:</b> ${esc(x.explanation)}</p>` : ''}${notes ? `<ul>${notes}</ul>` : ''}</div>`;
+}
+/** Revisión de un intento para el alumno: ✓/✗ por pregunta con la retroalimentación del docente (12.23). */
+function attemptReviewHtml(a, q, texts) {
+  return `<ul class="quiz-detail">${(a.data.details || [])
+    .map((d) => {
+      const mark = creditMark(d);
+      const question = q.data.questions[d.index];
+      const text = texts?.[d.index] ?? (question?.text || '').replace(/\{([A-Za-z_]\w*)\}/g, (m, name) => d.values?.[name] ?? m);
+      const notes = [d.explanation, ...(d.optionNotes || [])].filter(Boolean);
+      return `<li class="${mark.cls}">${mark.icon} ${esc(question?.type === 'fill' ? String(text).replace(/\[\[[^\]]*\]\]/g, '___') : text)}${mark.note}${pointsTag(question)}${
+        notes.length ? `<div class="quiz-explanation">${notes.map((n) => `<p>${esc(n)}</p>`).join('')}</div>` : ''
+      }${d.feedback ? `<div class="quiz-explanation is-teacher"><p><b>Comentario de tu docente:</b> ${esc(d.feedback)}</p></div>` : ''}</li>`;
+    })
+    .join('')}</ul>`;
+}
 
 /** Imagen de una pregunta (se sirve con la misma revisión de permisos que cualquier archivo del curso). */
 const quizImageHtml = (id, n) => (id ? `<img class="quiz-image" src="/api/file/${esc(id)}?preview=1" alt="Imagen de la pregunta ${n + 1}">` : '');
@@ -118,6 +141,7 @@ function quizQuestionHtml(q, i) {
     <legend>Pregunta ${i + 1}</legend>
     <div class="quiz-question-head">
       <label>Tipo<select data-f="type">${QUESTION_TYPES.map(([value, label]) => `<option value="${value}" ${(q.type || 'choice') === value ? 'selected' : ''}>${label}</option>`).join('')}</select></label>
+      <label class="quiz-points-field">Puntos<input data-f="points" type="number" min="0.1" max="100" step="0.1" value="${esc(q.points ?? 1)}" aria-label="Puntos de la pregunta ${i + 1}"></label>
       ${quizEditorMode === 'quiz' ? `<label>Grupo para sortear (opcional)<input data-f="pool" list="quizPools" maxlength="80" value="${esc(q.pool || '')}" placeholder="Por ejemplo: Cinemática"></label>` : ''}
       ${quizDraft.length > 1 ? `<button type="button" class="danger-link" data-quiz="remove-question">Quitar pregunta</button>` : ''}
     </div>
@@ -129,7 +153,20 @@ function quizQuestionHtml(q, i) {
         : `<label class="secondary quiz-image-add">＋ Imagen (diagrama, gráfica, foto)<input type="file" accept="image/*" data-quiz-image hidden></label>`
     }</div>
     ${body}
+    ${questionFeedbackHtml(q)}
   </fieldset>`;
+}
+
+/** Retroalimentación (12.23): la ve el alumno al revisar su intento, si la evaluación muestra qué preguntas acertó. */
+function questionFeedbackHtml(q) {
+  const options = (q.type || 'choice') === 'choice' || q.type === 'multi' ? q.options || [] : [];
+  const letters = q.type === 'multi' ? MULTI_LETTERS : QUIZ_LETTERS;
+  const notes = q.optionFeedback || [];
+  const open = q.explanation || notes.some(Boolean);
+  return `<details class="quiz-feedback-edit" ${open ? 'open' : ''}><summary>Retroalimentación para el alumno${open ? '' : ' (opcional)'}</summary>
+    <label>Explicación de la pregunta (la ve el alumno al revisar su intento, si activas «Qué preguntas acertó»)<textarea data-f="explanation" rows="2" maxlength="3000" placeholder="Por ejemplo: se usa la segunda ley de Newton, F = m a.">${esc(q.explanation || '')}</textarea></label>
+    ${options.length ? `<div class="quiz-option-notes">${options.map((o, k) => `<label>Si elige ${letters[k]}${o ? ` (${esc(o.slice(0, 40))}${o.length > 40 ? '…' : ''})` : ''}<input data-ofb="${k}" maxlength="1000" value="${esc(notes[k] || '')}" placeholder="Comentario para esta opción (opcional)"></label>`).join('')}</div>` : ''}
+  </details>`;
 }
 
 /** Lee del formulario el estado actual de las preguntas. */
@@ -150,6 +187,12 @@ function readQuizQuestions() {
         })),
     });
     const type = get('type') || 'choice';
+    // Puntos y retroalimentación (12.23): 1 punto no se guarda; los comentarios por opción solo si hay alguno.
+    const points = Number(get('points') || 1);
+    if (points !== 1) image.points = points;
+    if (get('explanation').trim()) image.explanation = get('explanation').trim();
+    const notes = [...box.querySelectorAll('[data-ofb]')].map((input) => input.value.trim());
+    if (notes.some(Boolean)) image.optionFeedback = notes;
     if (isNewType(type)) return { ...image, type, text: get('text'), ...readNewQuestionBody(box, type, i, readNumeric) };
     if (type === 'numeric') return { ...image, type: 'numeric', text: get('text'), ...readNumeric() };
     const options = [...box.querySelectorAll('[data-o]')].map((input) => input.value);
@@ -216,7 +259,7 @@ function quizModal(old) {
   const settings = quizSettings(old);
   quizEditorMode = 'quiz';
   quizDrawCounts = new Map((settings.draw || []).map((d) => [d.pool, d.count]));
-  quizDraft = old ? structuredClone(old.data.questions).map((q) => (q.type === 'numeric' ? q : { ...q, type: 'choice' })) : [blankQuestion()];
+  quizDraft = old ? structuredClone(old.data.questions).map((q) => (q.type ? q : { ...q, type: 'choice' })) : [blankQuestion()];
   modal(
     old ? 'Editar evaluación' : 'Nueva evaluación',
     field('Título', 'title', old?.data.title || '', 'text', 'required') +
@@ -241,10 +284,11 @@ function quizModal(old) {
       examSettingsHtml(settings.exam) +
       quizGradeHtml(old?.data.grade) +
       visible(old?.data.visible ?? false, old?.data.publishAt || '', [], false) +
+      conditionsEditorHtml(old) +
       `<div id="quizQuestions"></div><datalist id="quizPools"></datalist>
-       <div class="quiz-add-row"><button type="button" class="secondary" data-quiz="add-question">＋ Agregar pregunta</button>${bankPickerHtml()}</div>
+       <div class="quiz-add-row"><button type="button" class="secondary" data-quiz="add-question">＋ Agregar pregunta</button>${bankPickerHtml()}${quizImportHtml()}</div>
        <fieldset class="quiz-settings" id="quizDrawBox"></fieldset>
-       <p class="pending-message">Una evaluación con respuestas recibidas no permite modificar las preguntas ni las preguntas al azar.</p>` +
+       <p class="pending-message">Con respuestas recibidas solo puedes corregir las respuestas correctas, los puntos y la retroalimentación: al guardar, se vuelven a calificar todos los intentos. Las preguntas, opciones y preguntas al azar ya no cambian.</p>` +
       (old ? `<p class="modal-danger">${trashButton('quiz', old.id, 'Eliminar evaluación')}</p>` : ''),
     async (f) => {
       const saved = await save(
@@ -273,6 +317,12 @@ function quizModal(old) {
         old,
       );
       await saveSectionDates('quiz', saved.id, readQuizSectionDates(f));
+      const regraded = saved.regraded;
+      if (regraded?.checked) {
+        return `Guardado. Se volvieron a calificar ${regraded.checked === 1 ? 'el intento' : `los ${regraded.checked} intentos`} con las respuestas corregidas: ${
+          regraded.changed ? `cambió el resultado de ${regraded.changed}.` : 'ningún resultado cambió.'
+        }`;
+      }
     },
   );
   renderQuizQuestions();
@@ -353,6 +403,7 @@ function quizEditorAction(action, target) {
   if (action === 'remove-option') {
     const k = Number(target.dataset.option);
     q.options.splice(k, 1);
+    q.optionFeedback?.splice(k, 1);
     if (Array.isArray(q.correct)) q.correct = q.correct.filter((j) => j !== k).map((j) => (j > k ? j - 1 : j));
     else q.correct = q.correct === k ? 0 : q.correct > k ? q.correct - 1 : q.correct;
   }
@@ -400,8 +451,8 @@ document.addEventListener('change', (e) => {
   if (!e.target.matches('#quizQuestions [data-f="type"]')) return;
   quizDraft = readQuizQuestions();
   const i = Number(e.target.closest('[data-question]').dataset.question);
-  const { text, image, pool } = quizDraft[i];
-  quizDraft[i] = { ...blankQuestion(e.target.value), text, ...(image ? { image } : {}), ...(pool ? { pool } : {}) };
+  const { text, image, pool, points, explanation } = quizDraft[i];
+  quizDraft[i] = { ...blankQuestion(e.target.value), text, ...(image ? { image } : {}), ...(pool ? { pool } : {}), ...(points ? { points } : {}), ...(explanation ? { explanation } : {}) };
   renderQuizQuestions();
 });
 
@@ -419,12 +470,12 @@ function renderQuiz() {
     const questions = q.data.questions
       .map((x, i) =>
         isNewType(x.type)
-          ? `<section class="quiz-question"><h3>${i + 1}. ${esc(x.text)}${poolTag(x)} <span class="quiz-type-tag">${QUESTION_TYPE_NAME[x.type]}</span></h3>${quizImageHtml(x.image, i)}${newQuestionAnswerHtml(x)}</section>`
+          ? `<section class="quiz-question"><h3>${i + 1}. ${esc(x.text)}${pointsTag(x)}${poolTag(x)} <span class="quiz-type-tag">${QUESTION_TYPE_NAME[x.type]}</span></h3>${quizImageHtml(x.image, i)}${newQuestionAnswerHtml(x)}${teacherFeedbackHtml(x)}</section>`
           : x.type === 'numeric'
-          ? `<section class="quiz-question"><h3>${i + 1}. ${esc(x.text)}${poolTag(x)}</h3>${quizImageHtml(x.image, i)}<p>Respuesta: <code>${esc(x.answer)}</code> ${x.unit ? esc(x.unit) : ''} · tolerancia ${esc(x.tolerance)} %</p>${
+          ? `<section class="quiz-question"><h3>${i + 1}. ${esc(x.text)}${pointsTag(x)}${poolTag(x)}</h3>${quizImageHtml(x.image, i)}<p>Respuesta: <code>${esc(x.answer)}</code> ${x.unit ? esc(x.unit) : ''} · tolerancia ${esc(x.tolerance)} %</p>${
               x.variables?.length ? `<p class="muted">Datos por alumno: ${x.variables.map((v) => `${esc(v.name)} entre ${esc(v.min)} y ${esc(v.max)}`).join('; ')}</p>` : ''
-            }</section>`
-          : `<section class="quiz-question"><h3>${i + 1}. ${esc(x.text)}${poolTag(x)}</h3>${quizImageHtml(x.image, i)}<ol type="A">${x.options.map((o, j) => `<li>${esc(o)} ${j === x.correct ? '✓' : ''}</li>`).join('')}</ol></section>`,
+            }${teacherFeedbackHtml(x)}</section>`
+          : `<section class="quiz-question"><h3>${i + 1}. ${esc(x.text)}${pointsTag(x)}${poolTag(x)}</h3>${quizImageHtml(x.image, i)}<ol type="A">${x.options.map((o, j) => `<li>${esc(o)} ${j === x.correct ? '✓' : ''}</li>`).join('')}</ol>${teacherFeedbackHtml(x)}</section>`,
       )
       .join('');
     // Resultados por alumno: mejor calificación y número de intentos.
@@ -451,7 +502,7 @@ function renderQuiz() {
     const toReview = attempts.filter((a) => inSelectedSection(memberOfAuthor(a.author))).reduce((n, a) => n + (a.data.pending || 0), 0);
     $('#main').innerHTML = `${head}<div class="toolbar">${button('Editar evaluación', 'edit-quiz', q.id, 'secondary')}${specialAccessButton('quiz', q.id)}${
       essays ? `<button class="${toReview ? 'primary' : 'secondary'}" type="button" data-essay-review="${esc(q.id)}">Revisar respuestas escritas${toReview ? ` (${toReview} por calificar)` : ''}</button>` : ''
-    }<button class="secondary" data-bank-save="${esc(q.id)}">Guardar en el banco</button>${sectionFilterHtml()}</div>${sectionDatesSummary(q.id)}
+    }${attempts.length ? `<button class="secondary" type="button" data-quiz-stats="${esc(q.id)}">Estadísticas</button><button class="secondary" type="button" data-quiz-export="${esc(q.id)}">Exportar a Excel</button>` : ''}<button class="secondary" data-bank-save="${esc(q.id)}">Guardar en el banco</button>${sectionFilterHtml()}</div>${sectionDatesSummary(q.id)}
       ${exam ? `<section class="exam-monitor" id="examMonitor"><p class="muted">Cargando examen en curso…</p></section>` : ''}${drawNote}${questions}
       <h2>Resultados</h2><div class="table-wrap"><table><thead><tr><th>Alumno</th><th>Mejor calificación</th><th>Intentos</th><th>Último envío</th>${exam ? '<th>Integridad</th>' : ''}</tr></thead><tbody>${
         rows
@@ -480,19 +531,19 @@ function renderQuiz() {
   const history = attempts.length
     ? `<div class="quiz-result">${best === null ? `<p>${pendingResultText(attempts[0]?.data)}</p>` : `<p>Mejor calificación: <b>${best.toFixed(2)} / 10</b></p>`}<ul>${attempts
         .sort((a, b) => (a.data.attempt || 1) - (b.data.attempt || 1))
-        .map((a) => `<li>Intento ${a.data.attempt || 1}: ${a.data.score === null || a.data.score === undefined ? 'enviado' : `${a.data.score.toFixed(2)} / 10 · ${a.data.correct} de ${a.data.total} correctas`} · ${fmt(a.created)}${a.data.pending ? ` · ${pendingReviewText(a.data.pending)}` : ''}${feedbackListHtml(a, q)}</li>`)
+        .map(
+          (a) =>
+            `<li>Intento ${a.data.attempt || 1}: ${a.data.score === null || a.data.score === undefined ? 'enviado' : `${a.data.score.toFixed(2)} / 10 · ${a.data.correct} de ${a.data.total} correctas`} · ${fmt(a.created)}${a.data.pending ? ` · ${pendingReviewText(a.data.pending)}` : ''}${
+              a.data.details?.length ? `<details class="quiz-review"><summary>Ver revisión</summary>${attemptReviewHtml(a, q)}</details>` : feedbackListHtml(a, q)
+            }</li>`,
+        )
         .join('')}</ul></div>`
     : '';
   const last = quizLastResult?.quiz === q.id ? quizLastResult.result : null;
   const lastHtml = last?.data.hidden
     ? `<div class="quiz-result is-new"><p><b>Tu evaluación se envió.</b> ${pendingResultText(last.data)}</p></div>`
     : last
-    ? `<div class="quiz-result is-new"><p>Resultado del intento ${last.data.attempt}: <b>${last.data.score.toFixed(2)} / 10</b> (${last.data.correct} de ${last.data.total} correctas)${last.data.pending ? `. ${pendingReviewText(last.data.pending)}` : ''}</p><ul class="quiz-detail">${(last.data.details || [])
-        .map((d) => {
-          const mark = creditMark(d);
-          return `<li class="${mark.cls}">${mark.icon} ${esc(quizLastResult.texts?.[d.index] ?? (q.data.questions[d.index]?.text || '').replace(/\{([A-Za-z_]\w*)\}/g, (m, name) => d.values?.[name] ?? m))}${mark.note}</li>`;
-        })
-        .join('')}</ul></div>`
+    ? `<div class="quiz-result is-new"><p>Resultado del intento ${last.data.attempt}: <b>${last.data.score.toFixed(2)} / 10</b> (${last.data.correct} de ${last.data.total} correctas)${last.data.pending ? `. ${pendingReviewText(last.data.pending)}` : ''}</p>${attemptReviewHtml(last, q, quizLastResult.texts)}${last.data.details ? '' : feedbackListHtml(last, q)}</div>`
     : '';
   const exam = settings.exam?.enabled ? settings.exam : null;
   // Fechas de disponibilidad: antes de abrir o después de cerrar no hay botón para empezar.
@@ -523,7 +574,7 @@ async function startQuizAttempt(quizId, extra = {}) {
   const required = exam ? '' : 'required'; // en el examen, lo que quede sin contestar cuenta como incorrecto
   const questions = data.questions
     .map(
-      (x, n) => `<fieldset class="quiz-question" data-index="${x.index}" data-position="${n}"><legend>${n + 1}. ${x.type === 'fill' ? 'Completa los espacios' : esc(x.text)}</legend>${quizImageHtml(x.image, n)}${
+      (x, n) => `<fieldset class="quiz-question" data-index="${x.index}" data-position="${n}"><legend>${n + 1}. ${x.type === 'fill' ? 'Completa los espacios' : esc(x.text)}${pointsTag(x)}</legend>${quizImageHtml(x.image, n)}${
         isNewType(x.type)
           ? newAnswerInputHtml(x, required)
           : x.type === 'numeric'

@@ -124,10 +124,13 @@ const vieja = await quiz({ questions: [{ text: '¿1+1?', options: ['1', '2'], co
 const rv = await call('ana', '/api/attempt', { course: c, quiz: vieja.id, answers: [1] }, 201);
 assert.equal(rv.data.score, 10);
 await call('ana', '/api/attempt', { course: c, quiz: vieja.id, answers: [1] }, 409);
-// Con intentos, cambiar solo el título sí se permite; cambiar preguntas no.
+// Con intentos, cambiar solo el título sí se permite; cambiar el enunciado no. Corregir la clave sí (12.23): se recalifica.
 await call('docente', '/api/record', { course: c, kind: 'quiz', id: vieja.id, revision: vieja.revision, data: { title: 'Nuevo título', questions: [{ text: '¿1+1?', options: ['1', '2'], correct: 1 }] } });
-await call('docente', '/api/record', { course: c, kind: 'quiz', id: vieja.id, revision: vieja.revision + 1, data: { title: 'x', questions: [{ text: '¿1+1?', options: ['1', '2'], correct: 0 }] } }, 400);
-checks += 1;
+await call('docente', '/api/record', { course: c, kind: 'quiz', id: vieja.id, revision: vieja.revision + 1, data: { title: 'x', questions: [{ text: '¿1 + 1?', options: ['1', '2'], correct: 1 }] } }, 400);
+const corregida = await call('docente', '/api/record', { course: c, kind: 'quiz', id: vieja.id, revision: vieja.revision + 1, data: { title: 'x', questions: [{ text: '¿1+1?', options: ['1', '2'], correct: 0 }] } });
+assert.deepEqual(corregida.regraded, { checked: 1, changed: 1 });
+assert.equal(store.raw().prepare('SELECT score FROM aula_attempts WHERE quiz=?').get(vieja.id).score, 0);
+checks += 3;
 
 assert.deepEqual(store.raw().prepare('PRAGMA foreign_key_check').all(), []);
 console.log(`PASS: ${checks} verificaciones de evaluaciones — fórmulas seguras, preguntas numéricas con datos por alumno y tolerancia, varios intentos, tiempo límite y orden aleatorio.`);

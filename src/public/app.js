@@ -124,6 +124,7 @@ function render() {
     editor: renderEditor,
     forums: renderForums,
     forum: renderForum,
+    thread: renderThread,
     quizzes: renderQuizzes,
     quiz: renderQuiz,
     bank: renderBank,
@@ -167,11 +168,11 @@ function renderTask() {
   if (!t)
     return renderTasks();
   const subs = records('submission').filter(s => s.data.task === t.id), own = subs.find(s => s.data.member === myMember()?.id) || subs.find(s => s.author === viewerKey());
-  $('#main').innerHTML = `<div class="crumbs"><button data-section="tasks">Actividades</button><span>›</span><span>${teaches() ? 'Envíos en carpeta' : 'Entrega'}</span></div><h1>${esc(t.data.title)}${sectionTag(t)}</h1><p class="deadline">Vence: ${fmt(t.data.due)}</p>${t.data.extended ? `<p class="extension-note">Tienes acceso especial en esta actividad: ${esc([t.data.start && Date.parse(t.data.start) > Date.now() ? 'disponible desde ' + fmt(t.data.start) : '', t.data.due ? 'vence ' + fmt(t.data.due) : '', t.data.end ? 'cierra ' + fmt(t.data.end) : ''].filter(Boolean).join(', ') || 'puedes verla y entregarla')}.</p>` : ''}${!teaches() && t.data.groupCategory ? teamBannerHtml(t) : ''}${richText(t.data.body, t.data.fileIds)}<section class="task-materials"><div class="panel-head"><h2>Material del docente</h2>${teaches() ? button('＋ Subir archivos o presentaciones', 'task-files', t.id) : ''}</div>${fileLinks(t.data.fileIds)}${!t.data.fileIds?.length ? '<p class="muted">No hay archivos adjuntos a esta actividad.</p>' : ''}</section>${teaches() ? `<div class="toolbar">${button('Editar actividad', 'edit-task', t.id, 'secondary')}${button('Descargar entregas (ZIP)', 'zip-task', t.id, 'secondary')}${specialAccessButton('task', t.id)}${sectionFilterHtml()}</div>${sectionDatesSummary(t.id)}<div class="table-wrap"><table><thead><tr><th>Alumno</th>${courseSections().length ? '<th>Sección</th>' : ''}<th>Estado</th><th>Calificación</th><th>Acción</th></tr></thead><tbody>${studentsInView().filter(m => itemApplies(t, m)).map(m => {
+  $('#main').innerHTML = `<div class="crumbs"><button data-section="tasks">Actividades</button><span>›</span><span>${teaches() ? 'Envíos en carpeta' : 'Entrega'}</span></div><h1>${esc(t.data.title)}${sectionTag(t)}</h1><p class="deadline">Vence: ${fmt(t.data.due)}</p>${t.data.forum ? forumTaskNote(t) : ''}${t.data.extended ? `<p class="extension-note">Tienes acceso especial en esta actividad: ${esc([t.data.start && Date.parse(t.data.start) > Date.now() ? 'disponible desde ' + fmt(t.data.start) : '', t.data.due ? 'vence ' + fmt(t.data.due) : '', t.data.end ? 'cierra ' + fmt(t.data.end) : ''].filter(Boolean).join(', ') || 'puedes verla y entregarla')}.</p>` : ''}${!teaches() && t.data.groupCategory ? teamBannerHtml(t) : ''}${richText(t.data.body, t.data.fileIds)}<section class="task-materials"><div class="panel-head"><h2>Material del docente</h2>${teaches() ? button('＋ Subir archivos o presentaciones', 'task-files', t.id) : ''}</div>${fileLinks(t.data.fileIds)}${!t.data.fileIds?.length ? '<p class="muted">No hay archivos adjuntos a esta actividad.</p>' : ''}</section>${teaches() ? `<div class="toolbar">${button('Editar actividad', 'edit-task', t.id, 'secondary')}${button('Descargar entregas (ZIP)', 'zip-task', t.id, 'secondary')}${specialAccessButton('task', t.id)}${sectionFilterHtml()}</div>${sectionDatesSummary(t.id)}<div class="table-wrap"><table><thead><tr><th>Alumno</th>${courseSections().length ? '<th>Sección</th>' : ''}<th>Estado</th><th>Calificación</th><th>Acción</th></tr></thead><tbody>${studentsInView().filter(m => itemApplies(t, m)).map(m => {
     const s = subs.find(s => s.data.member === m.id);
     const ext = extensionOf(t.id, m.id);
     return `<tr><td><span class="person">${avatarHtml(m)}<span>${esc(m.name)}</span></span>${ext ? `<div class="table-subtext special-note">Acceso especial: ${esc(specialSummary({ start: ext.data.start, due: ext.data.due, end: ext.data.end }))}</div>` : ''}</td>${courseSections().length ? `<td>${esc(sectionName(m.section) || '—')}</td>` : ''}<td>${s ? s.data.manual ? 'Captura manual' : s.data.late ? 'Entrega tardía' : 'Entregado' : 'Sin entrega'}</td><td>${s?.data.grade ?? '—'}</td><td><button class="table-link" data-action="review" data-id="${t.id}" data-member="${m.id}">Evaluar →</button> <button type="button" class="text-btn" data-special-access="task" data-id="${esc(t.id)}" data-member="${esc(m.id)}">${ext ? 'Cambiar acceso' : 'Acceso especial'}</button></td></tr>`;
-  }).join('') || '<tr><td colspan="4">Inscribe alumnos para revisar sus entregas.</td></tr>'}</tbody></table></div>` : `${own ? `<section class="panel"><h2>Tu entrega</h2><p class="deadline">${fmt(own.data.submitted)}${own.data.submitted ? ` <button type="button" class="text-btn" data-receipt="${esc(own.id)}">Comprobante</button>` : ''}</p>${richText(own.data.body)}${fileLinks(own.data.fileIds)}<p>Calificación: <b>${own.data.grade ?? 'Pendiente'}</b></p>${richText(own.data.feedback)}${rubricResultHtml(own.data.rubricScores)}</section>` : ''}<div class="toolbar">${button(own ? 'Actualizar entrega' : 'Realizar entrega', 'submit', t.id)}</div>`}`;
+  }).join('') || '<tr><td colspan="4">Inscribe alumnos para revisar sus entregas.</td></tr>'}</tbody></table></div>` : `${own ? `<section class="panel"><h2>Tu entrega</h2><p class="deadline">${fmt(own.data.submitted)}${own.data.submitted ? ` <button type="button" class="text-btn" data-receipt="${esc(own.id)}">Comprobante</button>` : ''}</p>${richText(own.data.body)}${fileLinks(own.data.fileIds)}<p>Calificación: <b>${own.data.grade ?? 'Pendiente'}</b></p>${richText(own.data.feedback)}${rubricResultHtml(own.data.rubricScores)}</section>` : ''}${t.data.forum ? '' : `<div class="toolbar">${button(own ? 'Actualizar entrega' : 'Realizar entrega', 'submit', t.id)}</div>`}`}`;
 }
 function noticeCards() {
   // Una noticia programada lleva la fecha en que se publica (así la ven los alumnos) y, para el docente, la marca.
@@ -181,17 +182,8 @@ function noticeCards() {
 function renderNotices() {
   $('#main').innerHTML = `<div class="heading"><h1>Noticias</h1>${teaches() ? button('Crear publicación', 'new-notice') : ''}</div><section class="panel">${noticeCards()}</section>`;
 }
-function renderForums() {
-  $('#main').innerHTML = `<h1>Foros</h1><div class="home-tabs"><button class="active">Lista de foros</button></div><div class="toolbar">${teaches() ? button('Nuevo foro', 'new-forum') : ''}</div>${records('forum').map(f => `<section class="forum-block"><h2>${esc(f.data.title)}${sectionTag(f)}${f.data.visible === false ? ' · Oculto' : scheduledFor(f) ? ' · Programado para ' + esc(fmt(scheduledFor(f))) : ''}</h2>${richText(f.data.body)}<div class="table-wrap"><table><thead><tr><th>Tema</th><th>Publicaciones</th>${teaches() ? '<th>Editar</th>' : ''}</tr></thead><tbody><tr><td>${button(esc(f.data.title), 'forum', f.id, 'table-link')}</td><td>${records('post').filter(p => p.data.forum === f.id).length}</td>${teaches() ? `<td>${button('Editar', 'edit-forum', f.id, 'text-btn')}</td>` : ''}</tr></tbody></table></div></section>`).join('') || '<p class="empty">No hay foros.</p>'}`;
-}
-function renderForum() {
-  const f = find(detail);
-  if (!f)
-    return renderForums();
-  $('#main').innerHTML = `<button class="back" data-section="forums">❮ Lista de foros</button><h1>${esc(f.data.title)}</h1>${richText(f.data.body)}<div class="toolbar">${button('Publicar mensaje', 'new-post', f.id)}</div>${records('post').filter(p => p.data.forum === f.id).map(p => `<article class="forum-post"><h2>${esc(p.data.title)}</h2><p class="muted">${esc(p.data.name)} · ${fmt(p.created)}</p>${richText(p.data.body)}${teaches() || p.author === viewerKey() ? trashButton('post', p.id) : ''}</article>`).join('') || '<p class="empty">Todavía no hay publicaciones.</p>'}`;
-}
 function renderQuizzes() {
-  $('#main').innerHTML = `<h1>Evaluaciones</h1><div class="home-tabs"><button class="active">${teaches() ? 'Administrar evaluaciones' : 'Mis evaluaciones'}</button>${teaches() ? '<button data-section="bank">Banco de preguntas</button>' : ''}</div><div class="toolbar">${teaches() ? button('Nueva evaluación', 'new-quiz') : ''}</div><div class="table-wrap"><table><thead><tr><th>Evaluación</th><th>Preguntas</th><th>Estado</th></tr></thead><tbody>${records('quiz').map(q => `<tr><td>${button(esc(q.data.title), 'quiz', q.id, 'table-link')}${sectionTag(q)}</td><td>${questionCountOf(q.data) < q.data.questions.length ? `${questionCountOf(q.data)} de ${q.data.questions.length} (al azar)` : questionCountOf(q.data)}</td><td>${teaches() ? (q.data.visible ? (scheduledFor(q) ? 'Programada · ' + esc(fmt(scheduledFor(q))) : 'Publicada') : 'Oculta') : esc(quizStudentStatus(q))}</td></tr>`).join('') || '<tr><td colspan="3">No hay evaluaciones.</td></tr>'}</tbody></table></div>`;
+  $('#main').innerHTML = `<h1>Evaluaciones</h1><div class="home-tabs"><button class="active">${teaches() ? 'Administrar evaluaciones' : 'Mis evaluaciones'}</button>${teaches() ? '<button data-section="bank">Banco de preguntas</button>' : ''}</div><div class="toolbar">${teaches() ? button('Nueva evaluación', 'new-quiz') + button('Importar examen (Word, Excel o texto)', 'import-quiz', '', 'secondary') : ''}</div><div class="table-wrap"><table><thead><tr><th>Evaluación</th><th>Preguntas</th><th>Estado</th></tr></thead><tbody>${records('quiz').map(q => `<tr><td>${button(esc(q.data.title), 'quiz', q.id, 'table-link')}${sectionTag(q)}</td><td>${questionCountOf(q.data) < q.data.questions.length ? `${questionCountOf(q.data)} de ${q.data.questions.length} (al azar)` : questionCountOf(q.data)}</td><td>${teaches() ? (q.data.visible ? (scheduledFor(q) ? 'Programada · ' + esc(fmt(scheduledFor(q))) : 'Publicada') : 'Oculta') : esc(quizStudentStatus(q))}</td></tr>`).join('') || '<tr><td colspan="3">No hay evaluaciones.</td></tr>'}</tbody></table></div>`;
 }
 function gradeOf(member, task) {
   return records('submission').find(s => s.data.member === member && s.data.task === task);
@@ -415,6 +407,11 @@ async function save(kind, data, old) {
   // «¿Para qué secciones?» del editor abierto (si el curso tiene secciones).
   const chooser = document.querySelector('#modal[open] [data-section-chooser], #taskEditor [data-section-chooser]');
   if (chooser && data.sections === undefined) data = { ...data, sections: readSectionChooser(chooser) };
+  // Condiciones de liberación (12.23) del editor abierto.
+  if (data.conditions === undefined && typeof readConditions === 'function') {
+    const conditions = readConditions();
+    if (conditions !== undefined) data = { ...data, conditions };
+  }
   return request('/api/record', {
     course: current.course.id,
     kind,
@@ -538,7 +535,7 @@ function simpleRecord(kind, old) {
   // Las unidades llevan archivos (programa, presentaciones, imágenes dentro del texto); noticias y foros, solo texto.
   const withFiles = kind === 'module';
   let files = null;
-  modal(`${old ? 'Editar' : 'Crear'} ${names[kind]}`, field('Título', 'title', old?.data.title || '', 'text', 'required maxlength="200"') + richTextarea(kind === 'module' ? 'Descripción de la unidad' : 'Contenido', 'body', old?.data.body || '', { images: withFiles }) + (withFiles ? attachmentPanel(true, 'la unidad') : '') + visible(old?.data.visible, old?.data.publishAt || '', old?.data.sections) + (kind === 'notice' ? noticeEmailHtml(old) : '') + (old ? `<p class="modal-danger">${trashButton(kind, old.id, 'Eliminar ' + names[kind])}</p>` : ''), async (f) => {
+  modal(`${old ? 'Editar' : 'Crear'} ${names[kind]}`, field('Título', 'title', old?.data.title || '', 'text', 'required maxlength="200"') + richTextarea(kind === 'module' ? 'Descripción de la unidad' : 'Contenido', 'body', old?.data.body || '', { images: withFiles }) + (withFiles ? attachmentPanel(true, 'la unidad') : '') + visible(old?.data.visible, old?.data.publishAt || '', old?.data.sections) + (kind === 'module' ? conditionsEditorHtml(old) : '') + (kind === 'notice' ? noticeEmailHtml(old) : '') + (old ? `<p class="modal-danger">${trashButton(kind, old.id, 'Eliminar ' + names[kind])}</p>` : ''), async (f) => {
     const data = {
       title: f.get('title'),
       body: f.get('body'),
@@ -558,7 +555,7 @@ function simpleRecord(kind, old) {
 function materialModal(old) {
   const d = old?.data || {};
   let files = null;
-  modal(old ? 'Editar material' : 'Agregar material', field('Título', 'title', d.title || '', 'text', 'required') + `<label>Unidad<select name="module"><option value="">Sin unidad</option>${records('module').map(m => `<option value="${m.id}" ${(d.module || moduleId) === m.id ? 'selected' : ''}>${esc(m.data.title)}</option>`).join('')}</select></label>` + richTextarea('Descripción', 'body', d.body || '', { images: true }) + field('Enlace (opcional)', 'url', d.url || '', 'url') + attachmentPanel(true, 'este material') + visible(d.visible, d.publishAt || '', d.sections) + (old ? `<p class="modal-danger">${trashButton('material', old.id, 'Eliminar material')}</p>` : ''), async (f) => {
+  modal(old ? 'Editar material' : 'Agregar material', field('Título', 'title', d.title || '', 'text', 'required') + `<label>Unidad<select name="module"><option value="">Sin unidad</option>${records('module').map(m => `<option value="${m.id}" ${(d.module || moduleId) === m.id ? 'selected' : ''}>${esc(m.data.title)}</option>`).join('')}</select></label>` + richTextarea('Descripción', 'body', d.body || '', { images: true }) + field('Enlace (opcional)', 'url', d.url || '', 'url') + attachmentPanel(true, 'este material') + visible(d.visible, d.publishAt || '', d.sections) + conditionsEditorHtml(old) + (old ? `<p class="modal-danger">${trashButton('material', old.id, 'Eliminar material')}</p>` : ''), async (f) => {
     await save('material', {
       title: f.get('title'),
       body: f.get('body'),
@@ -797,10 +794,10 @@ document.addEventListener('click', async (e) => {
         simpleRecord('notice', r);
         break;
       case 'new-forum':
-        simpleRecord('forum');
+        forumModal();
         break;
       case 'edit-forum':
-        simpleRecord('forum', r);
+        forumModal(r);
         break;
       case 'forum':
         detail = id;
@@ -808,14 +805,13 @@ document.addEventListener('click', async (e) => {
         render();
         break;
       case 'new-post':
-        modal('Publicar mensaje', field('Título', 'title', '', 'text', 'required') + textarea('Mensaje', 'body'), f => save('post', {
-          forum: id,
-          title: f.get('title'),
-          body: f.get('body')
-        }));
+        newThreadModal(id);
         break;
       case 'new-quiz':
         quizModal();
+        break;
+      case 'import-quiz':
+        importQuizModal();
         break;
       case 'edit-quiz':
         quizModal(r);

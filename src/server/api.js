@@ -32,8 +32,9 @@ import {
   MAX_QUESTIONS,
   questionCount,
   quizInstance,
+  keyChanged,
   sameDraw,
-  sameQuestions,
+  sameStructure,
   validEvents,
 } from './quizzes.js';
 import { bankImageVisible, bankRoutes } from './bank.js';
@@ -41,6 +42,8 @@ import { photoRoutes, servePhoto } from './photos.js';
 import { digestRoutes } from './digest.js';
 import { accessRoutes, recordVisit } from './accesos.js';
 import { specialAccessRoutes } from './especial.js';
+import { forumRoutes, postFields, studentPosts } from './foros.js';
+import { CONDITION_KINDS, assertConditions, conditionsField, conditionsMet, recordConditionsSql, conditionsSql, studentFacts } from './condiciones.js';
 import { cleanSaved } from './reactivos.js';
 import { mailConfigured } from './mail.js';
 import { quizForStudent, quizWithAccess, quizWithSectionDates, sectionIdsByName, sectionKey, sectionRoutes, sectionsField, validSection } from './sections.js';
@@ -51,6 +54,7 @@ import {
   courseGradebook,
   loadTask,
   quizHasAttempts,
+  regradeQuiz,
   attemptRecord,
   saveGrade,
   saveSubmission,
@@ -139,7 +143,7 @@ export async function api(request, env) {
     assertHasPhoto(route, user, env);
     const ctx = { db: env.DB, env, user, url, request };
     const handler =
-      routes[route] || attendanceRoutes[route] || gradingRoutes[route] || directoryRoutes[route] || privacyRoutes[route] || periodRoutes[route] || dashboardRoutes[route] || reportRoutes[route] || demoRoutes[route] || backupRoutes[route] || userRoutes[route] || bankRoutes[route] || sectionRoutes[route] || photoRoutes[route] || digestRoutes[route] || accessRoutes[route] || specialAccessRoutes[route];
+      routes[route] || attendanceRoutes[route] || gradingRoutes[route] || directoryRoutes[route] || privacyRoutes[route] || periodRoutes[route] || dashboardRoutes[route] || reportRoutes[route] || demoRoutes[route] || backupRoutes[route] || userRoutes[route] || bankRoutes[route] || sectionRoutes[route] || photoRoutes[route] || digestRoutes[route] || accessRoutes[route] || specialAccessRoutes[route] || forumRoutes[route];
     if (handler) return await handler(ctx);
     if (request.method === 'GET' && url.pathname.startsWith('/api/file/')) return await downloadFile(ctx, url.pathname.slice(10));
     if (request.method === 'GET' && url.pathname.startsWith('/api/photo/')) return await servePhoto(ctx, url.pathname.slice(11));
@@ -450,6 +454,7 @@ const routes = {
       `SELECT (SELECT json_group_array(json_object('id',id,'name',name,'position',position))
                 FROM (SELECT * FROM aula_sections WHERE course=?1 ORDER BY position, name)) AS sections,
               (SELECT section FROM aula_members m WHERE m.course=?1 AND m.role='student' AND (m.id=?3 OR (?3 IS NULL AND m.user_id=?2)) LIMIT 1) AS my_section,
+              (SELECT id FROM aula_members m WHERE m.course=?1 AND m.role='student' AND (m.id=?3 OR (?3 IS NULL AND m.user_id=?2)) LIMIT 1) AS my_member,
               (SELECT json_group_array(json_object('item',d.item,'section',d.section,'start_at',d.start_at,'due',d.due,'end_at',d.end_at,'code',d.code))
                 FROM aula_section_dates d WHERE d.course=?1 AND (?4 OR d.section=(SELECT section FROM aula_members m
                   WHERE m.course=?1 AND m.role='student' AND (m.id=?3 OR (?3 IS NULL AND m.user_id=?2)) LIMIT 1))) AS dates,
@@ -457,7 +462,10 @@ const routes = {
               (SELECT json_group_array(json_object('quiz',qa.quiz,'member',qa.member,'start_at',qa.start_at,'end_at',qa.end_at,
                         'extra_minutes',qa.extra_minutes,'extra_attempts',qa.extra_attempts,'reason',CASE WHEN ?4 THEN qa.reason ELSE '' END,'created',qa.created))
                 FROM aula_quiz_access qa WHERE qa.course=?1 AND (?4 OR qa.member=(SELECT id FROM aula_members m
-                  WHERE m.course=?1 AND m.role='student' AND (m.id=?3 OR (?3 IS NULL AND m.user_id=?2)) LIMIT 1))) AS grants`,
+                  WHERE m.course=?1 AND m.role='student' AND (m.id=?3 OR (?3 IS NULL AND m.user_id=?2)) LIMIT 1))) AS grants,
+              -- Foros (12.23): lo que sigue la persona y cuándo leyó cada hilo.
+              (SELECT json_group_array(json_object('item',item,'follow',follow,'read_at',read_at))
+                FROM aula_forum_state WHERE course=?1 AND user_id=?2) AS forum_state`,
       courseId,
       viewer,
       viewing?.id ?? null,
@@ -467,17 +475,37 @@ const routes = {
     const sectionDates = JSON.parse(sectionRow?.dates || '[]');
     const myDates = teach ? new Map() : new Map(sectionDates.map((d) => [d.item, d]));
     const quizAccess = JSON.parse(sectionRow?.grants || '[]');
+    const forumState = JSON.parse(sectionRow?.forum_state || '[]');
     const myAccess = teach ? new Map() : new Map(quizAccess.map((g) => [g.quiz, g]));
     // Sección del alumno (null en la vista general «como alumno»: ahí se ve lo de todas las secciones).
     const mySection = teach || (!viewer && !viewing) ? null : sectionRow?.my_section ?? '';
-    // Para el alumno: visible, con su fecha de publicación cumplida y dirigido a su sección.
+    // Actividades, entregas, calificaciones e intentos; y el seguimiento del contenido: quien enseña ve el de todos; el
+    // alumno (o la vista de un alumno), solo el suyo. Se leen antes de filtrar por las condiciones de liberación.
+    const gradebook = await courseGradebook(db, courseId, { teacher: teach, userId: viewer, memberId: viewing?.id, attemptUser });
+    const progress = teach
+      ? await all(db, 'SELECT member, record, opened_at, completed_at FROM aula_progress WHERE course=?', courseId)
+      : await all(
+          db,
+          `SELECT p.member, p.record, p.opened_at, p.completed_at FROM aula_progress p JOIN aula_members m ON m.id=p.member
+           WHERE p.course=?1 AND (m.id=?3 OR (?3 IS NULL AND m.user_id=?2))`,
+          courseId,
+          viewer,
+          viewing?.id ?? null,
+        );
+    // Condiciones de liberación (12.23): lo que ya hizo el alumno (la vista general «como alumno» lo ve todo).
+    const facts = teach || mySection === null || !sectionRow?.my_member ? null : studentFacts(progress, gradebook, sectionRow.my_member);
+    const unlocked = (r) => conditionsMet(r.data.conditions, facts);
+    // Para el alumno: visible, con su fecha de publicación cumplida, dirigido a su sección y con sus condiciones cumplidas.
     const now = nowIso();
     // Una evaluación «solo con acceso especial» existe para el alumno solo si tiene acceso (la vista general la muestra).
-    const visible = (r) => isPublished(r, now) && forSection(r.data.sections, mySection) && (mySection === null || !r.data.specialOnly || myAccess.has(r.id));
+    const visible = (r) =>
+      isPublished(r, now) && forSection(r.data.sections, mySection) && (mySection === null || !r.data.specialOnly || myAccess.has(r.id)) && unlocked(r);
     const byId = new Map(rows.map((r) => [r.id, r]));
+    // Las respuestas de un hilo eliminado no se muestran (vuelven si se restaura).
+    const live = rows.filter((r) => r.kind !== 'post' || !r.data.parent || byId.has(r.data.parent));
     const content = teach
-      ? rows
-      : rows
+      ? live
+      : studentPosts(live, byId, viewing ? attemptUser : viewer)
           .filter(
             (r) =>
               visible(r) &&
@@ -495,7 +523,7 @@ const routes = {
           );
     const quizzesById = new Map(rows.filter((r) => r.kind === 'quiz').map((r) => [r.id, r]));
     // El alumno ve de sus intentos lo que permita cada evaluación («qué ve al terminar»).
-    const records = [...content, ...(await courseGradebook(db, courseId, { teacher: teach, userId: viewer, memberId: viewing?.id, attemptUser }))].map((r) =>
+    const records = [...content, ...gradebook.filter((r) => teach || r.kind !== 'task' || unlocked(r))].map((r) =>
       !teach && r.kind === 'attempt' ? studentAttemptView(r, quizzesById.get(r.data.quiz)) : r,
     );
     // El alumno no recibe las preguntas antes de contestarlas (llegan al empezar el intento, solo las que le tocan):
@@ -529,17 +557,6 @@ const routes = {
           ...(m.photo && (m.role === 'teacher' || m.user_id === viewer) ? { photo: m.photo } : {}),
         }));
 
-    // Seguimiento del contenido: quien enseña ve el de todos; el alumno (o la vista de un alumno), solo el suyo.
-    const progress = teach
-      ? await all(db, 'SELECT member, record, opened_at, completed_at FROM aula_progress WHERE course=?', courseId)
-      : await all(
-          db,
-          `SELECT p.member, p.record, p.opened_at, p.completed_at FROM aula_progress p JOIN aula_members m ON m.id=p.member
-           WHERE p.course=?1 AND (m.id=?3 OR (?3 IS NULL AND m.user_id=?2))`,
-          courseId,
-          viewer,
-          viewing?.id ?? null,
-        );
     let files = await all(db, 'SELECT id,course,owner,scope,name,size,mime,created FROM aula_files WHERE course=?', courseId);
     if (!teach) {
       const shared = new Set(records.filter((r) => ['module', 'material', 'task'].includes(r.kind)).flatMap((r) => r.data.fileIds || []));
@@ -576,6 +593,7 @@ const routes = {
       records,
       sections,
       ...(teach ? { sectionDates, quizAccess } : {}),
+      forumState,
       members,
       files,
       progress,
@@ -596,6 +614,9 @@ const routes = {
     const unitData = unit && { data: JSON.parse(unit.data) };
     const seen = (r) => isPublished(r, now) && forSection(r.data.sections, member.section);
     if (!seen(material) || (material.data.module && !seen(unitData))) fail('Material no disponible.', 403);
+    // Condiciones de liberación del material y de su unidad (12.23).
+    await assertConditions(db, material.data.conditions, member.id, 'Material no disponible.');
+    await assertConditions(db, unitData?.data.conditions, member.id, 'Material no disponible.');
     const completed = body.action === 'complete' ? now : null;
     await run(
       db,
@@ -899,6 +920,7 @@ const routes = {
       const fields = taskFields(input, []);
       fields.fileIds = await validateFiles(db, input.fileIds, body.course, user, 'material');
       fields.sections = await sectionsField(db, body.course, input.sections);
+      fields.conditions = await conditionsField(db, body.course, input.conditions, body.id);
       const { record, created } = await saveTask(db, {
         course: body.course,
         userId: user.id,
@@ -936,6 +958,7 @@ const routes = {
     if (previous && body.revision !== previous.revision) fail('Este elemento cambió. Recarga para obtener la versión actual.', 409);
 
     let data;
+    let attempted = false;
     if (TEACHER_CONTENT_KINDS.includes(kind)) {
       requireTeacher(a);
       data = { title: text(input.title, 200), body: String(input.body || '').slice(0, 30000), visible: input.visible !== false };
@@ -948,6 +971,15 @@ const routes = {
       }
       // Una noticia ya enviada por correo lo sigue estando al editarla (no se vuelve a enviar).
       if (kind === 'notice' && previous?.data.emailedAt) data.emailedAt = previous.data.emailedAt;
+      // Condiciones de liberación (12.23): unidades, materiales, foros y evaluaciones.
+      if (CONDITION_KINDS.includes(kind)) {
+        const conditions = await conditionsField(db, body.course, input.conditions, previous?.id);
+        if (conditions) data.conditions = conditions;
+      }
+      // Foro (12.23): publicar como anónimo, ver lo de otros solo después de publicar y cerrado.
+      if (kind === 'forum') {
+        for (const key of ['anonymous', 'mustPost', 'locked']) if (input[key] === true) data[key] = true;
+      }
       // «Solo con acceso especial» se cambia desde su ventana, no desde el editor: se conserva.
       if (kind === 'quiz' && previous?.data.specialOnly) data.specialOnly = true;
       if (kind === 'module') data.fileIds = await validateFiles(db, input.fileIds, body.course, user, 'material');
@@ -983,11 +1015,14 @@ const routes = {
           const policy = ['best', 'last', 'average'].includes(input.grade.policy) ? input.grade.policy : 'best';
           data.grade = { category: category.id, points, policy };
         }
-        if (previous && !sameQuestions(previous.data.questions, data.questions) && (await quizHasAttempts(db, body.course, previous.id))) {
-          fail('Una evaluación con intentos no permite cambiar sus preguntas. Crea una nueva.');
+        // Con intentos solo se corrige la clave, los puntos y la retroalimentación (y se recalifican los intentos).
+        const changed = previous && (!sameStructure(previous.data.questions, data.questions) || !sameDraw(previous.data.settings, data.settings));
+        attempted = Boolean(previous && (changed || keyChanged(previous.data.questions, data.questions)) && (await quizHasAttempts(db, body.course, previous.id)));
+        if (attempted && !sameStructure(previous.data.questions, data.questions)) {
+          fail('Una evaluación con intentos solo permite corregir las respuestas correctas, los puntos y la retroalimentación. Para cambiar preguntas u opciones, crea una nueva.');
         }
-        if (previous && !sameDraw(previous.data.settings, data.settings) && (await quizHasAttempts(db, body.course, previous.id))) {
-          fail('Una evaluación con intentos no permite cambiar las preguntas al azar. Crea una nueva.');
+        if (attempted && !sameDraw(previous.data.settings, data.settings)) {
+          fail('Una evaluación con intentos no permite cambiar las preguntas al azar ni el orden aleatorio. Crea una nueva.');
         }
       }
       if (kind === 'group') {
@@ -998,16 +1033,12 @@ const routes = {
         data.category = String(input.category || 'Equipos de trabajo').slice(0, 100);
       }
     } else {
-      // kind === 'post'
+      // kind === 'post': hilo o respuesta (12.23), con las reglas del foro.
       if (previous) fail('Las publicaciones no se editan desde este formulario.');
-      const forum = await contentRecord(db, input.forum, body.course, 'forum');
-      if (!a.teach && !isPublished(forum)) fail('Foro no disponible.', 403);
-      // Un alumno publica con su nombre de la lista del curso, no con el de su cuenta.
-      const enrolled = a.teach ? null : await one(db, "SELECT name, section FROM aula_members WHERE course=? AND user_id=? AND role='student'", body.course, user.id);
-      if (!a.teach && !forSection(forum.data.sections, enrolled?.section || '')) fail('Foro no disponible.', 403);
-      data = { forum: forum.id, title: text(input.title, 200), body: text(input.body, 15000), name: enrolled?.name || user.name };
+      data = await postFields(db, a, user, body.course, input);
     }
     const saved = await saveContentRecord(db, previous, data, user.id, body.course, kind);
+    if (attempted && keyChanged(previous.data.questions, data.questions)) saved.regraded = await regradeQuiz(db, saved);
     return json(saved, previous ? 200 : 201);
   },
 
@@ -1426,7 +1457,7 @@ const routes = {
       Object.assign(d, { credit, correct: credit === 1, reviewed: true, feedback: String(review.feedback ?? '').trim().slice(0, 2000) });
       if (!d.manual) d.overridden = true;
     }
-    const scored = scoreOf(details);
+    const scored = scoreOf(details, quiz.data.questions);
     await run(db, 'UPDATE aula_attempts SET details=?, correct=?, score=? WHERE id=?', JSON.stringify(details), scored.correct, scored.score, row.id);
     return json(attemptRecord(await one(db, 'SELECT * FROM aula_attempts WHERE id=?', row.id)));
   },
@@ -1760,18 +1791,19 @@ async function downloadFile({ db, env, user, url, request }, id) {
         // Y dirigido a su sección (lo que es para otras secciones no se descarga).
         `SELECT 1 AS ok FROM aula_records r, json_each(r.data,'$.fileIds') j
          WHERE r.course=?1 AND r.kind IN ('material','module') AND j.value=?2 AND ${publishedSql('r', '?3')}
-           AND r.deleted_at IS NULL AND ${sectionSql("json_extract(r.data,'$.sections')", MY_SECTION)}
+           AND r.deleted_at IS NULL AND ${sectionSql("json_extract(r.data,'$.sections')", MY_SECTION)} AND ${recordConditionsSql('r', MY_MEMBER, 'ca')}
            AND (r.kind='module' OR coalesce(json_extract(r.data,'$.module'),'')=''
                 OR EXISTS (SELECT 1 FROM aula_records p WHERE p.id=json_extract(r.data,'$.module') AND p.course=?1
-                           AND p.deleted_at IS NULL AND ${publishedSql('p', '?3')} AND ${sectionSql("json_extract(p.data,'$.sections')", MY_SECTION, 'sp')}))
+                           AND p.deleted_at IS NULL AND ${publishedSql('p', '?3')} AND ${sectionSql("json_extract(p.data,'$.sections')", MY_SECTION, 'sp')}
+                           AND ${recordConditionsSql('p', MY_MEMBER, 'cb')}))
          UNION ALL
          SELECT 1 FROM aula_tasks t, json_each(t.file_ids) j WHERE t.course=?1 AND t.visible=1 AND t.deleted_at IS NULL AND j.value=?2
-           AND ${sectionSql('t.sections', MY_SECTION)} AND ${specialTaskSql('t', MY_MEMBER)}
+           AND ${sectionSql('t.sections', MY_SECTION)} AND ${specialTaskSql('t', MY_MEMBER)} AND ${conditionsSql('t.conditions', MY_MEMBER, 'ct')}
          UNION ALL
          -- Imagen de una pregunta: evaluación publicada y, si es examen, solo después de empezarlo (no se adelantan preguntas).
          SELECT 1 FROM aula_records r, json_each(r.data,'$.questions') qq
          WHERE r.course=?1 AND r.kind='quiz' AND r.deleted_at IS NULL AND ${publishedSql('r', '?3')} AND json_extract(qq.value,'$.image')=?2
-           AND ${sectionSql("json_extract(r.data,'$.sections')", MY_SECTION)} AND ${specialRecordSql('r', MY_MEMBER)}
+           AND ${sectionSql("json_extract(r.data,'$.sections')", MY_SECTION)} AND ${specialRecordSql('r', MY_MEMBER)} AND ${recordConditionsSql('r', MY_MEMBER, 'cq')}
            AND (coalesce(json_extract(r.data,'$.settings.exam.enabled'),0)=0
                 OR EXISTS (SELECT 1 FROM aula_attempt_starts s WHERE s.quiz=r.id AND s.user_id=?4))
          LIMIT 1`,

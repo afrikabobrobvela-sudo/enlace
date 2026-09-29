@@ -182,7 +182,7 @@ checks += 4;
 // Con intentos, no se cambia cuántas se sortean ni los grupos.
 const cambio = (data) => call('ana', '/api/record', { course: anaNuevo, kind: 'quiz', id: sorteo.id, revision: sorteo.revision, data: { ...sorteo.data, ...data } }, 400);
 assert.match((await cambio({ settings: { ...sorteo.data.settings, draw: [{ pool: 'A', count: 3 }] } })).error, /preguntas al azar/);
-assert.match((await cambio({ questions: banco.map((x) => ({ ...x, pool: 'B' })), settings: { ...sorteo.data.settings, draw: [{ pool: 'B', count: 2 }] } })).error, /cambiar sus preguntas/);
+assert.match((await cambio({ questions: banco.map((x) => ({ ...x, pool: 'B' })), settings: { ...sorteo.data.settings, draw: [{ pool: 'B', count: 2 }] } })).error, /cambiar preguntas/);
 // El docente sí ve todas (con grupo y respuesta).
 const delDocente = (await call('ana', '/api/course?id=' + anaNuevo)).records.find((x) => x.id === sorteo.id).data;
 assert.deepEqual([delDocente.questions.length, delDocente.questions[0].pool, delDocente.questions[0].correct], [6, 'A', 0]);

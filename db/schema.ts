@@ -316,6 +316,10 @@ export const tasks = sqliteTable(
     sections: text('sections').notNull().default(''),
     // Migración 0028: 1 = solo la ven los alumnos con acceso especial (una fila en aula_extensions).
     specialOnly: integer('special_only').notNull().default(0),
+    // Migración 0029: la actividad califica la participación en un foro (id del foro en aula_records; NULL = no).
+    forum: text('forum'),
+    // Migración 0029: condiciones de liberación (JSON { mode: 'all'|'any', items: [{ type, target, value }] }; '' = ninguna).
+    conditions: text('conditions').notNull().default(''),
     // Papelera (migración 0007): la actividad eliminada conserva entregas y calificaciones.
     deletedAt: text('deleted_at'),
     deletedBy: text('deleted_by'),
@@ -797,4 +801,20 @@ export const quizAccess = sqliteTable(
     created: text('created').notNull(),
   },
   (t) => [primaryKey({ columns: [t.quiz, t.member] }), index('aula_quiz_access_course').on(t.course)],
+);
+
+/**
+ * Migración 0029: foros (12.23). Por persona y foro o hilo: si lo sigue (avisos de publicaciones nuevas) y cuándo lo
+ * leyó por última vez (para marcar lo nuevo).
+ */
+export const forumState = sqliteTable(
+  'aula_forum_state',
+  {
+    userId: text('user_id').notNull(),
+    course: text('course').notNull(),
+    item: text('item').notNull(), // id del foro o de la publicación que abre el hilo
+    follow: integer('follow').notNull().default(0),
+    readAt: text('read_at').notNull().default(''),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.item] }), index('aula_forum_state_course').on(t.course, t.userId)],
 );

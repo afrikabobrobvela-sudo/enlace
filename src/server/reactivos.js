@@ -115,7 +115,7 @@ export const maskBlanks = (textValue) => String(textValue).replace(BLANK, '_____
 
 /** Antes de empezar (y en la lista del curso): nada que delate la respuesta. */
 export function publicNew(q) {
-  const base = { type: q.type, text: q.type === 'fill' ? maskBlanks(q.text) : q.text, ...(q.image ? { image: q.image } : {}) };
+  const base = { type: q.type, text: q.type === 'fill' ? maskBlanks(q.text) : q.text, ...(q.image ? { image: q.image } : {}), ...(q.points ? { points: q.points } : {}) };
   if (q.type === 'multi') return { ...base, options: q.options };
   if (q.type === 'multishort') return { ...base, boxes: q.boxes };
   if (q.type === 'sigfig') return { ...base, unit: q.unit, figures: q.figures };
@@ -127,7 +127,7 @@ export function publicNew(q) {
  * `values` los datos aleatorios ya calculados (cifras significativas).
  */
 export function instanceNew(q, index, random, { shuffleOptions, values, shown }) {
-  const base = { index, type: q.type, text: q.text, ...(q.image ? { image: q.image } : {}) };
+  const base = { index, type: q.type, text: q.text, ...(q.image ? { image: q.image } : {}), ...(q.points ? { points: q.points } : {}) };
   switch (q.type) {
     case 'truefalse':
     case 'essay':

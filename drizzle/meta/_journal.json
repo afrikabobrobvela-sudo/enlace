@@ -204,6 +204,13 @@
       "when": 1790695261945,
       "tag": "0028_acceso_especial",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "6",
+      "when": 1790699045943,
+      "tag": "0029_foros_y_condiciones",
+      "breakpoints": true
     }
   ]
 }

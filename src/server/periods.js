@@ -107,6 +107,9 @@ export const periodRoutes = {
       sections: remap(t.sections || '', map),
       points: t.points,
       rubric: t.rubric,
+      // 12.23: la participación en un foro sigue ligada al foro copiado; las condiciones apuntan a lo copiado.
+      forum: t.forum ? map.get(t.forum) ?? null : null,
+      conditions: remap(t.conditions || '', map),
     }));
     const fileRows = files.map((f) => ({ id: map.get(f.id), owner: f.owner, name: f.name, size: f.size, mime: f.mime, key: f.r2_key || f.id }));
     const categoryRows = categories.map((c) => ({ id: map.get(c.id), name: c.name, weight: c.weight, source: c.source, position: c.position }));
@@ -151,13 +154,14 @@ export const periodRoutes = {
       db
         .prepare(
           `INSERT INTO aula_tasks (id,course,author,title,body,visible,submission_mode,max_files,extensions,file_ids,allow_resubmit,
-             due,start_at,end_at,weight,category,points,rubric,group_category,sections,revision,created,updated)
+             due,start_at,end_at,weight,category,points,rubric,group_category,sections,forum,conditions,revision,created,updated)
            SELECT json_extract(value,'$.id'), ?1, ?2, json_extract(value,'$.title'), json_extract(value,'$.body'),
                   json_extract(value,'$.visible'), json_extract(value,'$.submission_mode'), json_extract(value,'$.max_files'),
                   json_extract(value,'$.extensions'), json_extract(value,'$.file_ids'), json_extract(value,'$.allow_resubmit'),
                   json_extract(value,'$.due'), json_extract(value,'$.start_at'), json_extract(value,'$.end_at'),
                   json_extract(value,'$.weight'), json_extract(value,'$.category'), json_extract(value,'$.points'),
-                  json_extract(value,'$.rubric'), '', coalesce(json_extract(value,'$.sections'),''), 1, ?3, ?3 FROM json_each(?4)`,
+                  json_extract(value,'$.rubric'), '', coalesce(json_extract(value,'$.sections'),''), json_extract(value,'$.forum'),
+                  coalesce(json_extract(value,'$.conditions'),''), 1, ?3, ?3 FROM json_each(?4)`,
         )
         .bind(id, user.id, now, JSON.stringify(taskRows)),
       db

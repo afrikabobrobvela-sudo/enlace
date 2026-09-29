@@ -4,6 +4,8 @@
 import { access } from './access.js';
 import { publishedSql, sectionSql, specialRecordSql, specialTaskSql } from './published.js';
 import { base64url, fail, json, nowIso, one, all, readJson, run } from './http.js';
+import { forumActivitySql, threadTitleSql } from './foros.js';
+import { conditionsSql, recordConditionsSql } from './condiciones.js';
 
 const DAY = 86_400_000;
 const WINDOW_DAYS = 14;
@@ -51,7 +53,7 @@ export const dashboardRoutes = {
          JOIN aula_courses c ON c.id=t.course
          LEFT JOIN aula_extensions e ON e.task=t.id AND e.member=mine.member
          LEFT JOIN aula_section_dates d ON d.item=t.id AND d.section=mine.section
-         WHERE ${sectionSql('t.sections', 'mine.section')} AND ${specialTaskSql('t', 'mine.member')}
+         WHERE ${sectionSql('t.sections', 'mine.section')} AND ${specialTaskSql('t', 'mine.member')} AND t.forum IS NULL AND ${conditionsSql('t.conditions', 'mine.member')}
            AND coalesce(nullif(e.due,''), nullif(d.due,''), t.due) BETWEEN ?2 AND ?3
            AND coalesce(nullif(e.start_at,''), nullif(d.start_at,''), t.start_at)<=?4
            AND NOT EXISTS (SELECT 1 FROM aula_submissions s WHERE s.task=t.id AND s.member=mine.member AND (s.submitted!='' OR s.grade IS NOT NULL))
@@ -95,14 +97,15 @@ export const dashboardRoutes = {
     const seen = user.notices_seen_at || '';
     // D1 admite como máximo 5 términos en un SELECT compuesto (UNION): se hacen dos consultas de 3 y se juntan aquí.
     const ctes = `WITH mine AS (${STUDENT_COURSES}), teach AS (${TEACHER_COURSES})`;
-    const [content, activity] = await Promise.all([
+    const [content, activity, forums] = await Promise.all([
       // Con publicación programada, la fecha del aviso es la de publicación (aparece como nuevo en ese momento).
       all(
         db,
         `${ctes}, shown AS (
-           SELECT r.*, max(r.updated, coalesce(json_extract(r.data,'$.publishAt'),'')) AS at
+           SELECT r.*, max(r.updated, coalesce(json_extract(r.data,'$.publishAt'),'')) AS at, mine.member AS cond_member
            FROM mine JOIN aula_records r ON r.course=mine.course AND r.deleted_at IS NULL AND r.kind IN ('notice','material','quiz')
-           WHERE ${publishedSql('r', '?3')} AND ${sectionSql("json_extract(r.data,'$.sections')", 'mine.section')} AND ${specialRecordSql('r', 'mine.member')})
+           WHERE ${publishedSql('r', '?3')} AND ${sectionSql("json_extract(r.data,'$.sections')", 'mine.section')} AND ${specialRecordSql('r', 'mine.member')}
+             AND ${recordConditionsSql('r', 'mine.member')})
          SELECT 'notice' AS type, r.id, r.course, c.name AS course_name, json_extract(r.data,'$.title') AS title, r.at
            FROM shown r JOIN aula_courses c ON c.id=r.course WHERE r.kind='notice' AND r.at>?2
          UNION ALL
@@ -110,7 +113,8 @@ export const dashboardRoutes = {
            FROM shown r JOIN aula_courses c ON c.id=r.course
            WHERE r.kind='material' AND r.at>?2 AND (coalesce(json_extract(r.data,'$.module'),'')='' OR EXISTS (SELECT 1 FROM aula_records p
              WHERE p.id=json_extract(r.data,'$.module') AND p.deleted_at IS NULL AND ${publishedSql('p', '?3')}
-               AND ${sectionSql("json_extract(p.data,'$.sections')", '(SELECT m.section FROM aula_members m WHERE m.course=r.course AND m.user_id=?1)', 'sp')}))
+               AND ${sectionSql("json_extract(p.data,'$.sections')", '(SELECT m.section FROM aula_members m WHERE m.course=r.course AND m.user_id=?1)', 'sp')}
+               AND ${recordConditionsSql('p', 'r.cond_member', 'cp')}))
          UNION ALL
          SELECT 'quiz', r.id, r.course, c.name, json_extract(r.data,'$.title'), r.at
            FROM shown r JOIN aula_courses c ON c.id=r.course WHERE r.kind='quiz' AND r.at>?2
@@ -125,7 +129,7 @@ export const dashboardRoutes = {
          SELECT 'task' AS type, t.id, t.course, c.name AS course_name, t.title, t.updated AS at
            FROM mine JOIN aula_tasks t ON t.course=mine.course AND t.visible=1 AND t.deleted_at IS NULL
            JOIN aula_courses c ON c.id=t.course WHERE t.updated>?2 AND (t.start_at='' OR t.start_at<=?3) AND ${sectionSql('t.sections', 'mine.section')}
-             AND ${specialTaskSql('t', 'mine.member')}
+             AND ${specialTaskSql('t', 'mine.member')} AND ${conditionsSql('t.conditions', 'mine.member')}
          UNION ALL
          SELECT 'grade', t.id, s.course, c.name, t.title, s.graded_at
            FROM mine JOIN aula_submissions s ON s.member=mine.member AND s.published=1 AND s.grade IS NOT NULL
@@ -139,13 +143,28 @@ export const dashboardRoutes = {
         since,
         nowIso(),
       ),
+      // Foros (12.23): publicaciones nuevas en lo que sigue y respuestas a sus hilos (una por hilo más abajo).
+      all(
+        db,
+        `${ctes}, place AS (SELECT course, section, member, 0 AS teach FROM mine UNION ALL SELECT course, '', NULL, 1 FROM teach)
+         SELECT 'post' AS type, coalesce(json_extract(p.data,'$.parent'), p.id) AS id, p.course, c.name AS course_name,
+                ${threadTitleSql} AS title, p.created AS at, f.id AS forum
+         FROM place JOIN aula_records p ON p.course=place.course AND p.created>?2
+         JOIN aula_records f ON f.id=json_extract(p.data,'$.forum') AND f.deleted_at IS NULL
+         JOIN aula_courses c ON c.id=p.course
+         WHERE ${forumActivitySql('?1', 'place', '?3')}
+         ORDER BY at DESC LIMIT ${limit}`,
+        user.id,
+        since,
+        nowIso(),
+      ),
     ]);
     const reads = new Set((await all(db, 'SELECT item FROM aula_notice_reads WHERE user_id=?', user.id)).map((r) => r.item));
-    const items = [...content, ...activity].sort((a, b) => (a.at < b.at ? 1 : -1)).slice(0, limit);
-    // Varias entregas de la misma actividad se agrupan en un solo aviso.
+    const items = [...content, ...activity, ...forums].sort((a, b) => (a.at < b.at ? 1 : -1)).slice(0, limit);
+    // Varias entregas de la misma actividad (o publicaciones del mismo hilo) se agrupan en un solo aviso.
     const grouped = [];
     for (const item of items) {
-      const same = item.type === 'submission' && grouped.find((g) => g.type === 'submission' && g.id === item.id);
+      const same = (item.type === 'submission' || item.type === 'post') && grouped.find((g) => g.type === item.type && g.id === item.id);
       if (same) same.count++;
       else {
         const key = noticeKey(item);
@@ -205,7 +224,7 @@ export const dashboardRoutes = {
          LEFT JOIN aula_section_dates d ON d.item=t.id AND d.section=mine.section
          LEFT JOIN aula_submissions s ON s.task=t.id AND s.member=mine.member
          WHERE coalesce(nullif(e.due,''), nullif(d.due,''), t.due) BETWEEN ?2 AND ?3 AND ${sectionSql('t.sections', 'mine.section')}
-           AND ${specialTaskSql('t', 'mine.member')}
+           AND ${specialTaskSql('t', 'mine.member')} AND ${conditionsSql('t.conditions', 'mine.member')}
            AND coalesce(nullif(e.start_at,''), nullif(d.start_at,''), t.start_at)<=?4 ORDER BY due LIMIT 300`,
         user.id,
         fromIso,

@@ -1,9 +1,50 @@
-# Enlace · versión 12.22
+# Enlace · versión 12.23
 
 Plataforma académica independiente para docentes y alumnos de cualquier academia (nació en la Academia de Física de la BUAP), con interfaz inspirada en Brightspace.
 No es el código de D2L Brightspace ni una plataforma oficial de la BUAP.
 
 Esta versión se despliega en **tu propia cuenta de Cloudflare** (Workers + D1 + R2, plan gratuito) y ya no depende de ChatGPT Sites.
+
+## Novedades de la versión 12.23 (evaluaciones, foros completos y condiciones de liberación)
+
+**Importar un examen completo**: en Evaluaciones, botón **«Importar examen (Word, Excel o texto)»**. Eliges un archivo **.docx**, **.xlsx**, **.csv** o **.txt** (o pegas el texto) y ves cómo se entendió cada pregunta antes de agregarla. El título se toma del nombre del archivo. También está dentro del editor de cualquier evaluación («＋ Importar preguntas»).
+- Formato: preguntas numeradas (1., 2., …, o la lista automática de Word) y opciones a), b), c)…
+- La correcta lleva **\*** (o «(correcta)»), o se indica con «Respuesta: b». En Word basta con ponerla en **negritas**.
+- Varias correctas → selección múltiple. Sin opciones: «Respuesta: Verdadero/Falso» → verdadero o falso; un número → aritmética; un texto → respuesta corta (varias aceptadas con |); nada → respuesta escrita. Con [[ ]] en el enunciado → para completar.
+- Opcionales: «Puntos: 2», «Retroalimentación: …» y «Comentario: …» debajo de una opción.
+- En Excel: columnas Tipo, Pregunta, A a F, Respuesta, Puntos y Retroalimentación. En «Cómo escribirlas» hay una **plantilla de Excel** para descargar.
+
+**Evaluaciones**:
+- **Puntos por pregunta** (0.1 a 100): la calificación se pondera con ellos.
+- **Retroalimentación**: una explicación por pregunta y un comentario por opción. El alumno los ve al revisar su intento, si la evaluación muestra «Qué preguntas acertó». En sus intentos anteriores tiene «Ver revisión».
+- **Corregir la clave con intentos ya enviados**: ahora se puede cambiar la respuesta correcta, la tolerancia, las respuestas aceptadas y los puntos. **Al guardar se vuelven a calificar todos los intentos.** Se conservan las respuestas escritas ya calificadas y tus ajustes a mano. El enunciado, las opciones y el orden aleatorio siguen sin poder cambiarse.
+- **Estadísticas por pregunta**: acierto promedio, discriminación (si la aciertan más quienes salen mejor) y cuántos eligieron cada opción.
+- **Exportar a Excel**: un libro con tres hojas: resultados por alumno, respuestas por pregunta y estadísticas.
+- Se corrigió un error de la 12.21: al abrir para editar una evaluación, las preguntas de los tipos nuevos aparecían como opción múltiple.
+
+**Foros completos**:
+- **Hilos con respuestas**: cada hilo tiene sus respuestas. Hay búsqueda y orden por última actividad, más recientes o sin respuesta.
+- Lo **nuevo** desde tu última visita se marca en cada hilo.
+- **Seguir** un foro o un hilo: sus publicaciones nuevas llegan a la campana y al resumen por correo. Las respuestas a tus propios hilos siempre te llegan.
+- Reglas por foro:
+  - **anónimo**: tus compañeros no ven tu nombre; tu docente sí;
+  - **publica primero**: cada alumno ve lo de sus compañeros hasta que publica lo suyo;
+  - **cerrado**: ya no recibe publicaciones.
+- El docente puede **fijar** un hilo arriba o **cerrarlo**.
+- **Calificar la participación**: crea la actividad «Participación: …» en el libro de calificaciones. Ahí eliges su categoría o ponderación. Los alumnos no entregan nada en ella. En el foro ves los hilos y respuestas de cada alumno y pones su calificación.
+
+**Condiciones de liberación** (como en Brightspace): en unidades, materiales, foros, evaluaciones y actividades, la sección «Condiciones de liberación» define qué debe hacer el alumno antes de verlos:
+- completar o abrir un material;
+- entregar una actividad o sacar al menos cierta calificación en ella;
+- contestar una evaluación o sacar al menos cierto puntaje.
+
+Pueden ser «todas» o «cualquiera». Mientras no las cumple, el alumno no ve el elemento en ningún lado (curso, descargas, pendientes, calendario, avisos ni correo). Tú lo ves con la etiqueta «🔒 Con condiciones». Si borras el elemento de una condición, aparece «⚠ Condición rota» hasta que la corrijas. Al copiar el curso, las condiciones apuntan a lo copiado.
+
+Requiere la migración **0029**:
+- crea la tabla de seguimiento de foros (qué sigue cada quien y qué ya leyó);
+- agrega a las actividades el foro que califican y sus condiciones.
+
+No borra ni modifica datos.
 
 ## Novedades de la versión 12.22 (acceso especial, fechas en español y pulido visual)
 

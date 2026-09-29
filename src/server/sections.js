@@ -1,6 +1,7 @@
 // Secciones de un curso (por ejemplo 5AV, 5BV y 5CV de Física I): un solo curso con el mismo contenido para todos,
 // y alumnos, asistencia, calificaciones y fechas que se filtran o ajustan por sección. Un curso sin secciones funciona
 // igual que antes.
+import { conditionsSql } from './condiciones.js';
 import { access, requireTeacher } from './access.js';
 import { all, fail, isoDate, json, nowIso, one, readJson, run, text } from './http.js';
 
@@ -95,18 +96,20 @@ export async function quizForStudent(db, quiz, userId) {
   const dates = await one(
     db,
     `SELECT m.section, d.start_at, d.end_at, d.code, qa.quiz AS grant_quiz, qa.start_at AS grant_start, qa.end_at AS grant_end,
-            qa.extra_minutes, qa.extra_attempts
+            qa.extra_minutes, qa.extra_attempts, ${conditionsSql('?4', 'm.id')} AS unlocked
      FROM aula_members m LEFT JOIN aula_section_dates d ON d.section=m.section AND d.item=?1
        LEFT JOIN aula_quiz_access qa ON qa.quiz=?1 AND qa.member=m.id
      WHERE m.course=?2 AND m.user_id=?3 AND m.role='student'`,
     quiz.id,
     quiz.course,
     userId,
+    quiz.data.conditions ? JSON.stringify(quiz.data.conditions) : '',
   );
   // Una evaluación de otras secciones, o solo para quien tiene acceso especial, no está disponible para este alumno.
   const sections = quiz.data.sections || [];
   if (sections.length && !sections.includes(dates?.section)) fail('La evaluación no está disponible.', 403);
   if (quiz.data.specialOnly && !dates?.grant_quiz) fail('La evaluación no está disponible.', 403);
+  if (dates && !dates.unlocked) fail('La evaluación aún no está disponible: primero cumple sus condiciones.', 403);
   const grant = dates?.grant_quiz
     ? { start_at: dates.grant_start, end_at: dates.grant_end, extra_minutes: dates.extra_minutes, extra_attempts: dates.extra_attempts }
     : null;

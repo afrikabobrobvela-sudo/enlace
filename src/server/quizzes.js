@@ -138,14 +138,35 @@ export function questionFields(q, label) {
   const image = typeof q.image === 'string' && /^[A-Za-z0-9-]{1,64}$/.test(q.image) ? { image: q.image } : {};
   const poolName = String(q.pool ?? '').trim().replace(/\s+/g, ' ').slice(0, MAX_POOL_NAME);
   const pool = poolName ? { pool: poolName } : {};
+  let fields;
   if (type === 'choice') {
     const validOptions =
       Array.isArray(q.options) && q.options.length >= 2 && q.options.length <= 6 && Number.isInteger(q.correct) && q.correct >= 0 && q.correct < q.options.length;
     if (!validOptions) fail(`${label}: agrega de 2 a 6 opciones y marca la correcta.`);
-    return { type, text: prompt, options: q.options.map((o) => text(o, 1500)), correct: q.correct, ...image, ...pool };
+    fields = { options: q.options.map((o) => text(o, 1500)), correct: q.correct };
+  } else if (type !== 'numeric') fields = validateNew(type, q, label, numericFields);
+  else fields = numericFields(q, label);
+  return { type, text: prompt, ...fields, ...extraFields(q, label, fields.options), ...image, ...pool };
+}
+
+/**
+ * Lo opcional de cualquier pregunta (12.23): su valor en puntos (1 si no se indica: así todas valen lo mismo, como
+ * antes), la retroalimentación que ve el alumno al revisar y, en opción y selección múltiple, un comentario por opción.
+ */
+function extraFields(q, label, options) {
+  const extra = {};
+  if (q.points !== undefined && q.points !== null && q.points !== '') {
+    const points = Number(q.points);
+    if (!Number.isFinite(points) || points < 0.1 || points > 100) fail(`${label}: el valor de la pregunta va de 0.1 a 100 puntos.`);
+    if (points !== 1) extra.points = Math.round(points * 100) / 100;
   }
-  if (type !== 'numeric') return { type, text: prompt, ...validateNew(type, q, label, numericFields), ...image, ...pool };
-  return { type, text: prompt, ...numericFields(q, label), ...image, ...pool };
+  const explanation = String(q.explanation ?? '').trim().slice(0, 3000);
+  if (explanation) extra.explanation = explanation;
+  if (options && Array.isArray(q.optionFeedback)) {
+    const notes = options.map((_, i) => String(q.optionFeedback[i] ?? '').trim().slice(0, 1000));
+    if (notes.some(Boolean)) extra.optionFeedback = notes;
+  }
+  return extra;
 }
 
 /** Respuesta con fórmula, datos aleatorios, tolerancia y unidad («Aritmética» y «Cifras significativas»). */
@@ -365,7 +386,7 @@ export function finalAnswers(quiz, instance, start, submitted) {
 /** Forma canónica de una pregunta (las de versiones anteriores no tienen `type`: son de opción múltiple). */
 const canonical = (q) => {
   if (NEW_TYPES.includes(q.type)) {
-    const { image: _image, ...rest } = q;
+    const { image: _image, points: _p, explanation: _e, optionFeedback: _o, ...rest } = q;
     return rest;
   }
   return canonicalOld(q);
@@ -377,11 +398,98 @@ const canonicalOld = (q) => ({
   ...(q.pool ? { pool: q.pool } : {}),
 });
 
-/** ¿Son las mismas preguntas? (con intentos registrados no se permite cambiarlas). */
-export const sameQuestions = (a, b) => JSON.stringify((a || []).map(canonical)) === JSON.stringify((b || []).map(canonical));
+/**
+ * Lo que se puede corregir aunque ya haya intentos (12.23): la clave (respuesta correcta, respuestas aceptadas,
+ * tolerancia, forma de calificar), el valor en puntos y la retroalimentación. Lo demás (enunciado, opciones, datos,
+ * parejas…) es lo que el alumno vio: no cambia. En «Para completar», las respuestas van dentro de [[ ]] del enunciado.
+ */
+const KEY_FIELDS = ['correct', 'answer', 'answers', 'tolerance', 'scoring', 'exact', 'figures', 'penalty', 'points', 'explanation', 'optionFeedback', 'image', 'guide'];
+/** JSON con las llaves ordenadas (las preguntas de versiones anteriores guardan sus campos en otro orden). */
+const stable = (value) =>
+  Array.isArray(value)
+    ? `[${value.map(stable).join(',')}]`
+    : value && typeof value === 'object'
+    ? `{${Object.keys(value)
+        .filter((k) => value[k] !== undefined)
+        .sort()
+        .map((k) => `${JSON.stringify(k)}:${stable(value[k])}`)
+        .join(',')}}`
+    : JSON.stringify(value);
+/** Lo que vio el alumno de una pregunta (sin la clave). Las de versiones anteriores no tienen `type`: son de opción múltiple. */
+function structureOf(q) {
+  const type = q.type || 'choice';
+  if (type === 'choice') return { type, text: q.text, options: q.options, pool: q.pool || '' };
+  if (type === 'numeric') return { type, text: q.text, unit: q.unit || '', variables: q.variables || [], pool: q.pool || '' };
+  const base = { ...q, type, pool: q.pool || '' };
+  for (const key of KEY_FIELDS) delete base[key];
+  if (type === 'fill') base.text = String(base.text).replace(/\[\[[^\]]{1,200}\]\]/g, '[[ ]]');
+  return base;
+}
+/** La clave con la que se califica (y los puntos). */
+function keyOf(q) {
+  const type = q.type || 'choice';
+  const points = q.points || 1;
+  if (type === 'choice') return { correct: q.correct, points };
+  if (type === 'numeric') return { answer: q.answer, tolerance: q.tolerance, points };
+  const { explanation: _e, optionFeedback: _o, image: _i, guide: _g, ...rest } = q;
+  return { ...rest, type, points };
+}
 
-/** ¿Se sortean igual? (con intentos registrados tampoco se permite cambiar cuántas se toman de cada grupo). */
-export const sameDraw = (a, b) => JSON.stringify(a?.draw || []) === JSON.stringify(b?.draw || []);
+/** ¿Es la misma evaluación para lo que el alumno vio? (con intentos solo se permite corregir la clave y los puntos). */
+export const sameStructure = (a, b) => stable((a || []).map(structureOf)) === stable((b || []).map(structureOf));
+
+/** ¿Cambió algo que afecta la calificación? (clave o puntos): entonces se recalifican los intentos. */
+export const keyChanged = (a, b) => stable((a || []).map(keyOf)) !== stable((b || []).map(keyOf));
+
+/**
+ * ¿Se arma igual cada intento? Con intentos registrados no se permite cambiar las preguntas al azar ni el orden
+ * aleatorio de preguntas u opciones: así cada intento se puede volver a calificar con lo que vio el alumno.
+ */
+export const sameDraw = (a, b) =>
+  JSON.stringify([a?.draw || [], Boolean(a?.shuffle), Boolean(a?.shuffleOptions)]) === JSON.stringify([b?.draw || [], Boolean(b?.shuffle), Boolean(b?.shuffleOptions)]);
+
+/** La respuesta guardada de una pregunta, como la contestó el alumno (posiciones en su pantalla). */
+function rawAnswer(q, d, item) {
+  const type = q.type || 'choice';
+  if (type === 'choice') return item?.perm ? item.perm.indexOf(d.answer) : d.answer;
+  if (type === 'truefalse') return d.answer === true ? 0 : 1;
+  if (type === 'multi') return d.answer.map((o) => item.key.perm.indexOf(o));
+  if (type === 'matching') return d.answer.map((o) => (o === null || o === undefined ? null : item.key.perm.indexOf(o)));
+  return d.answer;
+}
+
+/**
+ * Vuelve a calificar un intento con la clave actual (después de que el docente la corrige). Lo calificado a mano
+ * (respuestas escritas revisadas y ajustes del docente) se conserva. Devuelve null si el intento no se puede recalificar.
+ */
+export function regradeAttempt(quiz, row) {
+  let details;
+  try {
+    details = JSON.parse(row.details || 'null');
+  } catch {
+    return null;
+  }
+  if (!Array.isArray(details)) return null;
+  const instance = quizInstance(quiz, row.user_id, row.attempt || 1);
+  const items = new Map(instance.map((item) => [item.index, item]));
+  if (details.some((d) => !items.has(d.index) || !quiz.data.questions[d.index])) return null;
+  const answers = {};
+  for (const d of details) if (d.answer !== null && d.answer !== undefined) answers[d.index] = rawAnswer(quiz.data.questions[d.index], d, items.get(d.index));
+  let graded;
+  try {
+    graded = gradeAttempt(quiz, details.map((d) => items.get(d.index)), answers);
+  } catch {
+    return null;
+  }
+  const merged = graded.details.map((nd) => {
+    const od = details.find((d) => d.index === nd.index);
+    if (od && (od.overridden || (od.manual && od.reviewed))) {
+      return { ...nd, credit: od.credit, correct: od.correct, reviewed: od.reviewed, feedback: od.feedback, ...(od.overridden ? { overridden: true } : {}) };
+    }
+    return od?.feedback ? { ...nd, feedback: od.feedback } : nd;
+  });
+  return { details: merged, ...scoreOf(merged, quiz.data.questions) };
+}
 
 /** Huella de una pregunta del banco (sin imagen ni grupo): la misma pregunta no se guarda dos veces. */
 export const questionFingerprint = async (q) => {
@@ -392,7 +500,7 @@ export const questionFingerprint = async (q) => {
 
 /** Lo que el alumno ve de las preguntas antes de empezar (sin respuestas ni fórmulas). */
 export function publicQuestions(questions) {
-  const image = (q) => (q.image ? { image: q.image } : {});
+  const image = (q) => ({ ...(q.image ? { image: q.image } : {}), ...(q.points ? { points: q.points } : {}) });
   return questions.map((q) =>
     NEW_TYPES.includes(q.type) ? publicNew(q) : q.type === 'numeric' ? { type: q.type, text: q.text, unit: q.unit, ...image(q) } : { type: 'choice', text: q.text, options: q.options, ...image(q) },
   );
@@ -412,9 +520,10 @@ export function quizInstance(quiz, userId, attempt) {
       const values = q.type === 'sigfig' ? valuesOf(q, own) : undefined;
       return instanceNew(q, index, own, { shuffleOptions: quiz.data.settings?.shuffleOptions, values, shown: values ? showValues(q, values) : q.text });
     }
-    if (q.type !== 'numeric') return { index, type: 'choice', text: q.text, options: q.options, ...(q.image ? { image: q.image } : {}) };
+    const points = q.points ? { points: q.points } : {};
+    if (q.type !== 'numeric') return { index, type: 'choice', text: q.text, options: q.options, ...points, ...(q.image ? { image: q.image } : {}) };
     const values = valuesOf(q, random);
-    return { index, type: 'numeric', text: showValues(q, values), unit: q.unit, values, ...(q.image ? { image: q.image } : {}) };
+    return { index, type: 'numeric', text: showValues(q, values), unit: q.unit, values, ...points, ...(q.image ? { image: q.image } : {}) };
   });
   if (quiz.data.settings?.shuffle) {
     for (let i = questions.length - 1; i > 0; i--) {
@@ -495,21 +604,23 @@ export function gradeAttempt(quiz, instance, answers) {
     const ok = Math.abs(value - expected) <= allowed;
     return { index: item.index, answer: value, correct: ok, credit: ok ? 1 : 0, ...values };
   });
-  return { ...scoreOf(details), details };
+  return { ...scoreOf(details, questions), details };
 }
 
 /**
- * Aciertos y calificación a partir del detalle: cada pregunta vale lo mismo y da crédito parcial (0 a 1). Con
+ * Aciertos y calificación a partir del detalle: cada pregunta vale sus puntos (1 si no se indica, 12.23) y da
+ * crédito parcial (0 a 1). Con
  * preguntas al azar, el total es lo que recibió el alumno. Las respuestas escritas sin revisar cuentan 0 y quedan
  * en `pending` hasta que el docente las califique.
  */
-export function scoreOf(details) {
-  const credit = details.reduce((sum, d) => sum + (typeof d.credit === 'number' ? d.credit : d.correct ? 1 : 0), 0);
-  const total = details.length;
+export function scoreOf(details, questions = []) {
+  const weight = (d) => questions[d.index]?.points || 1;
+  const credit = details.reduce((sum, d) => sum + weight(d) * (typeof d.credit === 'number' ? d.credit : d.correct ? 1 : 0), 0);
+  const possible = details.reduce((sum, d) => sum + weight(d), 0);
   return {
     correct: details.filter((d) => d.correct).length,
-    total,
-    score: total ? (credit / total) * 10 : 0,
+    total: details.length,
+    score: possible ? (credit / possible) * 10 : 0,
     pending: details.filter((d) => d.manual && !d.reviewed).length,
   };
 }
@@ -550,6 +661,20 @@ export function studentAttemptView(record, quiz, now = Date.now()) {
     // Sin «qué preguntas acertó», los comentarios del docente (respuestas escritas) sí llegan, si se ve la calificación.
     const feedback = results.score === false ? [] : (data.details || []).filter((d) => d.feedback).map((d) => ({ index: d.index, credit: d.credit, feedback: d.feedback }));
     Object.assign(data, { details: null, answers: null, ...(feedback.length ? { feedback } : {}) });
+  } else if (data.details && quiz) {
+    // Con «qué preguntas acertó»: la retroalimentación de cada pregunta y la de las opciones que eligió (12.23).
+    data.details = data.details.map((d) => {
+      const q = quiz.data.questions[d.index];
+      if (!q) return d;
+      const extra = {};
+      if (q.explanation) extra.explanation = q.explanation;
+      if (q.optionFeedback) {
+        const chosen = Array.isArray(d.answer) ? d.answer : [d.answer];
+        const notes = chosen.filter((i) => Number.isInteger(i) && q.optionFeedback[i]).map((i) => q.optionFeedback[i]);
+        if (notes.length) extra.optionNotes = notes;
+      }
+      return { ...d, ...extra };
+    });
   }
   return { ...record, data };
 }

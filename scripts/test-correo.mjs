@@ -350,7 +350,7 @@ checks += 5;
 await call('docente', '/api/members/bulk', { course: c, students: Array.from({ length: 150 }, (_, i) => ({ name: 'Alumno ' + i, email: `a${i}@example.test` })) });
 const before = store.counter.queries;
 await digestMessages(env.DB, env, new Date());
-assert(store.counter.queries - before <= 6);
+assert(store.counter.queries - before <= 7); // 7 consultas en total (la 7.ª, foros, desde 12.23)
 checks++;
 
 console.log(`PASS: ${checks} verificaciones de avisos por correo — resumen diario por sección y persona, preferencia en el perfil, cupo diario sin perder avisos, noticia urgente una sola vez, administración y mensaje MIME seguro.`);

@@ -8,6 +8,8 @@
 import { all, fail, isoDate, nowIso, one, optionalText, parseJson, run, text } from './http.js';
 import { withSectionDates } from './sections.js';
 import { sectionSql, specialTaskSql, taskSections } from './published.js';
+import { regradeAttempt } from './quizzes.js';
+import { conditionsSql } from './condiciones.js';
 
 // ---- Conversión fila → registro --------------------------------------------------------------
 
@@ -38,6 +40,9 @@ export function taskRecord(row) {
       groupCategory: row.group_category || '',
       sections: taskSections(row.sections),
       specialOnly: row.special_only === 1,
+      // 12.23: califica la participación en un foro (no se entrega nada) y condiciones de liberación.
+      forum: row.forum || null,
+      conditions: parseJson(row.conditions || 'null', null),
     },
   };
 }
@@ -301,6 +306,7 @@ export async function saveTask(db, { course, userId, id, revision, fields }) {
     fields.rubric,
     fields.groupCategory,
     fields.sections?.length ? JSON.stringify(fields.sections) : '',
+    fields.conditions ? JSON.stringify(fields.conditions) : '',
   ];
   if (id) {
     const current = await loadTask(db, id, course);
@@ -308,7 +314,7 @@ export async function saveTask(db, { course, userId, id, revision, fields }) {
     const result = await run(
       db,
       `UPDATE aula_tasks SET title=?,body=?,visible=?,submission_mode=?,max_files=?,extensions=?,file_ids=?,
-         allow_resubmit=?,due=?,start_at=?,end_at=?,rubric=?,group_category=?,sections=?,revision=revision+1,updated=?
+         allow_resubmit=?,due=?,start_at=?,end_at=?,rubric=?,group_category=?,sections=?,conditions=?,revision=revision+1,updated=?
        WHERE id=? AND course=? AND revision=?`,
       ...values,
       now,
@@ -323,7 +329,7 @@ export async function saveTask(db, { course, userId, id, revision, fields }) {
   await run(
     db,
     `INSERT INTO aula_tasks (id,course,author,title,body,visible,submission_mode,max_files,extensions,file_ids,
-       allow_resubmit,due,start_at,end_at,rubric,group_category,sections,revision,created,updated) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,?,?)`,
+       allow_resubmit,due,start_at,end_at,rubric,group_category,sections,conditions,revision,created,updated) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,?,?)`,
     newId,
     course,
     userId,
@@ -415,18 +421,22 @@ export async function saveSubmission(db, { course, user, id, revision, input, va
   if (!member || member.role !== 'student') fail('Solo un alumno inscrito puede entregar esta actividad.', 403);
   const dates = await one(
     db,
-    `SELECT e.task AS ext_task, e.start_at AS ext_start, e.due AS ext_due, e.end_at AS ext_end, d.start_at, d.due, d.end_at FROM (SELECT 1) x
+    `SELECT e.task AS ext_task, e.start_at AS ext_start, e.due AS ext_due, e.end_at AS ext_end, d.start_at, d.due, d.end_at,
+            ${conditionsSql('?4', '?2')} AS unlocked FROM (SELECT 1) x
      LEFT JOIN aula_extensions e ON e.task=?1 AND e.member=?2
      LEFT JOIN aula_section_dates d ON d.item=?1 AND d.section=?3`,
     loaded.id,
     member.id,
     member.section || '',
+    loaded.conditions || '',
   );
   const task = withExtension(withSectionDates(loaded, dates), dates?.ext_task ? { start_at: dates.ext_start, due: dates.ext_due, end_at: dates.ext_end } : null);
   // Una actividad de otras secciones (o solo para quien tiene acceso especial) no está disponible para este alumno.
   const sections = taskSections(loaded.sections);
   if (sections.length && !sections.includes(member.section)) fail('La actividad no está disponible.', 403);
   if (loaded.special_only === 1 && !dates?.ext_task) fail('La actividad no está disponible.', 403);
+  if (loaded.forum) fail('En esta actividad no se entrega nada: se califica tu participación en el foro.', 409);
+  if (!dates?.unlocked) fail('La actividad aún no está disponible: primero cumple sus condiciones.', 403);
   assertAvailable(task);
 
   const existing = await one(db, 'SELECT * FROM aula_submissions WHERE task=? AND member=?', task.id, member.id);
@@ -647,4 +657,50 @@ export async function saveGrade(db, { course, grader, taskId, memberId, revision
 
 export async function quizHasAttempts(db, course, quizId) {
   return Boolean(await one(db, 'SELECT 1 AS x FROM aula_attempts WHERE course=? AND quiz=? LIMIT 1', course, quizId));
+}
+
+/**
+ * Vuelve a calificar todos los intentos de una evaluación después de corregir la clave o los puntos (12.23).
+ * Una sola lectura y las escrituras en tandas de ~1 MB (json_each), en un solo batch. Devuelve cuántos intentos
+ * se revisaron y a cuántos les cambió el resultado.
+ */
+export async function regradeQuiz(db, quiz) {
+  const rows = await all(db, 'SELECT id, user_id, attempt, details, correct, score FROM aula_attempts WHERE quiz=? AND course=?', quiz.id, quiz.course);
+  const updates = [];
+  for (const row of rows) {
+    const graded = regradeAttempt(quiz, row);
+    if (!graded) continue;
+    const details = JSON.stringify(graded.details);
+    if (details === row.details && graded.correct === row.correct && Math.abs(graded.score - row.score) < 1e-9) continue;
+    updates.push({ id: row.id, details, correct: graded.correct, score: Math.min(10, Math.max(0, graded.score)) });
+  }
+  const chunks = [];
+  let chunk = [];
+  let size = 0;
+  for (const u of updates) {
+    if (chunk.length && size + u.details.length > 1_000_000) {
+      chunks.push(chunk);
+      chunk = [];
+      size = 0;
+    }
+    chunk.push(u);
+    size += u.details.length;
+  }
+  if (chunk.length) chunks.push(chunk);
+  if (chunks.length) {
+    await db.batch(
+      chunks.map((list) =>
+        db
+          .prepare(
+            `UPDATE aula_attempts SET
+               details=(SELECT json_extract(j.value,'$.details') FROM json_each(?1) j WHERE json_extract(j.value,'$.id')=aula_attempts.id),
+               correct=(SELECT json_extract(j.value,'$.correct') FROM json_each(?1) j WHERE json_extract(j.value,'$.id')=aula_attempts.id),
+               score=(SELECT json_extract(j.value,'$.score') FROM json_each(?1) j WHERE json_extract(j.value,'$.id')=aula_attempts.id)
+             WHERE quiz=?2 AND id IN (SELECT json_extract(value,'$.id') FROM json_each(?1))`,
+          )
+          .bind(JSON.stringify(list), quiz.id),
+      ),
+    );
+  }
+  return { checked: rows.length, changed: updates.length };
 }

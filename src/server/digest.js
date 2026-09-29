@@ -6,6 +6,8 @@ import { access, requireAdmin, requireTeacher } from './access.js';
 import { all, fail, json, nowIso, one, readJson, run } from './http.js';
 import { dailyLimit, mailBody, mailConfigured, mailProvider, mailQuota, sendMails } from './mail.js';
 import { forSection, isPublished, publishedSql, sectionSql, specialRecordSql, specialTaskSql } from './published.js';
+import { forumActivitySql, threadTitleSql } from './foros.js';
+import { conditionsSql, recordConditionsSql } from './condiciones.js';
 
 const HOUR = 3_600_000;
 const MAX_ITEMS_PER_GROUP = 8;
@@ -28,20 +30,21 @@ export async function digestMessages(db, env, now = new Date()) {
   // ?1 ahora, ?2 hace 24 h, ?3 hace 72 h (ventanas); solo la consulta de «vence pronto» usa ?4 (dentro de 24 h).
   const params = [nowIsoText, new Date(+now - 24 * HOUR).toISOString(), new Date(+now - 72 * HOUR).toISOString()];
   const soon = new Date(+now + 24 * HOUR).toISOString();
-  const [people, content, tasks, grades, due, toGrade] = await Promise.all([
+  const [people, content, tasks, grades, due, toGrade, posts] = await Promise.all([
     all(db, `WITH ${RECIPIENTS} SELECT uid, email, name FROM rcpt`, ...params),
     // Noticias, evaluaciones y materiales publicados (o programados que ya se publicaron) desde su último resumen.
     all(
       db,
       `WITH ${RECIPIENTS}, shown AS (
-         SELECT m.uid, m.section, r.*, c.name AS course_name, max(r.updated, coalesce(json_extract(r.data,'$.publishAt'),'')) AS at, m.since
+         SELECT m.uid, m.section, m.member AS cond_member, r.*, c.name AS course_name, max(r.updated, coalesce(json_extract(r.data,'$.publishAt'),'')) AS at, m.since
          FROM mine m JOIN aula_records r ON r.course=m.course AND r.deleted_at IS NULL AND r.kind IN ('notice','quiz','material')
          JOIN aula_courses c ON c.id=r.course
-         WHERE ${publishedSql('r', '?1')} AND ${sectionSql("json_extract(r.data,'$.sections')", 'm.section')} AND ${specialRecordSql('r', 'm.member')})
+         WHERE ${publishedSql('r', '?1')} AND ${sectionSql("json_extract(r.data,'$.sections')", 'm.section')} AND ${specialRecordSql('r', 'm.member')}
+           AND ${recordConditionsSql('r', 'm.member')})
        SELECT uid, kind, course_name, json_extract(data,'$.title') AS title, at FROM shown s
        WHERE at>since AND at<=?1 AND (kind<>'material' OR coalesce(json_extract(data,'$.module'),'')='' OR EXISTS (
          SELECT 1 FROM aula_records p WHERE p.id=json_extract(s.data,'$.module') AND p.deleted_at IS NULL AND ${publishedSql('p', '?1')}
-           AND ${sectionSql("json_extract(p.data,'$.sections')", 's.section', 'sp')}))
+           AND ${sectionSql("json_extract(p.data,'$.sections')", 's.section', 'sp')} AND ${recordConditionsSql('p', 's.cond_member', 'cp')}))
        ORDER BY at LIMIT 20000`,
       ...params,
     ),
@@ -54,7 +57,7 @@ export async function digestMessages(db, env, now = new Date()) {
        JOIN aula_courses c ON c.id=t.course
        LEFT JOIN aula_extensions e ON e.task=t.id AND e.member=m.member
        LEFT JOIN aula_section_dates d ON d.item=t.id AND d.section=m.section
-       WHERE ${sectionSql('t.sections', 'm.section')} AND ${specialTaskSql('t', 'm.member')}
+       WHERE ${sectionSql('t.sections', 'm.section')} AND ${specialTaskSql('t', 'm.member')} AND ${conditionsSql('t.conditions', 'm.member')}
          AND coalesce(nullif(e.start_at,''), nullif(d.start_at,''), t.start_at, '')<=?1
          AND (t.created>m.since OR coalesce(nullif(e.start_at,''), nullif(d.start_at,''), t.start_at, '')>m.since)
        LIMIT 20000`,
@@ -79,7 +82,8 @@ export async function digestMessages(db, env, now = new Date()) {
        JOIN aula_courses c ON c.id=t.course
        LEFT JOIN aula_extensions e ON e.task=t.id AND e.member=m.member
        LEFT JOIN aula_section_dates d ON d.item=t.id AND d.section=m.section
-       WHERE ${sectionSql('t.sections', 'm.section')} AND ${specialTaskSql('t', 'm.member')} AND coalesce(nullif(e.due,''), nullif(d.due,''), t.due) BETWEEN ?1 AND ?4
+       WHERE ${sectionSql('t.sections', 'm.section')} AND ${specialTaskSql('t', 'm.member')} AND t.forum IS NULL AND ${conditionsSql('t.conditions', 'm.member')}
+         AND coalesce(nullif(e.due,''), nullif(d.due,''), t.due) BETWEEN ?1 AND ?4
          -- Lo que ya se recordó en el resumen anterior (existía y vencía dentro de sus 24 h) no se repite.
          AND (t.created>m.since OR coalesce(nullif(e.due,''), nullif(d.due,''), t.due) > strftime('%Y-%m-%dT%H:%M:%fZ', m.since, '+1 day'))
          AND NOT EXISTS (SELECT 1 FROM aula_submissions s WHERE s.task=t.id AND s.member=m.member AND (s.submitted!='' OR s.grade IS NOT NULL))
@@ -99,6 +103,23 @@ export async function digestMessages(db, env, now = new Date()) {
        GROUP BY r.uid, c.id LIMIT 5000`,
       ...params,
     ),
+    // Foros (12.23): publicaciones nuevas en lo que sigue cada quien y respuestas a sus hilos, por hilo.
+    all(
+      db,
+      `WITH ${RECIPIENTS}, place AS (
+         SELECT uid, course, section, member, 0 AS teach, since FROM mine
+         UNION ALL
+         SELECT r.uid, c.id, '', NULL, 1, r.since FROM rcpt r JOIN aula_courses c ON c.archived_at IS NULL
+           AND NOT EXISTS (SELECT 1 FROM aula_deleted_courses d WHERE d.course=c.id)
+           AND (c.owner=r.uid OR EXISTS (SELECT 1 FROM aula_members t WHERE t.course=c.id AND t.user_id=r.uid AND t.role='teacher')))
+       SELECT place.uid, c.name AS course_name, ${threadTitleSql} AS title, count(*) AS n
+       FROM place JOIN aula_records p ON p.course=place.course AND p.created>place.since AND p.created<=?1
+       JOIN aula_records f ON f.id=json_extract(p.data,'$.forum') AND f.deleted_at IS NULL
+       JOIN aula_courses c ON c.id=p.course
+       WHERE ${forumActivitySql('place.uid', 'place', '?1')}
+       GROUP BY place.uid, coalesce(json_extract(p.data,'$.parent'), p.id) LIMIT 20000`,
+      ...params,
+    ),
   ]);
   const byUser = new Map();
   const add = (uid, course, line) => {
@@ -115,6 +136,7 @@ export async function digestMessages(db, env, now = new Date()) {
   for (const x of tasks) if (!dueSoon.has(x.uid + ':' + x.id)) add(x.uid, x.course_name, `Actividad nueva: «${x.title}»${x.due ? ` (vence ${when(x.due)})` : ''}`);
   for (const x of content) add(x.uid, x.course_name, `${label[x.kind]}: «${x.title}»`);
   for (const x of toGrade) add(x.uid, x.course_name, `${x.n} ${x.n === 1 ? 'entrega nueva' : 'entregas nuevas'} por calificar`);
+  for (const x of posts) add(x.uid, x.course_name, `Foro: ${x.n === 1 ? 'publicación nueva' : `${x.n} publicaciones nuevas`} en «${x.title}»`);
   const url = env.ENLACE_URL || '';
   const messages = [];
   for (const person of people) {

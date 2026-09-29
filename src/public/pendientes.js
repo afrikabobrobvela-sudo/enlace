@@ -55,8 +55,9 @@ const NOTICE_LABELS = {
   task: 'Actividad',
   grade: 'Calificación publicada',
   submission: 'Entregas nuevas',
+  post: 'Foro: publicaciones nuevas',
 };
-const NOTICE_TARGET = { notice: 'notices', material: 'content', quiz: 'quiz', task: 'task', grade: 'task', submission: 'task' };
+const NOTICE_TARGET = { notice: 'notices', material: 'content', quiz: 'quiz', task: 'task', grade: 'task', submission: 'task', post: 'thread' };
 let noticesCache = null;
 
 async function loadNotices() {
@@ -187,7 +188,7 @@ async function openFromNotice(dataset) {
   if (dialog?.open) return closeDialogThen(dialog, () => openFromNotice(dataset).catch((error) => toast(error.message)));
   if (current?.course.id !== dataset.openCourse) await openCourse(dataset.openCourse);
   const type = dataset.openType;
-  if (type === 'task' || type === 'quiz') {
+  if (type === 'task' || type === 'quiz' || type === 'thread') {
     section = type;
     detail = dataset.openId;
   } else {

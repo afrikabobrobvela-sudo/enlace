@@ -354,7 +354,7 @@ document.addEventListener('change', (e) => {
 /** Etiqueta «Solo 5AV, 5BV» para quien enseña en listas y encabezados. */
 function sectionTag(record) {
   const sections = record?.data?.sections || [];
-  const special = typeof specialTag === 'function' ? specialTag(record) : '';
+  const special = (typeof specialTag === 'function' ? specialTag(record) : '') + (typeof conditionsTag === 'function' ? conditionsTag(record) : '');
   if (!teaches() || !sections.length) return special;
   return ` <span class="role-pill section-pill">Solo ${esc(sections.map(sectionName).filter(Boolean).join(', '))}</span>${special}`;
 }

@@ -125,6 +125,8 @@ const legacyTasks = pick(before.records, 'task').map((t) => ({
     // 12.18: para todas las secciones.
     sections: [],
     specialOnly: false,
+    forum: null,
+    conditions: null,
   },
 }));
 assert.deepEqual(pick(after.records, 'task'), legacyTasks);

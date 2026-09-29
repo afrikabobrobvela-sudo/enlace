@@ -8,7 +8,7 @@
  */
 
 const ROUTE_KEYS = ['c', 's', 'd', 'm', 'a', 'r', 'h'];
-const ROUTE_DETAIL = ['task', 'forum', 'quiz', 'review', 'editor'];
+const ROUTE_DETAIL = ['task', 'forum', 'thread', 'quiz', 'review', 'editor'];
 let routeReady = false; // se activa al terminar de abrir la pantalla inicial
 let routeApplying = false; // aplicando una entrada del historial: se reemplaza, no se agrega otra
 let pendingBack = 0; // history.back() pedidos al cerrar una ventana con el botón de la ventana

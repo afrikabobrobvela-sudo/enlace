@@ -51,7 +51,7 @@ const moreSections = () =>
 /** Sección activa (las pantallas de detalle pertenecen a su lista). */
 function activeSection() {
   if (['task', 'editor', 'review'].includes(section)) return 'tasks';
-  if (section === 'forum') return 'forums';
+  if (section === 'forum' || section === 'thread') return 'forums';
   if (section === 'quiz' || section === 'bank') return 'quizzes';
   if (section === 'trash') return 'admin';
   if (section === 'access') return 'members';
