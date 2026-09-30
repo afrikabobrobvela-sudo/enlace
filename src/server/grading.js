@@ -1,6 +1,6 @@
 // Categorías con pesos, reglas de la calificación final y banco de rúbricas.
 import { access, requireTeacher } from './access.js';
-import { parseTerms, rubricRecord } from './gradebook.js';
+import { loadTask, parseTerms, rubricRecord } from './gradebook.js';
 import { all, fail, json, nowIso, one, optionalText, readJson, run, text } from './http.js';
 
 const STALE = 'Recarga la configuración de calificaciones antes de editar.';
@@ -51,6 +51,60 @@ function rubricDefinition(input) {
 const isTeacher = (user) => user.role === 'teacher' || user.role === 'admin';
 
 export const gradingRoutes = {
+  // Calificación en bloque (12.32): la misma calificación (y el comentario, si se escribe) a los alumnos elegidos de una
+  // actividad. Sin `replace` solo toca a quienes aún no tienen calificación. Historial y escritura en un solo batch;
+  // una fila sin cambios no se escribe ni se registra.
+  'POST /api/grades/bulk': async ({ db, user, request }) => {
+    const body = await readJson(request);
+    requireTeacher(await access(db, user, body.course));
+    const task = await loadTask(db, body.task, body.course);
+    const grade = typeof body.grade === 'number' ? body.grade : Number(String(body.grade ?? '').trim().replace(',', '.') || NaN);
+    if (!Number.isFinite(grade) || grade < 0 || grade > 10) fail('Escribe una calificación de 0 a 10.');
+    const ids = [...new Set((Array.isArray(body.members) ? body.members : []).filter((id) => typeof id === 'string' && id))];
+    if (!ids.length) fail('Elige al menos un alumno.');
+    if (ids.length > 2000) fail('Son demasiados alumnos para una sola vez.');
+    const feedback = optionalText(body.feedback, 15000); // vacío = se conserva el comentario de cada alumno
+    const replace = body.replace === true ? 1 : 0;
+    const publish = body.publish === false ? 0 : 1;
+    const enrolled = await one(
+      db,
+      "SELECT count(*) AS n FROM aula_members WHERE course=? AND role='student' AND id IN (SELECT value FROM json_each(?))",
+      task.course,
+      JSON.stringify(ids),
+    );
+    if (enrolled.n !== ids.length) fail('Algún alumno elegido ya no está inscrito. Recarga la página.', 409);
+    const now = nowIso();
+    // ?1 curso, ?2 actividad, ?3 calificación, ?4 publicada, ?5 comentario, ?6 docente, ?7 ahora, ?8 alumnos, ?9 reemplazar
+    const unchanged = (s) => `(${s}.grade IS ?3 AND ${s}.published=?4 AND (?5='' OR ${s}.feedback=?5))`;
+    const [, result] = await db.batch([
+      db
+        .prepare(
+          `INSERT INTO aula_grade_history (id,course,task,member,old_grade,new_grade,old_published,new_published,feedback_changed,reason,changed_by,changed_at)
+           SELECT lower(hex(randomblob(16))), ?1, ?2, m.id, s.grade, ?3, s.published, ?4,
+             CASE WHEN ?5 <> '' AND coalesce(s.feedback,'') <> ?5 THEN 1 ELSE 0 END, 'calificación en bloque', ?6, ?7
+           FROM aula_members m LEFT JOIN aula_submissions s ON s.task=?2 AND s.member=m.id
+           WHERE m.course=?1 AND m.role='student' AND m.id IN (SELECT value FROM json_each(?8))
+             AND (?9 OR s.grade IS NULL) AND (s.id IS NULL OR NOT ${unchanged('s')})`,
+        )
+        .bind(task.course, task.id, grade, publish, feedback, user.id, now, JSON.stringify(ids), replace),
+      db
+        .prepare(
+          `INSERT INTO aula_submissions (id,course,task,member,author,body,file_ids,submitted,late,manual,grade,feedback,published,
+             graded_by,graded_at,rubric_scores,revision,created,updated)
+           SELECT 'submission:'||?2||':'||coalesce(m.user_id,m.id), ?1, ?2, m.id, coalesce(m.user_id,m.id), '', '[]', '', 0, 1,
+             ?3, ?5, ?4, ?6, ?7, NULL, 1, ?7, ?7
+           FROM aula_members m WHERE m.course=?1 AND m.role='student' AND m.id IN (SELECT value FROM json_each(?8))
+           ON CONFLICT(task,member) DO UPDATE SET grade=excluded.grade,
+             feedback=CASE WHEN ?5 <> '' THEN excluded.feedback ELSE aula_submissions.feedback END,
+             published=excluded.published, graded_by=excluded.graded_by, graded_at=excluded.graded_at,
+             revision=aula_submissions.revision+1, updated=excluded.updated
+           WHERE (?9 OR aula_submissions.grade IS NULL) AND NOT ${unchanged('aula_submissions')}`,
+        )
+        .bind(task.course, task.id, grade, publish, feedback, user.id, now, JSON.stringify(ids), replace),
+    ]);
+    return json({ graded: result.meta.changes, skipped: ids.length - result.meta.changes });
+  },
+
   // Esquema del curso: "tasks" (pesos por actividad, como antes) o "categories".
   'POST /api/grades/scheme': async ({ db, user, request }) => {
     const body = await readJson(request);
@@ -257,6 +311,158 @@ export const gradingRoutes = {
     }
     await db.batch(statements);
     return json({ ok: true, quizzes: quizChanges.length, forums: newTasks.length });
+  },
+
+  // Aplicar la configuración de calificaciones de este curso a otros grupos (12.32): parciales, categorías (con su
+  // distribución y las que no cuentan), reglas de la calificación final y, por nombre, la categoría y el valor de cada
+  // actividad (y su peso) y evaluación. Lo que coincide por nombre en el destino conserva su id (las actividades siguen ligadas);
+  // las categorías del destino que no existen aquí se quitan (sus actividades quedan sin categoría).
+  'POST /api/grades/copy-scheme': async ({ db, user, request }) => {
+    const body = await readJson(request);
+    const from = await access(db, user, body.course);
+    requireTeacher(from);
+    const targets = [...new Set((Array.isArray(body.targets) ? body.targets : []).filter((id) => typeof id === 'string' && id && id !== from.course.id))];
+    if (!targets.length) fail('Elige al menos un grupo.');
+    if (targets.length > 20) fail('Elige como máximo 20 grupos a la vez.');
+    for (const id of targets) {
+      const a = await access(db, user, id);
+      requireTeacher(a);
+      if (a.course.archived_at) fail(`«${[a.course.name, a.course.group_name].filter(Boolean).join(' ')}» está archivado: desarchívalo para cambiarlo.`, 409);
+    }
+    const list = JSON.stringify(targets);
+    const [settings, categories, tasks, quizzes, targetSettings, targetCategories, targetTasks, targetQuizzes] = await Promise.all([
+      one(db, 'SELECT * FROM aula_grade_settings WHERE course=?', from.course.id),
+      all(db, 'SELECT * FROM aula_grade_categories WHERE course=? ORDER BY position', from.course.id),
+      all(db, 'SELECT title, category, points, weight FROM aula_tasks WHERE course=? AND deleted_at IS NULL', from.course.id),
+      all(db, "SELECT json_extract(data,'$.title') AS title, json_extract(data,'$.grade') AS grade FROM aula_records WHERE course=? AND kind='quiz' AND deleted_at IS NULL AND json_extract(data,'$.grade.category') IS NOT NULL", from.course.id),
+      all(db, 'SELECT course, terms FROM aula_grade_settings WHERE course IN (SELECT value FROM json_each(?))', list),
+      all(db, 'SELECT id, course, name, term FROM aula_grade_categories WHERE course IN (SELECT value FROM json_each(?))', list),
+      all(db, 'SELECT id, course, title FROM aula_tasks WHERE deleted_at IS NULL AND course IN (SELECT value FROM json_each(?))', list),
+      all(db, "SELECT id, course, json_extract(data,'$.title') AS title FROM aula_records WHERE kind='quiz' AND deleted_at IS NULL AND course IN (SELECT value FROM json_each(?))", list),
+    ]);
+    const key = (value) => String(value ?? '').trim().toLowerCase();
+    const terms = parseTerms(settings?.terms);
+    const termName = new Map(terms.map((t) => [t.id, key(t.name)]));
+    const now = nowIso();
+    const summary = [];
+    const settingRows = [];
+    const categoryRows = [];
+    const assignmentRows = [];
+    const quizRows = [];
+    for (const course of targets) {
+      // Parciales: los del destino con el mismo nombre conservan su id.
+      const oldTerms = new Map(parseTerms(targetSettings.find((x) => x.course === course)?.terms).map((t) => [key(t.name), t.id]));
+      const newTerms = terms.map((t) => ({ id: oldTerms.get(key(t.name)) || crypto.randomUUID(), name: t.name, weight: t.weight }));
+      const termIn = new Map(terms.map((t, i) => [t.id, newTerms[i].id]));
+      const termKeyOf = new Map(newTerms.map((t) => [t.id, key(t.name)]));
+      const mine = targetCategories.filter((c) => c.course === course);
+      const existing = new Map(mine.map((c) => [`${termKeyOf.get(c.term) ?? (c.term ? '?' + c.term : '')}\u0000${key(c.name)}`, c.id]));
+      const used = new Set();
+      const categoryIn = new Map();
+      const rows = categories.map((c) => {
+        // Primero el mismo nombre en el mismo parcial; si no, el mismo nombre en cualquier parte (se mueve).
+        const exact = existing.get(`${c.term ? termName.get(c.term) ?? '' : ''}\u0000${key(c.name)}`);
+        const loose = mine.find((x) => key(x.name) === key(c.name) && !used.has(x.id))?.id;
+        const id = (exact && !used.has(exact) ? exact : loose) || crypto.randomUUID();
+        used.add(id);
+        categoryIn.set(c.id, id);
+        return { id, name: c.name, weight: c.weight, source: c.source, position: c.position, term: c.term ? termIn.get(c.term) || '' : '', distribution: c.distribution || 'manual', drop_low: c.drop_low || 0, drop_high: c.drop_high || 0 };
+      });
+      const removed = [...existing.values()].filter((id) => !rows.some((r) => r.id === id)).length;
+      // Actividades y evaluaciones del destino con el mismo nombre (solo si el nombre no se repite).
+      const unique = (items) => {
+        const map = new Map();
+        for (const item of items) map.set(key(item.title), map.has(key(item.title)) ? null : item);
+        return map;
+      };
+      const courseTasks = unique(targetTasks.filter((t) => t.course === course));
+      const courseQuizzes = unique(targetQuizzes.filter((q) => q.course === course));
+      const assignments = tasks
+        .map((t) => ({ target: courseTasks.get(key(t.title)), category: (t.category && categoryIn.get(t.category)) || null, points: t.points, weight: t.weight }))
+        .filter((x) => x.target)
+        .map((x) => ({ task: x.target.id, category: x.category, points: x.points, weight: x.weight }));
+      const quizChanges = quizzes
+        .map((q) => {
+          const grade = JSON.parse(q.grade || 'null');
+          const target = courseQuizzes.get(key(q.title));
+          const category = grade && categoryIn.get(grade.category);
+          return target && category ? { quiz: target.id, grade: { category, points: grade.points ?? 10, policy: grade.policy || 'best' } } : null;
+        })
+        .filter(Boolean);
+      summary.push({ course, categories: rows.length, removed, tasks: assignments.length, quizzes: quizChanges.length });
+      settingRows.push({ course, terms: newTerms.length ? JSON.stringify(newTerms) : '' });
+      categoryRows.push(...rows.map((r) => ({ ...r, course })));
+      assignmentRows.push(...assignments);
+      quizRows.push(...quizChanges);
+    }
+    // Cinco escrituras para todos los grupos (el plan gratuito cuenta cada instrucción del batch).
+    const statements = [
+      db
+        .prepare(
+          `INSERT INTO aula_grade_settings (course,revision,updated,updated_by,scheme,final_decimals,final_rounding,passing_grade,failing_as,missing_as_zero,terms)
+           SELECT json_extract(value,'$.course'),1,?1,?2,?3,?4,?5,?6,?7,?8,json_extract(value,'$.terms') FROM json_each(?9) WHERE true
+           ON CONFLICT(course) DO UPDATE SET revision=revision+1, updated=excluded.updated, updated_by=excluded.updated_by, scheme=excluded.scheme,
+             final_decimals=excluded.final_decimals, final_rounding=excluded.final_rounding, passing_grade=excluded.passing_grade,
+             failing_as=excluded.failing_as, missing_as_zero=excluded.missing_as_zero, terms=excluded.terms`,
+        )
+        .bind(
+          now,
+          user.id,
+          settings?.scheme || (categories.length ? 'categories' : 'tasks'),
+          settings?.final_decimals ?? 1,
+          settings?.final_rounding || 'half_up',
+          settings?.passing_grade ?? 6,
+          settings?.failing_as ?? null,
+          settings?.missing_as_zero ?? 0,
+          JSON.stringify(settingRows),
+        ),
+      // Las actividades de una categoría quitada quedan sin categoría (ON DELETE SET NULL).
+      db
+        .prepare(
+          `DELETE FROM aula_grade_categories WHERE course IN (SELECT value FROM json_each(?1))
+             AND id NOT IN (SELECT json_extract(value,'$.id') FROM json_each(?2))`,
+        )
+        .bind(list, JSON.stringify(categoryRows)),
+      db
+        .prepare(
+          `INSERT INTO aula_grade_categories (id,course,name,weight,source,position,term,distribution,drop_low,drop_high,updated)
+           SELECT json_extract(value,'$.id'), json_extract(value,'$.course'), json_extract(value,'$.name'), json_extract(value,'$.weight'),
+                  json_extract(value,'$.source'), json_extract(value,'$.position'), json_extract(value,'$.term'),
+                  json_extract(value,'$.distribution'), json_extract(value,'$.drop_low'), json_extract(value,'$.drop_high'), ?1
+           FROM json_each(?2) WHERE true
+           ON CONFLICT(id) DO UPDATE SET name=excluded.name, weight=excluded.weight, source=excluded.source,
+             position=excluded.position, term=excluded.term, distribution=excluded.distribution,
+             drop_low=excluded.drop_low, drop_high=excluded.drop_high, updated=excluded.updated`,
+        )
+        .bind(now, JSON.stringify(categoryRows)),
+    ];
+    if (assignmentRows.length) {
+      statements.push(
+        db
+          .prepare(
+            `UPDATE aula_tasks SET
+               category=(SELECT json_extract(value,'$.category') FROM json_each(?1) WHERE json_extract(value,'$.task')=aula_tasks.id),
+               points=(SELECT json_extract(value,'$.points') FROM json_each(?1) WHERE json_extract(value,'$.task')=aula_tasks.id),
+               weight=(SELECT json_extract(value,'$.weight') FROM json_each(?1) WHERE json_extract(value,'$.task')=aula_tasks.id)
+             WHERE course IN (SELECT value FROM json_each(?2)) AND id IN (SELECT json_extract(value,'$.task') FROM json_each(?1))`,
+          )
+          .bind(JSON.stringify(assignmentRows), list),
+      );
+    }
+    if (quizRows.length) {
+      statements.push(
+        db
+          .prepare(
+            `UPDATE aula_records SET
+               data=(SELECT json_set(aula_records.data,'$.grade',json(json_extract(value,'$.grade'))) FROM json_each(?1) WHERE json_extract(value,'$.quiz')=aula_records.id),
+               revision=revision+1, updated=?3
+             WHERE course IN (SELECT value FROM json_each(?2)) AND kind='quiz' AND deleted_at IS NULL AND id IN (SELECT json_extract(value,'$.quiz') FROM json_each(?1))`,
+          )
+          .bind(JSON.stringify(quizRows), list, now),
+      );
+    }
+    await db.batch(statements);
+    return json({ courses: summary });
   },
 
   'POST /api/grades/final-rules': async ({ db, user, request }) => {

@@ -5,6 +5,28 @@ No es el código de D2L Brightspace ni una plataforma oficial de la BUAP.
 
 Esta versión se despliega en **tu propia cuenta de Cloudflare** (Workers + D1 + R2, plan gratuito) y ya no depende de ChatGPT Sites.
 
+## Novedades de la versión 12.32 (pasar de pregunta sin «salidas», revisar en rojo, calificar en bloque y copiar la configuración)
+
+**Examen en el celular**: con «una pregunta a la vez» y «sin regresar», al pasar a la siguiente pregunta el navegador mostraba su propia ventana de confirmación. En el celular esa ventana le quita el foco a la página, y Enlace lo contaba como una salida; con tres salidas se bloqueaba el examen. Ahora la confirmación aparece dentro de la página y pasar de pregunta ya no cuenta como salida. Además, un parpadeo del foco de menos de 0.6 s (al tocar la pantalla o abrir el teclado) no se cuenta. Lo demás se cuenta igual:
+- cambiar de aplicación o de pestaña, o bloquear el teléfono, cuenta en ese momento aunque dure un instante;
+- pantalla dividida, ventana flotante o bajar las notificaciones cuentan desde el primer instante si duran más de 0.6 s;
+- sigue el bloqueo a la 3.ª salida corta;
+- recargar la página o cerrar el navegador no quita el bloqueo.
+
+Se probó con Android y iPhone emulados en el navegador; conviene confirmarlo en un teléfono real antes de un examen.
+
+**Libro de calificaciones**: una entrega que **aún no revisas** (sin calificación, o entregada de nuevo después de calificarla) aparece **en rojo**, con la leyenda «sin revisar». Cada columna dice cuántas le faltan por revisar. En la página de la actividad dice «Entregado · sin revisar».
+
+**Calificar en bloque**: en el menú ⌄ de cada columna del libro, o con el botón «Calificar en bloque» de la actividad. Eliges a todo el grupo, solo a quienes no tienen calificación, o a los alumnos que marques. Escribes una calificación y, si quieres, un comentario; decides si queda publicada o como borrador. Las calificaciones ya capturadas **no se reemplazan** salvo que marques la casilla. Queda en el historial de calificaciones.
+
+**Aplicar la configuración a otros grupos**: en Calificaciones → Administrar calificaciones, el botón **«Aplicar a otros grupos»** copia la configuración a los grupos que elijas:
+- parciales, categorías (pesos, distribución y calificaciones que no cuentan) y reglas de la calificación final;
+- la categoría, el valor y el peso de cada actividad, y la categoría de cada evaluación, cuando se llamen igual en el otro grupo.
+
+La configuración de esos grupos se reemplaza: sus categorías que no existan en el curso de origen se quitan, pero una categoría con el mismo nombre se conserva, junto con sus actividades. Las calificaciones capturadas no se tocan. Las secciones de un mismo curso ya comparten la configuración: esto es para grupos que son cursos distintos.
+
+No requiere migración.
+
 ## Novedades de la versión 12.31 (sin bloqueos falsos dentro de Safe Exam Browser y resumen de la evaluación)
 
 **Safe Exam Browser**: dentro de SEB, tocar su barra, sus avisos o cualquier parte de su ventana hacía que la página «perdiera el foco», y eso se contaba como salida y bloqueaba el examen. Ahora, cuando el alumno presenta dentro de Safe Exam Browser (verificado por Enlace), **no se cuentan salidas ni se bloquea**: SEB ya impide salir del examen. Tampoco se pide pantalla completa (SEB ya la ocupa). Fuera de SEB todo sigue igual.

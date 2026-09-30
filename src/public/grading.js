@@ -320,7 +320,8 @@ function gradingManageHtml(weightsHtml = '') {
     ? categoriesFormHtml(tasks)
     : `<p class="real-status">Ahora: <strong>pesos por actividad</strong>. Si prefieres agrupar (por ejemplo, exámenes 60 %, tareas 30 %, asistencia 10 %), usa categorías.</p>
        <button type="button" class="secondary" data-grading="use-categories">Usar categorías con pesos</button>${weightsHtml}`;
-  return `<h1>Cómo se calcula la calificación</h1>${schemeSection}
+  const others = copySchemeTargets();
+  return `<div class="heading"><h1>Cómo se calcula la calificación</h1>${others.length ? '<button type="button" class="secondary" data-copy-scheme>Aplicar a otros grupos</button>' : ''}</div>${schemeSection}
     <h2 class="grading-subtitle">Calificación final</h2>
     <form id="finalRules" class="real-form grading-rules">
       <label>Decimales<select name="decimals">${[[0, 'Entero (8)'], [1, 'Un decimal (8.5)'], [2, 'Dos decimales (8.47)']]
@@ -336,6 +337,46 @@ function gradingManageHtml(weightsHtml = '') {
     </form>
     <h2 class="grading-subtitle">Rúbricas</h2><div id="rubricBank"><p class="muted">Cargando rúbricas…</p></div>`;
 }
+
+/** Otros cursos donde enseña y que no están archivados (destinos para copiar la configuración). */
+const copySchemeTargets = () => (courses || []).filter((c) => c.canTeach && !c.archived_at && c.id !== current.course.id);
+
+/** Aplicar la configuración de calificaciones de este curso a otros grupos (12.32). */
+function copySchemeModal() {
+  if (categoryEditing) return toast('Guarda o cancela primero los cambios de las categorías.');
+  const settings = gradingSettings();
+  const cats = settings.categories || [];
+  const terms = settings.terms || [];
+  const label = (c) => [c.name, c.group_name || c.group].filter(Boolean).join(' · ') + (c.period ? ` (${c.period})` : '');
+  const summary = settings.scheme === 'categories'
+    ? `${terms.length ? `${terms.length} ${terms.length === 1 ? 'parcial' : 'parciales'} y ` : ''}${cats.length} ${cats.length === 1 ? 'categoría' : 'categorías'}`
+    : 'pesos por actividad';
+  modal(
+    'Aplicar la configuración a otros grupos',
+    `<p class="real-status">Se copia la configuración de este curso (<b>${esc(summary)}</b>, mínima aprobatoria ${esc(settings.final.passing)}) a los grupos que elijas:</p>
+     <ul class="copy-scheme-list">
+       <li>Parciales, categorías con sus pesos, distribución y calificaciones que no cuentan.</li>
+       <li>Las reglas de la calificación final (decimales, redondeo, mínima aprobatoria).</li>
+       <li>La categoría, el valor y el peso de cada actividad, y la categoría de cada evaluación, cuando se llamen igual en el otro grupo.</li>
+     </ul>
+     <p class="warning-note">La configuración de esos grupos se reemplaza: sus categorías que no existan aquí se quitan y sus actividades quedan sin categoría. Las calificaciones capturadas no se tocan.</p>
+     <fieldset class="copy-scheme-targets"><legend>Grupos</legend>${copySchemeTargets()
+       .map((c) => `<label class="check-label"><input type="checkbox" name="target" value="${esc(c.id)}"> ${esc(label(c))}</label>`)
+       .join('')}</fieldset>`,
+    async (f) => {
+      const targets = f.getAll('target');
+      if (!targets.length) throw new Error('Elige al menos un grupo.');
+      const r = await request('/api/grades/copy-scheme', { course: current.course.id, targets });
+      const linked = r.courses.reduce((n, c) => n + c.tasks + c.quizzes, 0);
+      return `Configuración aplicada a ${r.courses.length === 1 ? '1 grupo' : `${r.courses.length} grupos`}${linked ? `; ${linked === 1 ? 'se enlazó 1 actividad o evaluación' : `se enlazaron ${linked} actividades y evaluaciones`} por su nombre` : ''}.`;
+    },
+    'Aplicar',
+  );
+}
+
+document.addEventListener('click', (e) => {
+  if (e.target.closest('[data-copy-scheme]')) copySchemeModal();
+});
 
 const CATEGORY_SUGGESTIONS = ['Exámenes', 'Tareas', 'Laboratorio', 'Prácticas', 'Proyecto', 'Participación', 'Foros', 'Evaluaciones en línea', 'Exposiciones', 'Examen departamental', 'Asistencia'];
 const round2 = (n) => Math.round(n * 100) / 100;
@@ -664,14 +705,25 @@ document.addEventListener('click', async (event) => {
 const DOC_ICON = '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" d="M6 3h8l4 4v14H6zM14 3v4h4M9 12h6M9 16h6"/></svg>';
 
 /** Casilla del libro: la calificación se escribe ahí mismo y el ícono abre la entrega (o la pantalla para calificar). */
+/** ¿El alumno entregó algo? (una captura manual del docente no es entrega) */
+const hasSubmission = (s) => Boolean(s && !s.data.manual && (s.data.submitted || s.data.body || s.data.fileIds?.length));
+
+/** Entrega que el docente aún no revisa: sin calificación, o entregada de nuevo después de calificarla (12.32). */
+function needsReview(s) {
+  if (!hasSubmission(s)) return false;
+  const grade = s.data.grade;
+  return grade === null || grade === undefined || grade === '' || Boolean(s.data.gradedAt && s.data.submitted && s.data.submitted > s.data.gradedAt);
+}
+
 function gradebookCellHtml(t, m, s) {
-  const sent = s && !s.data.manual && (s.data.submitted || s.data.body || s.data.fileIds?.length);
-  const title = sent ? `Ver la entrega de ${m.name}${s.data.late ? ' (tardía)' : ''}` : `Calificar a ${m.name} con comentarios o rúbrica`;
-  return `<div class="gb-cell-row"><input class="gb-input" type="number" min="0" max="10" step="0.01" inputmode="decimal" value="${esc(s?.data.grade ?? '')}" placeholder="—"
+  const sent = hasSubmission(s);
+  const pending = needsReview(s);
+  const title = sent ? `${pending ? 'Sin revisar: ' : ''}ver la entrega de ${m.name}${s.data.late ? ' (tardía)' : ''}` : `Calificar a ${m.name} con comentarios o rúbrica`;
+  return `<div class="gb-cell-row${pending ? ' needs-review' : ''}"><input class="gb-input" type="number" min="0" max="10" step="0.01" inputmode="decimal" value="${esc(s?.data.grade ?? '')}" placeholder="—"
       data-gb-task="${esc(t.id)}" data-gb-member="${esc(m.id)}" aria-label="Calificación de ${esc(m.name)} en ${esc(t.data.title)}">
-    <button type="button" class="gb-open ${sent ? 'has-file' : ''}" data-action="review" data-id="${esc(t.id)}" data-member="${esc(m.id)}" title="${esc(title)}" aria-label="${esc(title)}">${sent ? DOC_ICON : '›'}</button></div>${
-    s && s.data.published === false ? '<span class="draft-tag">borrador</span>' : ''
-  }${sent && s.data.late ? '<span class="late-tag">tardía</span>' : ''}`;
+    <button type="button" class="gb-open ${sent ? 'has-file' : ''} ${pending ? 'needs-review' : ''}" data-action="review" data-id="${esc(t.id)}" data-member="${esc(m.id)}" title="${esc(title)}" aria-label="${esc(title)}">${sent ? DOC_ICON : '›'}</button></div>${
+    pending ? '<span class="review-tag">sin revisar</span>' : ''
+  }${s && s.data.published === false ? '<span class="draft-tag">borrador</span>' : ''}${sent && s.data.late ? '<span class="late-tag">tardía</span>' : ''}`;
 }
 
 /** Menú ⌄ de cada columna (como en Brightspace). */
@@ -680,6 +732,7 @@ function gradebookColumnMenu(t) {
     <button type="button" data-action="task" data-id="${esc(t.id)}">Ver entregas</button>
     <button type="button" data-action="edit-task" data-id="${esc(t.id)}">Editar actividad</button>
     <button type="button" data-gb-enter="${esc(t.id)}">Ingresar calificaciones</button>
+    <button type="button" data-gb-bulk="${esc(t.id)}">Calificar en bloque</button>
     <button type="button" data-gb-stats="${esc(t.id)}">Ver las estadísticas</button>
   </div></details>`;
 }
@@ -754,6 +807,59 @@ function nextGradebookInput(input, step) {
   return all[all.indexOf(input) + step] || null;
 }
 
+/** Calificar en bloque (12.32): la misma calificación a todo el grupo o a los alumnos elegidos. */
+function bulkGradeModal(taskId) {
+  const t = find(taskId);
+  const students = studentsInView().filter((m) => itemApplies(t, m));
+  const status = (s) => (s?.data.grade !== null && s?.data.grade !== undefined ? `Tiene ${s.data.grade}` : hasSubmission(s) ? 'Entregó, sin calificar' : 'Sin calificación');
+  const rows = students
+    .map((m) => {
+      const s = gradeOf(m.id, t.id);
+      const graded = s?.data.grade !== null && s?.data.grade !== undefined;
+      return `<tr><td><label class="check-label bulk-grade-pick"><input type="checkbox" name="m" value="${esc(m.id)}" data-graded="${graded ? 1 : 0}" ${graded ? '' : 'checked'}> ${esc(m.name)}</label></td><td class="${needsReview(s) ? 'status-review' : 'muted'}">${esc(status(s))}</td></tr>`;
+    })
+    .join('');
+  modal(
+    `Calificar en bloque: ${t.data.title}`,
+    `<p class="real-status">Pon la misma calificación a varios alumnos a la vez (por ejemplo, una actividad hecha en clase). Luego puedes cambiar la de cualquiera en el libro.</p>
+     <div class="quiz-grid"><label>Calificación (0 a 10)<input name="grade" type="number" min="0" max="10" step="0.01" inputmode="decimal" required></label>
+     <label>Estado<select name="publish"><option value="1" ${reviewPublishNow() ? 'selected' : ''}>Publicada (el alumno la ve)</option><option value="0" ${reviewPublishNow() ? '' : 'selected'}>Borrador</option></select></label></div>
+     <label>Comentario para cada alumno (opcional; vacío conserva el que tenga)<textarea name="feedback" rows="2" maxlength="15000"></textarea></label>
+     <label class="check-label"><input type="checkbox" name="replace" data-bulk-replace> Reemplazar también las calificaciones ya capturadas</label>
+     <div class="toolbar bulk-grade-tools"><button type="button" class="secondary" data-bulk-pick="all">Todos</button><button type="button" class="secondary" data-bulk-pick="ungraded">Solo sin calificación</button><button type="button" class="secondary" data-bulk-pick="none">Ninguno</button><span class="muted" data-bulk-count></span></div>
+     <div class="table-wrap keep-table bulk-grade-list"><table><thead><tr><th>Alumno</th><th>Ahora</th></tr></thead><tbody>${rows || '<tr><td colspan="2">No hay alumnos en esta vista.</td></tr>'}</tbody></table></div>`,
+    async (f) => {
+      const members = f.getAll('m');
+      if (!members.length) throw new Error('Elige al menos un alumno.');
+      const replace = f.get('replace') === 'on';
+      const r = await request('/api/grades/bulk', { course: current.course.id, task: t.id, members, grade: f.get('grade'), feedback: f.get('feedback') || '', publish: f.get('publish') === '1', replace });
+      const done = r.graded === 1 ? 'Se calificó a 1 alumno' : `Se calificó a ${r.graded} alumnos`;
+      return r.skipped ? `${done}; ${r.skipped} ya ${r.skipped === 1 ? 'tenía' : 'tenían'} calificación${replace ? ' igual' : ' (no se reemplazó)'}.` : `${done}.`;
+    },
+    'Calificar',
+  );
+  bulkGradeCount();
+}
+
+function bulkGradeCount() {
+  const boxes = [...document.querySelectorAll('#fields input[name="m"]')];
+  const chosen = boxes.filter((b) => b.checked);
+  const replace = document.querySelector('#fields [data-bulk-replace]')?.checked;
+  const kept = replace ? 0 : chosen.filter((b) => b.dataset.graded === '1').length;
+  const out = document.querySelector('#fields [data-bulk-count]');
+  if (out) out.textContent = `${chosen.length} de ${boxes.length} elegidos${kept ? ` · ${kept} ya ${kept === 1 ? 'tiene' : 'tienen'} calificación y no se ${kept === 1 ? 'cambiará' : 'cambiarán'}` : ''}`;
+}
+
+document.addEventListener('click', (e) => {
+  const pick = e.target.closest('[data-bulk-pick]');
+  if (!pick) return;
+  for (const box of document.querySelectorAll('#fields input[name="m"]')) box.checked = pick.dataset.bulkPick === 'all' || (pick.dataset.bulkPick === 'ungraded' && box.dataset.graded === '0');
+  bulkGradeCount();
+});
+document.addEventListener('change', (e) => {
+  if (e.target.closest?.('#fields') && (e.target.name === 'm' || e.target.matches('[data-bulk-replace]'))) bulkGradeCount();
+});
+
 function gradebookStatsModal(taskId) {
   const t = find(taskId);
   const students = studentsInView().filter((m) => itemApplies(t, m));
@@ -803,7 +909,9 @@ document.addEventListener('change', (e) => {
 document.addEventListener('click', (e) => {
   const enter = e.target.closest('[data-gb-enter]');
   const stats = e.target.closest('[data-gb-stats]');
-  if (enter || stats) e.target.closest('details')?.removeAttribute('open');
+  const bulk = e.target.closest('[data-gb-bulk]');
+  if (enter || stats || bulk) e.target.closest('details')?.removeAttribute('open');
+  if (bulk) return bulkGradeModal(bulk.dataset.gbBulk);
   if (stats) return gradebookStatsModal(stats.dataset.gbStats);
   if (enter) {
     const first = document.querySelector(`.gb-input[data-gb-task="${CSS.escape(enter.dataset.gbEnter)}"]`);

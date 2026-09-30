@@ -1291,7 +1291,7 @@ const isFullscreen = () => Boolean(document.fullscreenElement || document.webkit
 function startExam(quizId, data, collect) {
   stopExam();
   const exam = data.exam;
-  examState = { quizId, attempt: data.attempt, exam, collect, position: exam.position || 0, events: [], awaySince: null, lastCopy: 0, saveTimer: null, ignoreBlur: false };
+  examState = { quizId, attempt: data.attempt, exam, collect, position: exam.position || 0, events: [], awaySince: null, blurTimer: null, lastCopy: 0, saveTimer: null };
   document.body.classList.add('exam-running');
   // Respuestas guardadas (al retomar tras recargar).
   restoreAttemptAnswers(document.getElementById('quizAttempt'), data.questions, data.saved);
@@ -1327,6 +1327,8 @@ function stopExam() {
   window.removeEventListener('beforeprint', examPrint);
   document.body.classList.remove('exam-running', 'exam-shield');
   document.getElementById('examFullscreenBar')?.remove();
+  document.getElementById('examConfirm')?.remove();
+  clearTimeout(examState.blurTimer);
   hideExamLock();
   examState = null;
   if (isFullscreen()) (document.exitFullscreen || document.webkitExitFullscreen)?.call(document)?.catch?.(() => {});
@@ -1402,13 +1404,37 @@ function examAwayCheck() {
   // Dentro de Safe Exam Browser no se puede salir del examen; al tocar su barra o sus avisos la página pierde el foco
   // y eso se confundía con una salida que bloqueaba el examen (12.31).
   if (isSafeExamBrowser()) return;
-  if (!examState || examState.ignoreBlur) return;
-  const away = document.visibilityState === 'hidden' || !document.hasFocus();
+  if (!examState) return;
+  const hidden = document.visibilityState === 'hidden';
+  const away = hidden || !document.hasFocus();
+  clearTimeout(examState.blurTimer);
   if (away && !examState.awaySince) {
-    examState.awaySince = Date.now();
-    // Bloqueo al salir: el servidor anota la salida en ese momento (keepalive: llega aunque se cierre la página).
-    if (examState.exam.lockOnLeave && !examState.locked) examState.awayRequest = examLockCall('away', {}, true);
+    // Ocultar la página (otra aplicación, otra pestaña, bloquear el teléfono) cuenta en ese instante. Perder solo el
+    // foco con la página a la vista (pantalla dividida, ventana flotante, la cortina de notificaciones) cuenta si dura
+    // más de BLUR_CONFIRM_MS, y entonces desde que empezó: así un parpadeo del foco al tocar la pantalla no es salida (12.32).
+    if (hidden) markExamAway(Date.now());
+    else {
+      const since = Date.now();
+      const state = examState;
+      state.blurTimer = setTimeout(() => {
+        if (examState === state && !state.awaySince && (document.visibilityState === 'hidden' || !document.hasFocus())) markExamAway(since);
+      }, BLUR_CONFIRM_MS);
+    }
   }
+  examReturnCheck(away);
+}
+
+const BLUR_CONFIRM_MS = 600;
+
+function markExamAway(since) {
+  if (!examState || examState.awaySince) return;
+  examState.awaySince = since;
+  // Bloqueo al salir: el servidor anota la salida en ese momento (keepalive: llega aunque se cierre la página).
+  if (examState.exam.lockOnLeave && !examState.locked) examState.awayRequest = examLockCall('away', {}, true);
+}
+
+/** Al volver a la página: registra la salida con su duración (y, con bloqueo al salir, pregunta al servidor). */
+function examReturnCheck(away) {
   if (!away && examState.awaySince) {
     const seconds = Math.round((Date.now() - examState.awaySince) / 1000);
     examState.awaySince = null;
@@ -1430,6 +1456,28 @@ function examAwayCheck() {
     toast(`Saliste del examen ${seconds} s. Quedó registrado.`);
     saveExamProgress(true).catch(() => {});
   }
+}
+
+/** Pregunta de sí o no dentro de la página (sin ventanas nativas, que cuentan como salir del examen). */
+function examConfirm(message, okText = 'Sí, continuar') {
+  return new Promise((resolve) => {
+    document.getElementById('examConfirm')?.remove();
+    document.body.insertAdjacentHTML(
+      'beforeend',
+      `<div id="examConfirm" class="exam-lock exam-confirm" role="alertdialog" aria-modal="true" aria-labelledby="examConfirmText"><div class="exam-lock-card">
+        <p id="examConfirmText">${esc(message)}</p>
+        <div class="form-actions"><button type="button" class="secondary" data-exam-confirm="no">Cancelar</button><button type="button" class="primary" data-exam-confirm="yes">${esc(okText)}</button></div>
+      </div></div>`,
+    );
+    const box = document.getElementById('examConfirm');
+    box.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-exam-confirm]');
+      if (!b) return;
+      box.remove();
+      resolve(b.dataset.examConfirm === 'yes');
+    });
+    box.querySelector('[data-exam-confirm="yes"]').focus({ preventScroll: true });
+  });
 }
 
 /** Llamadas del bloqueo al salir. `keepalive` deja que el aviso de salida llegue aunque la página se cierre. */
@@ -1577,10 +1625,10 @@ async function examNavigate(direction) {
     const current = boxes[state.position];
     const answered = [...current.querySelectorAll('input, select, textarea')].some((i) => (i.type === 'radio' || i.type === 'checkbox' ? i.checked : i.value.trim()));
     if (state.exam.noBack) {
-      state.ignoreBlur = true;
-      const ok = confirm(answered ? '¿Pasar a la siguiente pregunta? Ya no podrás regresar a esta.' : 'No contestaste esta pregunta. ¿Pasar a la siguiente? Ya no podrás regresar.');
-      state.ignoreBlur = false;
-      if (!ok) return;
+      // Confirmación dentro de la página: la ventana nativa (confirm) le quita el foco a la página y en el celular el
+      // aviso de «salió» llegaba después de cerrarla, así que pasar de pregunta contaba como una salida (12.32).
+      const ok = await examConfirm(answered ? '¿Pasar a la siguiente pregunta? Ya no podrás regresar a esta.' : 'No contestaste esta pregunta. ¿Pasar a la siguiente? Ya no podrás regresar.', 'Pasar a la siguiente');
+      if (!ok || examState !== state) return;
     }
     state.position = Math.min(state.position + 1, boxes.length - 1);
   } else if (!state.exam.noBack) state.position = Math.max(state.position - 1, 0);

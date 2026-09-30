@@ -826,6 +826,10 @@ button.my-grade-row:hover .my-grade-title { color: var(--link); }
 .exam-lock-card form { text-align: left; margin-top: 14px; }
 .exam-lock-card input[name=code] { font-size: 28px; letter-spacing: .3em; text-align: center; font-variant-numeric: tabular-nums; }
 .exam-lock-card .primary { width: 100%; }
+.exam-confirm { background: rgba(12, 28, 44, .55); }
+.exam-confirm .exam-lock-card p { font-size: 1.05rem; margin: 0 0 16px; }
+.exam-confirm .form-actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; position: static; margin: 0; padding: 0; border: 0; background: none; box-shadow: none; }
+.exam-confirm .form-actions button { flex: 1 1 140px; width: auto; }
 .exam-locked-list { list-style: none; padding: 0; margin: 8px 0 14px; }
 .exam-locked-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; padding: 10px 12px; margin-bottom: 8px; border-radius: 10px; background: #fff4e5; border: 1px solid #f3c98b; }
 .exam-locked-row > div { flex: 1 1 200px; }
@@ -1257,6 +1261,12 @@ button.att-mark.none { background: #f4f6f8; }
 .gb-input.is-error { border-color: #b42318 !important; box-shadow: 0 0 0 2px rgba(180, 35, 24, 0.15); }
 .gb-open { flex: none; width: 30px; height: 30px; display: grid; place-items: center; padding: 0 !important; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--ink-faint); cursor: pointer; box-shadow: none; }
 .gb-open.has-file { color: var(--brand-2); border-color: #cfe3ee; background: #f2f8fc; }
+/* Entrega sin revisar (12.32): en rojo, para distinguirla de las ya calificadas. */
+.gb-open.has-file.needs-review { color: #b42318; border-color: #f2b8b5; background: #fdecea; }
+.gb-cell-row.needs-review .gb-input { border-color: #e5877f; background: #fff6f5; }
+.review-tag { display: inline-block; margin-top: 2px; font-size: 11px; font-weight: 600; color: #b42318; }
+.review-count { display: block; font-size: 12px; font-weight: 600; color: #b42318; }
+.status-review { color: #b42318; font-weight: 600; }
 .gb-open:hover, .gb-open:focus-visible { border-color: var(--line-strong); color: var(--brand); outline: none; }
 .late-tag { display: inline-block; margin-left: 4px; font-size: 0.7rem; color: #8a5a00; }
 .gb-attendance { white-space: nowrap; font-variant-numeric: tabular-nums; }
@@ -1353,3 +1363,10 @@ article.course .course-cover.has-cover .course-letter { opacity: 0; }
 .monitor-finished td, .monitor-finished th { white-space: nowrap; }
 .monitor-pending { margin-top: 10px; }
 .monitor-pending > summary { cursor: pointer; color: var(--link); font-weight: 600; }
+
+/* Calificar en bloque (12.32) */
+.bulk-grade-tools { align-items: center; margin: 4px 0; }
+.bulk-grade-list { max-height: 45vh; overflow: auto; }
+.bulk-grade-pick { margin: 0; }
+.copy-scheme-list { margin: 4px 0 12px; padding-left: 20px; }
+.copy-scheme-targets { display: grid; gap: 6px; border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; max-height: 40vh; overflow: auto; }
