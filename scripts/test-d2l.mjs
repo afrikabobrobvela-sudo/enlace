@@ -242,6 +242,33 @@ await call('raul', '/api/attempt/start', { course: c, quiz: seb.id }, 200, { 'X-
 await call('raul', '/api/attempt', { course: c, quiz: seb.id, answers: { 0: 0 } }, 403); // enviar también lo exige
 await call('raul', '/api/attempt', { course: c, quiz: seb.id, answers: { 0: 0 } }, 201, { 'X-SafeExamBrowser-RequestHash': await hash('https://t.local/api/attempt') });
 
+// 12.28: con un solo botón, sin archivo .seb del docente: Enlace arma la configuración y calcula su Config Key.
+const worker = (await import('../src/worker.js')).default;
+const facil = await saveQuiz({ title: 'SEB fácil', questions: [mixed[1]], settings: { seb: { required: true } } });
+assert.deepEqual((await call('docente', '/api/course?id=' + c)).records.find((r) => r.id === facil.id).data.settings.seb, { required: true });
+const conf = await worker.fetch(new Request(`https://t.local/seb/${facil.id}.seb`), env);
+assert.equal(conf.status, 200);
+assert.equal(conf.headers.get('Content-Type'), 'application/seb');
+const xml = await conf.text();
+ok(xml.includes(`<key>startURL</key>\n\t<string>https://t.local/#c=${c}&amp;s=quiz&amp;d=${facil.id}</string>`) && xml.includes('<key>sendBrowserExamKey</key>\n\t<true/>'), 'La configuración abre la evaluación y manda las llaves');
+// La Config Key sale del archivo mismo (como la calcula SEB): JSON sin originatorVersion, llaves en orden sin mayúsculas.
+const dict = {};
+for (const [, k, v] of xml.matchAll(/<key>([^<]+)<\/key>\n\t(<true\/>|<false\/>|<integer>-?\d+<\/integer>|<string>[^<]*<\/string>)/g)) {
+  dict[k] = v === '<true/>' ? true : v === '<false/>' ? false : v.startsWith('<integer>') ? Number(v.slice(9, -10)) : v.slice(8, -9).replace(/&amp;/g, '&');
+}
+delete dict.originatorVersion;
+const keys = Object.keys(dict).sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase(), 'en'));
+assert.deepEqual(keys.slice(-2), ['startURL', 'URLFilterEnable'], 'Orden sin distinguir mayúsculas');
+const configKey = [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`{${keys.map((k) => `${JSON.stringify(k)}:${JSON.stringify(dict[k])}`).join(',')}}`)))].map((b) => b.toString(16).padStart(2, '0')).join('');
+const hashWith = async (url, key) => [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(url + key)))].map((b) => b.toString(16).padStart(2, '0')).join('');
+await call('raul', '/api/attempt/start', { course: c, quiz: facil.id }, 403);
+await call('raul', '/api/attempt/start', { course: c, quiz: facil.id }, 200, { 'X-SafeExamBrowser-ConfigKeyHash': await hashWith('https://t.local/api/attempt/start', configKey) });
+await call('raul', '/api/attempt', { course: c, quiz: facil.id, answers: { 0: 0 } }, 201, { 'X-SafeExamBrowser-ConfigKeyHash': await hashWith('https://t.local/api/attempt', configKey) });
+// Sin exigir SEB, o evaluación inexistente: no hay configuración.
+assert.equal((await worker.fetch(new Request(`https://t.local/seb/${tipos.id}.seb`), env)).status, 404);
+assert.equal((await worker.fetch(new Request('https://t.local/seb/no-existe.seb'), env)).status, 404);
+checks += 4;
+
 // ---- Vista previa del docente ----------------------------------------------------------------------------
 await call('ana', '/api/quiz/preview', { course: c, quiz: parcial.id }, 403);
 const p1 = await call('docente', '/api/quiz/preview', { course: c, quiz: parcial.id });

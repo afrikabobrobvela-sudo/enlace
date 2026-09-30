@@ -1341,3 +1341,7 @@ article.course .course-cover.has-cover .course-letter { opacity: 0; }
 .preview-mark.ok { color: var(--success); }
 .preview-mark.bad { color: #b3261e; }
 .preview-mark.partial, .preview-mark.pending { color: #8a5a00; }
+/* 12.28: Safe Exam Browser con un botón */
+.seb-notice p { margin: 6px 0; }
+.seb-notice a.button-link { display: inline-block; padding: 10px 18px; border-radius: var(--radius-sm); background: var(--brand); color: #fff; font-weight: 600; text-decoration: none; }
+.seb-notice a.button-link:hover { background: var(--brand-2); }

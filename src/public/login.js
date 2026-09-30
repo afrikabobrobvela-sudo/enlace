@@ -27,7 +27,10 @@ function currentLoginError() {
 
 function currentReturnPath() {
   const loc = globalThis.location;
-  return loc ? loc.pathname + loc.search : '/';
+  // Con la pantalla (#c=…&s=quiz&d=…): así, al entrar desde Safe Exam Browser (12.28) o desde un enlace a una
+  // evaluación, se regresa a esa pantalla y no al inicio.
+  const path = loc ? loc.pathname + loc.search + (loc.hash || '') : '/';
+  return path.length < 500 ? path : loc.pathname;
 }
 
 function renderLogin(methods = { google: true, email: false }) {

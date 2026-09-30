@@ -35,9 +35,9 @@ import {
   keyChanged,
   sameDraw,
   sameStructure,
-  sebAllows,
   validEvents,
 } from './quizzes.js';
+import { sebAllows } from './seb.js';
 import { bankImageVisible, bankRoutes } from './bank.js';
 import { coverRoutes, photoRoutes, serveCourseCover, servePhoto } from './photos.js';
 import { digestRoutes } from './digest.js';
@@ -349,7 +349,7 @@ async function openStart(db, quiz, userId) {
 }
 
 const PREVIEW_SEED = /^vista:[0-9a-f-]{36}$/;
-const SEB_MESSAGE = 'Esta evaluación solo se puede presentar en Safe Exam Browser. Ábrela con el archivo de configuración que te dio tu docente.';
+const SEB_MESSAGE = 'Esta evaluación solo se puede presentar en Safe Exam Browser: en la evaluación toca «Abrir en Safe Exam Browser».';
 const CODE_PER_MINUTE = 5;
 
 /** Safe Exam Browser (12.27): si la evaluación lo exige, cada solicitud del intento debe venir de él. */

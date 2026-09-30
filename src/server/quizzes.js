@@ -289,37 +289,18 @@ export function quizFields(input) {
   };
 }
 
-// ---- Safe Exam Browser (12.27) ---------------------------------------------------------------------
-// SEB manda en cada solicitud la cabecera X-SafeExamBrowser-ConfigKeyHash = SHA-256(URL completa + Config Key) (o
-// X-SafeExamBrowser-RequestHash con la Browser Exam Key). El docente copia la llave de su archivo .seb.
+// ---- Safe Exam Browser (12.27; 12.28: con un solo botón) ---------------------------------------------------
+// Enlace arma la configuración de SEB de la evaluación y la revisa (seb.js). Opcionalmente, el docente puede además
+// aceptar las Config Keys de su propio archivo .seb. Las llaves nunca llegan al alumno.
 
 const SEB_KEY = /^[0-9a-f]{64}$/;
 
-/** `{ seb: { keys } }` si la evaluación exige Safe Exam Browser; las llaves nunca llegan al alumno. */
+/** `{ seb: { required, keys } }` si la evaluación exige Safe Exam Browser. */
 function sebFields(input) {
   if (!input || input.required !== true) return {};
   const keys = [...new Set((Array.isArray(input.keys) ? input.keys : String(input.keys ?? '').split(/[\s,;]+/)).map((k) => String(k).trim().toLowerCase()).filter(Boolean))];
-  if (!keys.length) fail('Para exigir Safe Exam Browser, pega la Config Key de tu archivo .seb (64 caracteres).');
-  if (keys.length > 10 || keys.some((k) => !SEB_KEY.test(k))) fail('Cada llave de Safe Exam Browser tiene 64 caracteres hexadecimales (0-9 y a-f). Puedes pegar hasta 10.');
-  return { seb: { required: true, keys } };
-}
-
-async function sha256hex(value) {
-  const bytes = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value)));
-  return [...bytes].map((b) => b.toString(16).padStart(2, '0')).join('');
-}
-
-/** ¿La solicitud viene de Safe Exam Browser con una configuración permitida? (true si la evaluación no lo exige) */
-export async function sebAllows(quiz, request) {
-  const keys = quiz.data.settings?.seb?.keys || [];
-  if (!keys.length) return true;
-  const url = request.url.split('#')[0];
-  const sent = [request.headers.get('X-SafeExamBrowser-ConfigKeyHash'), request.headers.get('X-SafeExamBrowser-RequestHash')]
-    .map((h) => String(h || '').trim().toLowerCase())
-    .filter((h) => SEB_KEY.test(h));
-  if (!sent.length) return false;
-  for (const key of keys) if (sent.includes(await sha256hex(url + key))) return true;
-  return false;
+  if (keys.length > 10 || keys.some((k) => !SEB_KEY.test(k))) fail('Cada llave de Safe Exam Browser tiene 64 caracteres hexadecimales (0-9 y a-f). Puedes pegar hasta 10, o dejarlo vacío para usar la configuración de Enlace.');
+  return { seb: { required: true, ...(keys.length ? { keys } : {}) } };
 }
 
 // ---- Modo examen ---------------------------------------------------------------------------------

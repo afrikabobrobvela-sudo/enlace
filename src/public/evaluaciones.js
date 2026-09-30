@@ -422,12 +422,18 @@ function quizModal(old) {
 
 const isSafeExamBrowser = () => /\bSEB\//.test(navigator.userAgent || '');
 
+/** Enlace para abrir la evaluación en SEB (sebs:// descarga la configuración que arma Enlace y la abre en SEB). */
+const sebLink = (quizId) => `${location.protocol === 'https:' ? 'sebs' : 'seb'}://${location.host}/seb/${encodeURIComponent(quizId)}.seb`;
+const SEB_DOWNLOAD = 'https://safeexambrowser.org/download_en.html';
+
 function sebSettingsHtml(seb) {
   return `<fieldset class="quiz-settings"><legend>Safe Exam Browser</legend>
     <label class="check-label"><input type="checkbox" name="seb" ${seb?.required ? 'checked' : ''}> Exigir Safe Exam Browser: solo se puede empezar, guardar y enviar desde él</label>
     <div class="seb-options" ${seb?.required ? '' : 'hidden'}>
-      <label>Config Key de tu archivo .seb (64 caracteres; si usas varios archivos, una por renglón)<textarea name="sebKeys" rows="2" spellcheck="false" autocomplete="off" placeholder="3f2a…">${esc((seb?.keys || []).join('\n'))}</textarea></label>
-      <p class="muted">En la herramienta de configuración de SEB, en «Exam», activa «Use Browser Exam Key and Config Key» y copia la <b>Config Key</b>. Como dirección de inicio pon la de esta evaluación. Los alumnos abren el examen con tu archivo .seb; desde otro navegador Enlace no les deja empezar.</p>
+      <p class="muted">No necesitas preparar nada: Enlace arma la configuración. Tus alumnos (con Safe Exam Browser instalado) tocan <b>«Abrir en Safe Exam Browser»</b> en la evaluación y se abre ahí directamente; desde otro navegador no pueden empezar.</p>
+      <details${seb?.keys?.length ? ' open' : ''}><summary>Avanzado: aceptar también mi propio archivo .seb</summary>
+        <label>Config Key de tu archivo .seb (64 caracteres, una por renglón; opcional)<textarea name="sebKeys" rows="2" spellcheck="false" autocomplete="off">${esc((seb?.keys || []).join('\n'))}</textarea></label>
+      </details>
     </div></fieldset>`;
 }
 
@@ -612,7 +618,10 @@ function renderQuiz() {
     const essays = q.data.questions.some((x) => x.type === 'essay');
     const toReview = attempts.filter((a) => inSelectedSection(memberOfAuthor(a.author))).reduce((n, a) => n + (a.data.pending || 0), 0);
     const total = quizTotalPoints(q.data.questions, new Map((settings.draw || []).map((d) => [d.pool, d.count])));
-    $('#main').innerHTML = `${head}<p class="quiz-meta">${total.exact ? '' : 'Aprox. '}${total.total} ${total.total === 1 ? 'punto' : 'puntos'} por alumno.</p><div class="toolbar">${button('Editar evaluación', 'edit-quiz', q.id, 'secondary')}<button class="secondary" type="button" data-quiz-preview="${esc(q.id)}">Vista previa</button>${specialAccessButton('quiz', q.id)}${
+    const sebInfo = settings.seb?.required
+      ? `<p class="real-status">Exige <b>Safe Exam Browser</b>: tus alumnos ven el botón «Abrir en Safe Exam Browser». <a href="${esc(sebLink(q.id))}">Probarlo aquí</a> · <a href="/seb/${esc(q.id)}.seb" download>Descargar la configuración (.seb)</a></p>`
+      : '';
+    $('#main').innerHTML = `${head}<p class="quiz-meta">${total.exact ? '' : 'Aprox. '}${total.total} ${total.total === 1 ? 'punto' : 'puntos'} por alumno.</p>${sebInfo}<div class="toolbar">${button('Editar evaluación', 'edit-quiz', q.id, 'secondary')}<button class="secondary" type="button" data-quiz-preview="${esc(q.id)}">Vista previa</button>${specialAccessButton('quiz', q.id)}${
       essays ? `<button class="${toReview ? 'primary' : 'secondary'}" type="button" data-essay-review="${esc(q.id)}">Revisar respuestas escritas${toReview ? ` (${toReview} por calificar)` : ''}</button>` : ''
     }${attempts.length ? `<button class="secondary" type="button" data-quiz-stats="${esc(q.id)}">Estadísticas</button><button class="secondary" type="button" data-quiz-export="${esc(q.id)}">Exportar a Excel</button>` : ''}<button class="secondary" data-bank-save="${esc(q.id)}">Guardar en el banco</button>${sectionFilterHtml()}</div>${sectionDatesSummary(q.id)}
       ${exam ? `<section class="exam-monitor" id="examMonitor"><p class="muted">Cargando examen en curso…</p></section>` : ''}${drawNote}${questions}
@@ -662,10 +671,14 @@ function renderQuiz() {
   const notYet = settings.opensAt && Date.parse(settings.opensAt) > Date.now();
   const closed = settings.closesAt && Date.parse(settings.closesAt) < Date.now();
   const sebNotice = settings.needsSeb && left > 0 && !isSafeExamBrowser()
-    ? '<p class="warning-note">Esta evaluación solo se puede presentar en <b>Safe Exam Browser</b>. Ábrela con el archivo de configuración (.seb) que te dio tu docente.</p>'
+    ? `<div class="seb-notice warning-note"><p>Esta evaluación solo se puede presentar en <b>Safe Exam Browser</b>.</p>
+        <p><a class="primary button-link" href="${esc(sebLink(q.id))}">Abrir en Safe Exam Browser</a></p>
+        <p class="muted">¿No lo tienes? <a href="${SEB_DOWNLOAD}" target="_blank" rel="noopener">Descárgalo gratis</a> (Windows, Mac o iPad), instálalo y vuelve a tocar el botón. Dentro de Safe Exam Browser entra a Enlace con tu cuenta.</p></div>`
     : '';
   $('#main').innerHTML = `${head}${lastHtml}${history}${sebNotice}${
-    left > 0 && notYet
+    sebNotice
+      ? '' // fuera de Safe Exam Browser no hay botón para empezar (el servidor tampoco lo permitiría)
+      : left > 0 && notYet
       ? `<p class="real-status">Esta evaluación se abre el <b>${esc(fmt(settings.opensAt))}</b>. Vuelve a esta página a esa hora.</p>`
       : left > 0 && closed
       ? `<p class="real-status">Esta evaluación cerró el ${esc(fmt(settings.closesAt))}.</p>`

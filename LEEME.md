@@ -5,6 +5,19 @@ No es el código de D2L Brightspace ni una plataforma oficial de la BUAP.
 
 Esta versión se despliega en **tu propia cuenta de Cloudflare** (Workers + D1 + R2, plan gratuito) y ya no depende de ChatGPT Sites.
 
+## Novedades de la versión 12.28 (Safe Exam Browser con un solo botón)
+
+Ya no necesitas preparar un archivo .seb ni copiar llaves:
+- **Tú**: en la evaluación marca **«Exigir Safe Exam Browser»** y guarda. Nada más.
+- **Tus alumnos** (con Safe Exam Browser instalado, gratis para Windows, Mac o iPad) ven en la evaluación el botón **«Abrir en Safe Exam Browser»**: se abre SEB directamente en esa evaluación; entran con su cuenta y la presentan. Desde otro navegador no aparece el botón para empezar y Enlace no lo permite.
+- Enlace arma la configuración de cada evaluación (en `/seb/<evaluación>.seb`) y comprueba en cada paso (empezar, guardar, enviar) que la solicitud venga de SEB con esa configuración, como lo hace Moodle.
+- Si ya tienes tu propio archivo .seb, puedes seguir usándolo: en «Avanzado» pega su Config Key.
+- Al entrar a Enlace desde un enlace a una evaluación (o desde SEB), después de iniciar sesión se llega a esa evaluación y no al inicio.
+
+Antes del primer examen real, haz una prueba con una evaluación de práctica y un alumno: Safe Exam Browser es un programa aparte que no pude probar aquí (lo simulé con sus mismas cabeceras). En particular, confirma que el inicio de sesión (Google o Microsoft) funcione dentro de SEB.
+
+No requiere migración.
+
 ## Novedades de la versión 12.27 (evaluaciones al estilo Brightspace)
 
 Se integró al sistema de evaluaciones de Enlace lo que faltaba del módulo de Brightspace. No es un sistema aparte: tus evaluaciones, bancos, calificaciones y exámenes de siempre siguen igual.
