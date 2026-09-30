@@ -18,6 +18,7 @@ import {
   MAX_UNLOCK_FAILURES,
   assertInTime,
   assertOpen,
+  assertTimeLeft,
   studentAttemptView,
   deadlineOf,
   examPlaceCheck,
@@ -1349,6 +1350,7 @@ const routes = {
       let start = await one(db, 'SELECT * FROM aula_attempt_starts WHERE quiz=? AND user_id=? AND attempt=?', quiz.id, user.id, attempt);
       if (!start) {
         assertOpen(quiz); // fechas de disponibilidad: solo para empezar; lo que está en curso lo corta el límite de tiempo
+        assertTimeLeft(quiz); // un intento nuevo nunca nace vencido (no se gasta ningún intento)
         // El código de su sección o la contraseña del modo examen (los dicta el docente en el salón) solo se pide al
         // empezar; retomar tras recargar no lo pide.
         const code = startCodeOf(quiz.data.settings);
@@ -1523,6 +1525,32 @@ const routes = {
       fail('Este intento ya se envió. Recarga la página.', 409);
     }
     return json(studentAttemptView(attemptRecord(await one(db, 'SELECT * FROM aula_attempts WHERE id=?', id)), quiz), 201);
+  },
+
+  // Devolver intentos vacíos (12.29): los que se cerraron por tiempo sin ninguna respuesta guardada (por ejemplo, los
+  // que abría el error del tiempo fijo). No borra el trabajo de nadie: solo intentos sin respuestas, de alumnos que no
+  // tienen otro intento en curso. Con `user` solo los de ese alumno.
+  'POST /api/quiz/void-empty': async ({ db, user, request }) => {
+    const body = await readJson(request);
+    requireTeacher(await access(db, user, body.course));
+    const quiz = await contentRecord(db, String(body.quiz ?? ''), body.course, 'quiz');
+    const empty = `a.quiz=?1 AND a.course=?2 AND a.details IS NULL AND a.answers='[]' AND (?3 IS NULL OR a.user_id=?3)
+      AND NOT EXISTS (SELECT 1 FROM aula_attempt_starts s WHERE s.quiz=a.quiz AND s.user_id=a.user_id
+                      AND NOT EXISTS (SELECT 1 FROM aula_attempts x WHERE x.quiz=s.quiz AND x.user_id=s.user_id AND x.attempt=s.attempt))`;
+    const who = body.user ? String(body.user) : null;
+    const rows = await all(db, `SELECT a.id, a.user_id, a.attempt FROM aula_attempts a WHERE ${empty}`, quiz.id, body.course, who);
+    if (!rows.length) return json({ voided: 0 });
+    const list = JSON.stringify(rows.map((r) => ({ id: r.id, user: r.user_id, attempt: r.attempt })));
+    await db.batch([
+      db
+        .prepare(
+          `DELETE FROM aula_attempt_starts WHERE quiz=?1 AND EXISTS (SELECT 1 FROM json_each(?2) j
+             WHERE json_extract(j.value,'$.user')=aula_attempt_starts.user_id AND json_extract(j.value,'$.attempt')=aula_attempt_starts.attempt)`,
+        )
+        .bind(quiz.id, list),
+      db.prepare("DELETE FROM aula_attempts WHERE course=?1 AND quiz=?2 AND details IS NULL AND answers='[]' AND id IN (SELECT json_extract(value,'$.id') FROM json_each(?3))").bind(body.course, quiz.id, list),
+    ]);
+    return json({ voided: rows.length, students: new Set(rows.map((r) => r.user_id)).size });
   },
 
   // Vista previa del docente (12.27): un sorteo nuevo cada vez (preguntas, orden y datos), tal como lo recibiría un

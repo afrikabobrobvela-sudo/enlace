@@ -682,12 +682,28 @@ export function deadlineOf(quiz, started) {
   return deadline;
 }
 
+const when = (iso) => new Date(iso).toLocaleString('es-MX', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'America/Mexico_City' });
+
 /** ¿Se puede empezar un intento ahora? (fechas de disponibilidad) */
 export function assertOpen(quiz, now = Date.now()) {
   const { opensAt, closesAt } = quiz.data.settings || {};
-  const when = (iso) => new Date(iso).toLocaleString('es-MX', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'America/Mexico_City' });
   if (opensAt && now < Date.parse(opensAt)) fail(`Esta evaluación se abre el ${when(opensAt)}.`, 403);
   if (closesAt && now > Date.parse(closesAt)) fail(`Esta evaluación cerró el ${when(closesAt)}.`, 403);
+}
+
+/**
+ * ¿Queda tiempo para un intento nuevo? (12.29) Con «el tiempo corre desde la hora de inicio», el límite es el mismo
+ * para todos (inicio + tiempo límite): después de esa hora no se abre un intento que nacería ya vencido (antes se
+ * abría, se cerraba en 0 y, en el mismo clic, se gastaban todos los intentos).
+ */
+export function assertTimeLeft(quiz, now = Date.now()) {
+  const deadline = deadlineOf(quiz, new Date(now).toISOString());
+  if (!deadline || now < Date.parse(deadline)) return;
+  const settings = quiz.data.settings || {};
+  if (settings.timerMode === 'fixed' && settings.opensAt && (!settings.closesAt || deadline < settings.closesAt)) {
+    fail(`El tiempo de esta evaluación terminó el ${when(deadline)}: se cuenta desde la hora de inicio (${when(settings.opensAt)}), igual para todos. Avisa a tu docente.`, 403);
+  }
+  fail(`Esta evaluación cerró el ${when(deadline)}.`, 403);
 }
 
 /**

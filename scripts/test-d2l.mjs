@@ -296,5 +296,38 @@ assert.equal(bankSaved, 120);
 assert.equal((await call('docente', '/api/bank', { course: c, topic: 'QUIM-P01', questions: byTopic.get('QUIM-P01') }, 201)).repeated, 10, 'No se repiten');
 checks += 2;
 
+// ---- 12.29: tiempo fijo ya vencido (abre 7:00, 30 min, cierra 15:30) ------------------------------------------
+const hours = (n) => new Date(Date.now() + n * 3600_000).toISOString();
+const fijo = await saveQuiz({
+  title: 'examen parcial 1',
+  questions: [mixed[1], mixed[1]],
+  settings: { attempts: 2, timeLimit: 30, opensAt: hours(-8), closesAt: hours(1), timerMode: 'fixed', exam: { enabled: true, password: 'E8576W', oneByOne: true, noBack: true } },
+});
+const tarde = await call('raul', '/api/attempt/start', { course: c, quiz: fijo.id, password: 'E8576W' }, 403);
+ok(/se cuenta desde la hora de inicio/.test(tarde.error), 'Tiempo fijo vencido: explica por qué y no abre el intento');
+const raulId = store.raw().prepare("SELECT id FROM aula_users WHERE email='raul@example.test'").get().id;
+assert.equal(store.raw().prepare('SELECT count(*) AS n FROM aula_attempts WHERE quiz=?').get(fijo.id).n, 0, 'No se gastó ningún intento');
+// Lo que dejaba la versión anterior: dos intentos cerrados en 0 sin respuestas (y uno con respuestas de otro alumno).
+const insertAttempt = store.raw().prepare("INSERT INTO aula_attempts (id,course,quiz,user_id,name,answers,correct,total,score,created,attempt,details) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)");
+const insertStart = store.raw().prepare('INSERT INTO aula_attempt_starts (quiz,user_id,attempt,started) VALUES (?,?,?,?)');
+for (const n of [1, 2]) {
+  insertAttempt.run(`v${n}`, c, fijo.id, raulId, 'raul', '[]', 0, 2, 0, hours(0), n, null);
+  insertStart.run(fijo.id, raulId, n, hours(0));
+}
+const evaId = store.raw().prepare("SELECT id FROM aula_users WHERE email='eva@example.test'").get().id;
+insertAttempt.run('conRespuestas', c, fijo.id, evaId, 'eva', '[true]', 1, 2, 5, hours(0), 1, JSON.stringify([{ index: 0, answer: true, correct: true, credit: 1 }]));
+await call('raul', '/api/quiz/void-empty', { course: c, quiz: fijo.id }, 403);
+const devueltos = await call('docente', '/api/quiz/void-empty', { course: c, quiz: fijo.id });
+assert.deepEqual([devueltos.voided, devueltos.students], [2, 1]);
+assert.deepEqual(store.raw().prepare('SELECT id FROM aula_attempts WHERE quiz=?').all(fijo.id).map((r) => r.id), ['conRespuestas'], 'Solo se quitan los vacíos');
+assert.equal(store.raw().prepare('SELECT count(*) AS n FROM aula_attempt_starts WHERE quiz=? AND user_id=?').get(fijo.id, raulId).n, 0);
+// Con el tiempo por alumno, Raúl vuelve a empezar desde el intento 1 y tiene sus 30 minutos.
+const actual = (await call('docente', '/api/course?id=' + c)).records.find((r) => r.id === fijo.id);
+await call('docente', '/api/record', { course: c, kind: 'quiz', id: fijo.id, revision: actual.revision, data: { ...actual.data, settings: { ...actual.data.settings, timerMode: 'attempt' } } });
+const deNuevo = await call('raul', '/api/attempt/start', { course: c, quiz: fijo.id, password: 'E8576W' });
+assert.deepEqual([deNuevo.attempt, deNuevo.attemptsLeft], [1, 2]);
+ok(Date.parse(deNuevo.deadline) - Date.parse(deNuevo.started) === 30 * 60_000, 'Tiene sus 30 minutos completos');
+checks += 3;
+
 assert.deepEqual(store.raw().prepare('PRAGMA foreign_key_check').all(), []);
 console.log(`PASS: ${checks} verificaciones de la 12.27 — CSV de Brightspace (8 tipos, HTML, errores por renglón, grupos), 60 puntos en 12 grupos, sorteos distintos, intento congelado, código con límite, tiempo agotado, 10 con todo correcto, sin clave en la red, recalificar, Safe Exam Browser y vista previa.`);

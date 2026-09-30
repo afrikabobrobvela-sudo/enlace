@@ -360,7 +360,7 @@ function quizModal(old) {
       <fieldset class="quiz-settings"><legend>Fechas y disponibilidad</legend><div class="quiz-grid">
         <label>Fecha de inicio (opcional)<input name="opensAt" type="datetime-local" value="${esc(localDate(settings.opensAt))}"></label>
         <label>Fecha final (opcional)<input name="closesAt" type="datetime-local" value="${esc(localDate(settings.closesAt))}"></label></div>
-        <label class="check-label"><input type="checkbox" name="timerFixed" ${settings.timerMode === 'fixed' ? 'checked' : ''}> El tiempo empieza a la hora de inicio, igual para todos (quien entra tarde tiene menos tiempo)</label>
+        <label class="check-label"><input type="checkbox" name="timerFixed" ${settings.timerMode === 'fixed' ? 'checked' : ''}> El tiempo empieza a la hora de inicio, igual para todos: todos terminan a la misma hora (inicio + tiempo límite) y quien entra tarde tiene menos tiempo. Úsalo solo si todo el grupo presenta a la misma hora.</label>
         <p class="muted">Antes del inicio no se puede empezar; en la fecha final termina todo lo que esté en curso y se califica lo que cada alumno dejó guardado.</p>
         ${courseSections().length ? '<p class="muted">El horario de cada sección está arriba, en «Secciones y horarios».</p>' : ''}</fieldset>
       <fieldset class="quiz-settings"><legend>Qué ve el alumno al terminar</legend>
@@ -379,6 +379,18 @@ function quizModal(old) {
        <p class="pending-message">Con respuestas recibidas solo puedes corregir las respuestas correctas, los puntos y la retroalimentación: al guardar, se vuelven a calificar todos los intentos. Las preguntas, opciones y preguntas al azar ya no cambian.</p>` +
       (old ? `<p class="modal-danger">${trashButton('quiz', old.id, 'Eliminar evaluación')}</p>` : ''),
     async (f) => {
+      // 12.29: con el tiempo fijo, después de «inicio + tiempo límite» ya nadie puede presentar, aunque la evaluación
+      // siga abierta. Si la fecha final es posterior, casi siempre es un error de configuración: se pregunta.
+      const opens = iso(f.get('opensAt'));
+      const closes = iso(f.get('closesAt'));
+      const limit = Number(f.get('timeLimit')) || 0;
+      if (f.get('timerFixed') === 'on' && opens && limit && closes && Date.parse(closes) > Date.parse(opens) + limit * 60_000 + 60_000) {
+        const end = new Date(Date.parse(opens) + limit * 60_000);
+        const ok = confirm(
+          `Con «El tiempo empieza a la hora de inicio», todos deben terminar a las ${end.toLocaleTimeString('es-MX', { hour: 'numeric', minute: '2-digit' })} del ${end.toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })}, aunque la evaluación cierre después (${fmt(closes)}). Quien entre después de esa hora ya no podrá presentarla.\n\nSi cada alumno debe tener sus ${limit} minutos desde que empieza, cancela y desmarca esa casilla. ¿Guardar así?`,
+        );
+        if (!ok) throw new Error('Revisa «El tiempo empieza a la hora de inicio»: con esa casilla, todos terminan a la misma hora.');
+      }
       const saved = await save(
         'quiz',
         {
@@ -616,6 +628,8 @@ function renderQuiz() {
           .join(', ')} al azar${questionCountOf(q.data) > settings.draw.reduce((n, d) => n + d.count, 0) ? ' y todas las que no tienen grupo' : ''}.</p>`
       : '';
     const essays = q.data.questions.some((x) => x.type === 'essay');
+    // Intentos cerrados por tiempo sin ninguna respuesta (12.29): se pueden devolver.
+    const emptyAttempts = attempts.filter((a) => !a.data.details && !(a.data.answers || []).length);
     const toReview = attempts.filter((a) => inSelectedSection(memberOfAuthor(a.author))).reduce((n, a) => n + (a.data.pending || 0), 0);
     const total = quizTotalPoints(q.data.questions, new Map((settings.draw || []).map((d) => [d.pool, d.count])));
     const sebInfo = settings.seb?.required
@@ -623,7 +637,11 @@ function renderQuiz() {
       : '';
     $('#main').innerHTML = `${head}<p class="quiz-meta">${total.exact ? '' : 'Aprox. '}${total.total} ${total.total === 1 ? 'punto' : 'puntos'} por alumno.</p>${sebInfo}<div class="toolbar">${button('Editar evaluación', 'edit-quiz', q.id, 'secondary')}<button class="secondary" type="button" data-quiz-preview="${esc(q.id)}">Vista previa</button>${specialAccessButton('quiz', q.id)}${
       essays ? `<button class="${toReview ? 'primary' : 'secondary'}" type="button" data-essay-review="${esc(q.id)}">Revisar respuestas escritas${toReview ? ` (${toReview} por calificar)` : ''}</button>` : ''
-    }${attempts.length ? `<button class="secondary" type="button" data-quiz-stats="${esc(q.id)}">Estadísticas</button><button class="secondary" type="button" data-quiz-export="${esc(q.id)}">Exportar a Excel</button>` : ''}<button class="secondary" data-bank-save="${esc(q.id)}">Guardar en el banco</button>${sectionFilterHtml()}</div>${sectionDatesSummary(q.id)}
+    }${attempts.length ? `<button class="secondary" type="button" data-quiz-stats="${esc(q.id)}">Estadísticas</button><button class="secondary" type="button" data-quiz-export="${esc(q.id)}">Exportar a Excel</button>` : ''}<button class="secondary" data-bank-save="${esc(q.id)}">Guardar en el banco</button>${sectionFilterHtml()}</div>${sectionDatesSummary(q.id)}${
+      emptyAttempts.length
+        ? `<div class="warning-note void-note"><p><b>${emptyAttempts.length} ${emptyAttempts.length === 1 ? 'intento se cerró' : 'intentos se cerraron'} sin ninguna respuesta</b> (de ${new Set(emptyAttempts.map((a) => a.author)).size} ${new Set(emptyAttempts.map((a) => a.author)).size === 1 ? 'alumno' : 'alumnos'}): se acabó el tiempo antes de que contestaran. Si fue por la configuración, devuélvelos para que puedan volver a presentar.</p><button type="button" class="secondary" data-void-empty="${esc(q.id)}">Devolver intentos sin respuestas</button></div>`
+        : ''
+    }
       ${exam ? `<section class="exam-monitor" id="examMonitor"><p class="muted">Cargando examen en curso…</p></section>` : ''}${drawNote}${questions}
       <h2>Resultados</h2><div class="table-wrap"><table><thead><tr><th>Alumno</th><th>Mejor calificación</th><th>Intentos</th><th>Último envío</th>${exam ? '<th>Integridad</th>' : ''}</tr></thead><tbody>${
         rows
@@ -670,6 +688,9 @@ function renderQuiz() {
   // Fechas de disponibilidad: antes de abrir o después de cerrar no hay botón para empezar.
   const notYet = settings.opensAt && Date.parse(settings.opensAt) > Date.now();
   const closed = settings.closesAt && Date.parse(settings.closesAt) < Date.now();
+  // 12.29: con el tiempo fijo, después de «inicio + tiempo límite» ya no hay tiempo para nadie.
+  const fixedEnd = settings.timerMode === 'fixed' && settings.opensAt && settings.timeLimit ? Date.parse(settings.opensAt) + settings.timeLimit * 60_000 : null;
+  const timeOver = fixedEnd && fixedEnd < Date.now() && !closed;
   const sebNotice = settings.needsSeb && left > 0 && !isSafeExamBrowser()
     ? `<div class="seb-notice warning-note"><p>Esta evaluación solo se puede presentar en <b>Safe Exam Browser</b>.</p>
         <p><a class="primary button-link" href="${esc(sebLink(q.id))}">Abrir en Safe Exam Browser</a></p>
@@ -682,6 +703,8 @@ function renderQuiz() {
       ? `<p class="real-status">Esta evaluación se abre el <b>${esc(fmt(settings.opensAt))}</b>. Vuelve a esta página a esa hora.</p>`
       : left > 0 && closed
       ? `<p class="real-status">Esta evaluación cerró el ${esc(fmt(settings.closesAt))}.</p>`
+      : left > 0 && timeOver
+      ? `<p class="real-status">El tiempo de esta evaluación terminó el ${esc(fmt(new Date(fixedEnd).toISOString()))}: se cuenta desde la hora de inicio, igual para todos. Si crees que es un error, avisa a tu docente.</p>`
       : left > 0 && exam
       ? examIntroHtml(exam, attempts.length)
       : left > 0
@@ -885,6 +908,19 @@ document.addEventListener('click', (e) => {
   showAttemptPage(form, Number(form.dataset.page || 0) + (nav.dataset.pageNav === 'next' ? 1 : -1));
   if (attemptSave) saveAttemptProgress();
   form.scrollIntoView?.({ block: 'start' });
+});
+
+document.addEventListener('click', async (e) => {
+  const b = e.target.closest('[data-void-empty]');
+  if (!b || busy) return;
+  if (!confirm('Se quitarán los intentos que se cerraron sin ninguna respuesta; esos alumnos podrán volver a empezar. Los intentos con respuestas no se tocan. ¿Continuar?')) return;
+  try {
+    const r = await request('/api/quiz/void-empty', { course: current.course.id, quiz: b.dataset.voidEmpty });
+    await reload();
+    toast(r.voided ? `Se ${r.voided === 1 ? 'devolvió 1 intento' : `devolvieron ${r.voided} intentos`} a ${r.students} ${r.students === 1 ? 'alumno' : 'alumnos'}. Revisa que el horario y el tiempo de la evaluación sean los correctos.` : 'No había intentos por devolver (o el alumno tiene uno en curso).');
+  } catch (error) {
+    toast(error.message);
+  }
 });
 
 // ---- Vista previa del docente (12.27) -----------------------------------------------------------------

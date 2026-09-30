@@ -5,6 +5,21 @@ No es el código de D2L Brightspace ni una plataforma oficial de la BUAP.
 
 Esta versión se despliega en **tu propia cuenta de Cloudflare** (Workers + D1 + R2, plan gratuito) y ya no depende de ChatGPT Sites.
 
+## Novedades de la versión 12.29 (corrección urgente: «ya usaste tus intentos»)
+
+**El problema**: con «El tiempo empieza a la hora de inicio, igual para todos», el límite es el mismo para todos: *hora de inicio + tiempo límite* (por ejemplo, abre 7:00 con 30 minutos → todos terminan a las 7:30), aunque la evaluación cierre más tarde. Si un alumno tocaba «Comenzar examen» después de esa hora, Enlace abría un intento ya vencido, lo cerraba en 0 y, en el mismo toque, hacía lo mismo con los demás intentos. Por eso decía «Ya usaste tus 2 intentos» sin haber contestado nada.
+
+**Ya corregido**:
+- Un intento nunca se abre ya vencido. El alumno ve por qué: «El tiempo de esta evaluación terminó a las …: se cuenta desde la hora de inicio». No se le descuenta nada.
+- Al guardar una evaluación con esa casilla y una fecha final más tarde, Enlace te avisa a qué hora terminan todos y te pregunta si así la quieres.
+- En la evaluación aparece **«Devolver intentos sin respuestas»** cuando hay intentos que se cerraron sin ninguna respuesta. Los quita para que esos alumnos puedan volver a presentar. Los intentos con respuestas no se tocan.
+
+**Qué hacer con el examen afectado**:
+1. En «Editar evaluación», **desmarca** «El tiempo empieza a la hora de inicio» (así cada alumno tiene sus 30 minutos desde que empieza). Si ya pasó la fecha final, amplíala.
+2. En la evaluación, toca **«Devolver intentos sin respuestas»**.
+
+No requiere migración.
+
 ## Novedades de la versión 12.28 (Safe Exam Browser con un solo botón)
 
 Ya no necesitas preparar un archivo .seb ni copiar llaves:
