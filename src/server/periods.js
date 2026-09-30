@@ -116,8 +116,9 @@ export const periodRoutes = {
 
     const statements = [
       db
-        .prepare('INSERT INTO aula_courses (id,owner,name,group_name,intro,created,academy_id,unit_id,period) VALUES (?,?,?,?,?,?,?,?,?)')
-        .bind(id, user.id, name, group, remap(a.course.intro, map), now, user.academy_id ?? a.course.academy_id ?? null, user.unit_id ?? a.course.unit_id ?? null, period),
+        // El color se copia; la portada no (su imagen es del curso original y se borraría con él).
+        .prepare('INSERT INTO aula_courses (id,owner,name,group_name,intro,created,academy_id,unit_id,period,theme) VALUES (?,?,?,?,?,?,?,?,?,?)')
+        .bind(id, user.id, name, group, remap(a.course.intro, map), now, user.academy_id ?? a.course.academy_id ?? null, user.unit_id ?? a.course.unit_id ?? null, period, a.course.theme ?? 0),
       db
         .prepare(
           `INSERT INTO aula_grade_settings (course,revision,updated,updated_by,scheme,final_decimals,final_rounding,passing_grade,failing_as,missing_as_zero)

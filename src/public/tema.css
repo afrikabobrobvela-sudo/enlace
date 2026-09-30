@@ -1275,3 +1275,22 @@ button.att-mark.none { background: #f4f6f8; }
 }
 .gradebook .sticky-name .person .muted { display: block; margin: 2px 0 0; padding: 0; text-align: left; white-space: nowrap; font-size: 0.75rem; }
 .gb-col-panel button { font-size: 0.9rem; }
+
+/* Portada y color del curso (12.25) */
+article.course .course-cover.has-cover { background: linear-gradient(180deg, rgba(8, 20, 32, 0.15), rgba(8, 20, 32, 0.55)), var(--cover) center / cover no-repeat, linear-gradient(135deg, var(--c1), var(--c2)) !important; }
+article.course .course-cover.has-cover .course-letter { opacity: 0; }
+.hub-banner.has-cover { background: linear-gradient(90deg, rgba(8, 20, 32, 0.72), rgba(8, 20, 32, 0.25)), var(--cover) center / cover no-repeat, linear-gradient(120deg, var(--c1), var(--c2)); min-height: 180px; }
+.hub-banner.has-cover::after { display: none; }
+.hub-banner .hub-edit { position: absolute; right: 16px; top: 16px; z-index: 2; padding: 6px 12px; border-radius: 999px; border: 1px solid rgba(255, 255, 255, 0.45); background: rgba(8, 20, 32, 0.35); color: #fff; font: inherit; font-size: 0.85rem; font-weight: 600; cursor: pointer; box-shadow: none; }
+.hub-banner .hub-edit:hover, .hub-banner .hub-edit:focus-visible { background: rgba(8, 20, 32, 0.55); outline: none; }
+.theme-picker, .cover-picker { border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 10px 14px; margin: 10px 0; }
+.theme-swatches { display: flex; flex-wrap: wrap; gap: 8px; }
+.theme-swatch { position: relative; width: 44px; height: 44px; border-radius: 10px; background: var(--pattern), linear-gradient(135deg, var(--c1), var(--c2)); cursor: pointer; display: grid !important; place-items: center; margin: 0 !important; color: #fff; font-size: 0.75rem; font-weight: 700; }
+.theme-swatch input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+.theme-swatch:has(input:checked) { box-shadow: 0 0 0 3px var(--surface), 0 0 0 5px var(--brand); }
+.theme-swatch:has(input:focus-visible) { box-shadow: 0 0 0 3px var(--surface), 0 0 0 5px var(--accent); }
+.cover-preview { height: 110px; border-radius: var(--radius-sm); display: flex; align-items: flex-end; padding: 12px 14px; color: #fff; font-weight: 800; font-size: 1.1rem; background: var(--pattern), linear-gradient(135deg, var(--c1), var(--c2)); margin-bottom: 8px; text-shadow: 0 1px 6px rgba(0, 0, 0, 0.35); }
+.cover-preview.has-cover { background: linear-gradient(180deg, rgba(8, 20, 32, 0.1), rgba(8, 20, 32, 0.6)), var(--cover) center / cover no-repeat; }
+@media (max-width: 720px) {
+  .hub-banner .hub-edit { position: static; margin-top: 10px; }
+}

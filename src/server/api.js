@@ -38,7 +38,7 @@ import {
   validEvents,
 } from './quizzes.js';
 import { bankImageVisible, bankRoutes } from './bank.js';
-import { photoRoutes, servePhoto } from './photos.js';
+import { coverRoutes, photoRoutes, serveCourseCover, servePhoto } from './photos.js';
 import { digestRoutes } from './digest.js';
 import { accessRoutes, recordVisit } from './accesos.js';
 import { specialAccessRoutes } from './especial.js';
@@ -144,10 +144,11 @@ export async function api(request, env) {
     assertHasPhoto(route, user, env);
     const ctx = { db: env.DB, env, user, url, request };
     const handler =
-      routes[route] || attendanceRoutes[route] || gradingRoutes[route] || directoryRoutes[route] || privacyRoutes[route] || periodRoutes[route] || dashboardRoutes[route] || reportRoutes[route] || demoRoutes[route] || backupRoutes[route] || userRoutes[route] || bankRoutes[route] || sectionRoutes[route] || photoRoutes[route] || digestRoutes[route] || accessRoutes[route] || specialAccessRoutes[route] || forumRoutes[route] || importRoutes[route];
+      routes[route] || attendanceRoutes[route] || gradingRoutes[route] || directoryRoutes[route] || privacyRoutes[route] || periodRoutes[route] || dashboardRoutes[route] || reportRoutes[route] || demoRoutes[route] || backupRoutes[route] || userRoutes[route] || bankRoutes[route] || sectionRoutes[route] || photoRoutes[route] || digestRoutes[route] || accessRoutes[route] || specialAccessRoutes[route] || forumRoutes[route] || importRoutes[route] || coverRoutes[route];
     if (handler) return await handler(ctx);
     if (request.method === 'GET' && url.pathname.startsWith('/api/file/')) return await downloadFile(ctx, url.pathname.slice(10));
     if (request.method === 'GET' && url.pathname.startsWith('/api/photo/')) return await servePhoto(ctx, url.pathname.slice(11));
+    if (request.method === 'GET' && url.pathname.startsWith('/api/course-cover/')) return await serveCourseCover(ctx, url.pathname.slice(18));
     fail('Ruta no encontrada.', 404);
   } catch (error) {
     console.error('aula-api', error.status || 500, error.status ? error.message : error);
@@ -160,7 +161,15 @@ export async function api(request, env) {
 
 // ---- Registros de contenido (aula_records) ---------------------------------------------------
 
+/** El curso sin la llave interna de su portada en R2 (la interfaz usa cover_updated). */
+const publicCourse = ({ cover: _cover, ...course }) => course;
 const unpack = (row) => (row ? { ...row, data: parseJson(row.data, {}) } : null);
+
+function validTheme(value) {
+  const n = Number(value);
+  if (!Number.isInteger(n) || n < 0 || n > 6) fail('Color de portada no válido.');
+  return n;
+}
 
 async function contentRecord(db, id, course, kind) {
   const r = unpack(await one(db, 'SELECT * FROM aula_records WHERE id=? AND course=? AND deleted_at IS NULL', id, course));
@@ -404,7 +413,7 @@ const routes = {
             user.role === 'teacher' ? 1 : 0,
           );
     return json(
-      rows.map(({ can_teach: canTeach, ...c }) => ({
+      rows.map(({ can_teach: canTeach, cover: _cover, ...c }) => ({
         ...c,
         canTeach: canTeach === 1,
         canDelete: user.role === 'admin' || ownsCourse(user, c),
@@ -419,7 +428,7 @@ const routes = {
     await run(
       db,
       // El curso queda clasificado con la academia y la unidad de quien lo crea.
-      'INSERT INTO aula_courses (id,owner,name,group_name,intro,created,academy_id,unit_id,period) VALUES (?,?,?,?,?,?,?,?,?)',
+      'INSERT INTO aula_courses (id,owner,name,group_name,intro,created,academy_id,unit_id,period,theme) VALUES (?,?,?,?,?,?,?,?,?,?)',
       id,
       user.id,
       text(body.name, 150),
@@ -429,6 +438,7 @@ const routes = {
       user.academy_id ?? null,
       user.unit_id ?? null,
       optionalText(body.period, 60),
+      body.theme === undefined ? 0 : validTheme(body.theme),
     );
     return json({ id }, 201);
   },
@@ -569,7 +579,7 @@ const routes = {
       const quiz = records.find((r) => r.id === quizId);
       const images = new Set((quiz?.data.questions || []).map((q) => q?.image).filter(Boolean));
       return json({
-        course: a.course,
+        course: publicCourse(a.course),
         canTeach: false,
         canPreview: false,
         preview: false,
@@ -583,7 +593,7 @@ const routes = {
       });
     }
     return json({
-      course: a.course,
+      course: publicCourse(a.course),
       canTeach: teach,
       // canPreview: quien enseña puede alternar entre su vista y la de alumno.
       canPreview: a.teach,
@@ -639,11 +649,12 @@ const routes = {
     requireTeacher(await access(db, user, body.course));
     await run(
       db,
-      'UPDATE aula_courses SET name=?,group_name=?,intro=?,period=? WHERE id=?',
+      'UPDATE aula_courses SET name=?,group_name=?,intro=?,period=?,theme=coalesce(?,theme) WHERE id=?',
       text(body.name, 150),
       text(body.group, 100),
       optionalText(body.intro, 10000),
       optionalText(body.period, 60),
+      body.theme === undefined ? null : validTheme(body.theme),
       body.course,
     );
     return json({ ok: true });
@@ -815,6 +826,34 @@ const routes = {
       students,
     );
     return json({ total: byEmail.size, created: byEmail.size - before.n, updated: before.n });
+  },
+
+  // Corregir los datos de un alumno inscrito (12.25): nombre, matrícula, correo y sección. Si el correo cambia, la
+  // inscripción se liga a la cuenta con el correo nuevo (o a ninguna, hasta que entre con él).
+  'POST /api/member/update': async ({ db, user, request }) => {
+    const body = await readJson(request);
+    requireTeacher(await access(db, user, body.course));
+    const member = await one(db, "SELECT * FROM aula_members WHERE id=? AND course=? AND role='student'", String(body.id ?? ''), body.course);
+    if (!member) fail('Alumno no encontrado.', 404);
+    const address = validEmail(body.email);
+    const section = body.section === undefined ? member.section : await validSection(db, body.course, body.section);
+    if (address !== member.email) {
+      const taken = await one(db, 'SELECT role FROM aula_members WHERE course=? AND email=? AND id<>?', body.course, address, member.id);
+      if (taken) fail(taken.role === 'removed' ? 'Ese correo es de un alumno que retiraste de este curso.' : 'Ese correo ya es de otra persona inscrita en este curso.', 409);
+    }
+    await run(
+      db,
+      `UPDATE aula_members SET name=?1, matricula=?2, section=?3, email=?4,
+         user_id=CASE WHEN ?4=email THEN user_id ELSE (SELECT u.id FROM aula_users u WHERE u.email=?4) END
+       WHERE id=?5 AND course=?6`,
+      text(body.name, 150),
+      optionalText(body.matricula, 50),
+      section,
+      address,
+      member.id,
+      body.course,
+    );
+    return json(await one(db, 'SELECT id, name, matricula, email, section, user_id FROM aula_members WHERE id=?', member.id));
   },
 
   'DELETE /api/member': async ({ db, user, request }) => {

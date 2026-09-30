@@ -146,7 +146,7 @@ function renderHome() {
 }
 function renderHub() {
   const c = current.course;
-  $('#main').innerHTML = `<section class="hub-banner" data-theme="${courseTheme(c.id)}"><p class="hub-eyebrow">Grupo ${esc(c.group_name)}</p><h1>${esc(c.name)}</h1></section><div class="hub-grid"><div class="hub-side"><section class="panel hub-info ${c.intro ? '' : 'is-empty'}"><h2>Información del curso</h2><p class="muted">${esc(c.group_name)}</p>${richText(c.intro)}</section><section class="panel"><h2>Actividades</h2>${records('task').slice(-4).map(t => `<div class="task-row"><div><b>${esc(t.data.title)}</b><p class="deadline">${fmt(t.data.due)}</p>${button('Abrir →', 'task', t.id, 'text-btn')}</div></div>`).join('') || '<p class="muted">No hay actividades publicadas.</p>'}</section></div><div>${continueCardHtml()}<section class="panel"><div class="panel-head"><h2>Noticias</h2>${teaches() ? button('Crear publicación', 'new-notice', '', 'text-btn') : ''}</div>${noticeCards()}</section><section class="panel"><div class="panel-head"><h2>Contenido del curso</h2>${teaches() ? button('Nueva unidad', 'new-module', '', 'text-btn') : ''}</div><div class="module-cards">${records('module').map(m => `<button class="module-card" data-action="module" data-id="${m.id}"><div class="module-cover">${esc(m.data.title)}</div><span class="module-label">${m.data.visible === false ? 'Oculta' : teaches() ? (scheduledFor(m) ? 'Programada' : 'Abrir unidad') : myMember() && materialsOf(m.id).length ? `${unitProgress(m.id, myMember().id).done} de ${materialsOf(m.id).length} completados` : 'Abrir unidad'}</span></button>`).join('')}</div>${!records('module').length ? '<p class="muted">Agrega unidades para organizar los materiales.</p>' : ''}</section></div></div>`;
+  $('#main').innerHTML = `<section class="hub-banner ${c.cover_updated ? 'has-cover' : ''}" data-theme="${courseThemeOf(c)}"${coverStyle(c)}><p class="hub-eyebrow">Grupo ${esc(c.group_name)}</p><h1>${esc(c.name)}</h1>${teaches() && !previewAsStudent ? button('✎ Editar curso y portada', 'edit-course', '', 'hub-edit') : ''}</section><div class="hub-grid"><div class="hub-side"><section class="panel hub-info ${c.intro ? '' : 'is-empty'}"><h2>Información del curso</h2><p class="muted">${esc(c.group_name)}</p>${richText(c.intro)}</section><section class="panel"><h2>Actividades</h2>${records('task').slice(-4).map(t => `<div class="task-row"><div><b>${esc(t.data.title)}</b><p class="deadline">${fmt(t.data.due)}</p>${button('Abrir →', 'task', t.id, 'text-btn')}</div></div>`).join('') || '<p class="muted">No hay actividades publicadas.</p>'}</section></div><div>${continueCardHtml()}<section class="panel"><div class="panel-head"><h2>Noticias</h2>${teaches() ? button('Crear publicación', 'new-notice', '', 'text-btn') : ''}</div>${noticeCards()}</section><section class="panel"><div class="panel-head"><h2>Contenido del curso</h2>${teaches() ? button('Nueva unidad', 'new-module', '', 'text-btn') : ''}</div><div class="module-cards">${records('module').map(m => `<button class="module-card" data-action="module" data-id="${m.id}"><div class="module-cover">${esc(m.data.title)}</div><span class="module-label">${m.data.visible === false ? 'Oculta' : teaches() ? (scheduledFor(m) ? 'Programada' : 'Abrir unidad') : myMember() && materialsOf(m.id).length ? `${unitProgress(m.id, myMember().id).done} de ${materialsOf(m.id).length} completados` : 'Abrir unidad'}</span></button>`).join('')}</div>${!records('module').length ? '<p class="muted">Agrega unidades para organizar los materiales.</p>' : ''}</section></div></div>`;
 }
 function fileLinks(ids = []) {
   return `<div class="file-list">${ids.map(id => {
@@ -337,7 +337,7 @@ function renderGroups() {
   return workspaceGroups();
 }
 function renderMembers() {
-  $('#main').innerHTML = `<h1>Listado de alumnos</h1><div class="toolbar">${teaches() ? button('Inscribir alumno', 'new-member') + button('Importar lista', 'bulk-members', '', 'secondary') + button(courseSections().length ? 'Secciones' : 'Crear secciones', 'sections', '', 'secondary') + '<button class="secondary" type="button" data-section="access">Accesos</button>' : ''}<input data-search type="search" placeholder="Buscar…" aria-label="Buscar alumno">${sectionFilterHtml()}</div>${teaches() ? '<p class="real-status">La inscripción vincula el curso al correo del alumno: verá el curso cuando entre con ese mismo correo (su cuenta de Microsoft o de Google). No se envían invitaciones. «Ver lo que ve» muestra el curso exactamente como lo ve ese alumno (solo lectura; la consulta queda registrada).</p>' : ''}${coTeachersPanel()}<div class="table-wrap"><table><thead><tr><th>Nombre</th>${teaches() ? `<th>Matrícula</th>${courseSections().length ? '<th>Sección</th>' : ''}<th>Correo</th><th>Estado</th><th>Acción</th>` : courseSections().length ? '<th>Sección</th>' : ''}</tr></thead><tbody>${(teaches() ? studentsInView() : current.members.filter(m => m.role === 'student')).map(m => `<tr data-search-row><td>${teaches() ? `<span class="person">${avatarHtml(m)}<span>${esc(m.name)}</span></span>` : esc(m.name)}</td>${!teaches() && courseSections().length ? `<td>${esc(sectionName(m.section) || '—')}</td>` : ''}${teaches() ? `<td>${esc(m.matricula)}</td>${courseSections().length ? `<td>${memberSectionSelect(m)}</td>` : ''}<td>${esc(m.email)}</td><td>${m.user_id ? 'Cuenta vinculada' : 'Pendiente de ingreso'}</td><td><div class="row-actions">${button('Ver lo que ve', 'view-member', m.id, 'text-btn')}${button('Retirar', 'remove-member', m.id, 'text-btn')}${m.photo ? `<button type="button" class="text-btn" data-member-photo-delete="${esc(m.id)}">Quitar foto</button>` : ''}</div></td>` : ''}</tr>`).join('') || '<tr><td>No hay alumnos inscritos.</td></tr>'}</tbody></table></div>`;
+  $('#main').innerHTML = `<h1>Listado de alumnos</h1><div class="toolbar">${teaches() ? button('Inscribir alumno', 'new-member') + button('Importar lista', 'bulk-members', '', 'secondary') + button(courseSections().length ? 'Secciones' : 'Crear secciones', 'sections', '', 'secondary') + '<button class="secondary" type="button" data-section="access">Accesos</button>' : ''}<input data-search type="search" placeholder="Buscar…" aria-label="Buscar alumno">${sectionFilterHtml()}</div>${teaches() ? '<p class="real-status">La inscripción vincula el curso al correo del alumno: verá el curso cuando entre con ese mismo correo (su cuenta de Microsoft o de Google). No se envían invitaciones. «Ver lo que ve» muestra el curso exactamente como lo ve ese alumno (solo lectura; la consulta queda registrada).</p>' : ''}${coTeachersPanel()}<div class="table-wrap"><table><thead><tr><th>Nombre</th>${teaches() ? `<th>Matrícula</th>${courseSections().length ? '<th>Sección</th>' : ''}<th>Correo</th><th>Estado</th><th>Acción</th>` : courseSections().length ? '<th>Sección</th>' : ''}</tr></thead><tbody>${(teaches() ? studentsInView() : current.members.filter(m => m.role === 'student')).map(m => `<tr data-search-row><td>${teaches() ? `<span class="person">${avatarHtml(m)}<span>${esc(m.name)}</span></span>` : esc(m.name)}</td>${!teaches() && courseSections().length ? `<td>${esc(sectionName(m.section) || '—')}</td>` : ''}${teaches() ? `<td>${esc(m.matricula)}</td>${courseSections().length ? `<td>${memberSectionSelect(m)}</td>` : ''}<td>${esc(m.email)}</td><td>${m.user_id ? 'Cuenta vinculada' : 'Pendiente de ingreso'}</td><td><div class="row-actions">${button('Editar', 'edit-member', m.id, 'text-btn')}${button('Ver lo que ve', 'view-member', m.id, 'text-btn')}${button('Retirar', 'remove-member', m.id, 'text-btn')}${m.photo ? `<button type="button" class="text-btn" data-member-photo-delete="${esc(m.id)}">Quitar foto</button>` : ''}</div></td>` : ''}</tr>`).join('') || '<tr><td>No hay alumnos inscritos.</td></tr>'}</tbody></table></div>`;
 }
 // ---- Accesos (12.20): inicios de sesión durante el curso e ingresos al curso de alumnos y docentes ----
 let accessData = null;
@@ -580,17 +580,61 @@ function groupModal(old) {
 }
 function courseModal(edit = false) {
   const c = edit ? current.course : null;
-  modal(edit ? 'Información del curso' : 'Crear curso', field('Nombre de la materia', 'name', c?.name || '', 'text', 'required maxlength="150"') + field('Grupo', 'group', c?.group_name || '', 'text', 'required maxlength="100"') + field('Periodo', 'period', c?.period || '', 'text', 'maxlength="60" placeholder="Por ejemplo: Otoño 2026"') + (edit ? '' : field('Secciones (opcional)', 'sections', '', 'text', 'maxlength="300" placeholder="Por ejemplo: 5AV, 5BV, 5CV"') + '<p class="muted">¿La misma materia con varios grupos? Crea un solo curso y escribe aquí sus secciones: el contenido es el mismo para todos y en cada pantalla filtras por sección.</p>') + textarea('Presentación', 'intro', c?.intro || '', false), async f => {
+  const theme = c?.theme || 0;
+  const swatches = `<fieldset class="theme-picker"><legend>Color de la portada</legend><div class="theme-swatches">${[0, 1, 2, 3, 4, 5, 6]
+    .map((n) => `<label class="theme-swatch" data-theme="${n || (c ? courseTheme(c.id) : 1)}" title="${n ? 'Color ' + n : 'Automático'}"><input type="radio" name="theme" value="${n}" ${theme === n ? 'checked' : ''}><span>${n ? '' : 'Auto'}</span></label>`)
+    .join('')}</div></fieldset>`;
+  const cover = `<fieldset class="cover-picker"><legend>Imagen de portada (opcional)</legend>
+    <div class="cover-preview ${c?.cover_updated ? 'has-cover' : ''}" data-theme="${c ? courseThemeOf(c) : 1}"${c ? coverStyle(c) : ''} id="coverPreview"><span>${esc(c?.name || 'Tu curso')}</span></div>
+    <div class="action-row"><label class="secondary file-button">${c?.cover_updated ? 'Cambiar imagen' : 'Elegir imagen'}<input type="file" accept="image/jpeg,image/png,image/webp" name="coverFile" hidden></label>
+    ${c?.cover_updated ? '<label class="check-label"><input type="checkbox" name="coverRemove"> Quitar la imagen</label>' : ''}</div>
+    <p class="muted">Una foto horizontal se ve mejor (por ejemplo, 1600 × 600). Se reduce en tu dispositivo antes de subirla.</p></fieldset>`;
+  modal(edit ? 'Editar curso' : 'Crear curso', field('Nombre de la materia', 'name', c?.name || '', 'text', 'required maxlength="150"') + field('Grupo', 'group', c?.group_name || '', 'text', 'required maxlength="100"') + field('Periodo', 'period', c?.period || '', 'text', 'maxlength="60" placeholder="Por ejemplo: Otoño 2026"') + (edit ? '' : field('Secciones (opcional)', 'sections', '', 'text', 'maxlength="300" placeholder="Por ejemplo: 5AV, 5BV, 5CV"') + '<p class="muted">¿La misma materia con varios grupos? Crea un solo curso y escribe aquí sus secciones: el contenido es el mismo para todos y en cada pantalla filtras por sección.</p>') + textarea('Presentación', 'intro', c?.intro || '', false) + swatches + cover, async f => {
     const result = await request(edit ? '/api/course' : '/api/courses', {
       course: c?.id,
       name: f.get('name'),
       group: f.get('group'),
       period: f.get('period'),
-      intro: f.get('intro')
+      intro: f.get('intro'),
+      theme: Number(f.get('theme') || 0)
     });
+    const courseId = edit ? c.id : result.id;
+    const file = f.get('coverFile');
+    if (file && file.size) await uploadCourseCover(courseId, file);
+    else if (f.get('coverRemove') === 'on') await request('/api/course/cover/delete', { course: courseId });
     const names = edit ? [] : String(f.get('sections') || '').split(',').map(x => x.trim()).filter(Boolean);
-    for (const name of names) await request('/api/sections', { course: result.id, name });
-    return names.length ? `Curso creado con ${names.length} ${names.length === 1 ? 'sección' : 'secciones'}.` : undefined;
+    for (const name of names) await request('/api/sections', { course: courseId, name });
+    return names.length ? `Curso creado con ${names.length} ${names.length === 1 ? 'sección' : 'secciones'}.` : edit ? 'Curso actualizado.' : undefined;
+  });
+}
+/** Color del curso: el que eligió el docente o uno automático por su id. */
+const courseThemeOf = (c) => c?.theme || courseTheme(c?.id);
+/** Estilo con la imagen de portada del curso (si tiene). */
+const coverStyle = (c) => (c?.cover_updated ? ` style="--cover:url('/api/course-cover/${encodeURIComponent(c.id)}?v=${encodeURIComponent(c.cover_updated)}')"` : '');
+/** Sube la portada ya reducida en el navegador (máx. 1.5 MB). */
+async function uploadCourseCover(courseId, file) {
+  if (!/^image\/(jpeg|png|webp)$/.test(file.type)) throw new Error('Usa una imagen JPG, PNG o WEBP.');
+  const blob = await compressImage(file);
+  if (blob.size > 1.5 * 1024 * 1024) throw new Error('La imagen sigue siendo muy grande (máximo 1.5 MB). Elige otra más ligera.');
+  const r = await fetch('/api/course/cover?course=' + encodeURIComponent(courseId), { method: 'POST', credentials: 'same-origin', headers: { 'X-Aula-Request': '1', 'content-type': blob.type || file.type }, body: blob });
+  const data = await r.json();
+  if (!r.ok) throw new Error(data.error || 'No se pudo subir la portada.');
+  return data;
+}
+/** Corregir los datos de un alumno inscrito. */
+function memberModal(m) {
+  if (!m) return;
+  const sections = courseSections();
+  modal('Editar alumno', field('Nombre completo', 'name', m.name, 'text', 'required maxlength="150"') + field('Matrícula', 'matricula', m.matricula || '', 'text', 'maxlength="50"') + field('Correo de su cuenta', 'email', m.email || '', 'email', 'required') + (sections.length ? `<label>Sección<select name="section"><option value="">Sin sección</option>${sections.map(x => `<option value="${esc(x.id)}" ${m.section === x.id ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select></label>` : '') + `<p class="muted">${m.user_id ? 'Ya entró con su cuenta. Si cambias el correo, tendrá que entrar con el correo nuevo; sus entregas y calificaciones se conservan.' : 'Todavía no entra: verá el curso cuando inicie sesión con este correo.'}</p>`, async f => {
+    await request('/api/member/update', {
+      course: current.course.id,
+      id: m.id,
+      name: f.get('name'),
+      matricula: f.get('matricula'),
+      email: f.get('email'),
+      ...(sections.length ? { section: f.get('section') || '' } : {})
+    });
+    return 'Datos del alumno actualizados.';
   });
 }
 /** Co-docentes del curso: los ve todo el curso; el propietario o la administración los agregan y retiran. */
@@ -707,6 +751,13 @@ document.addEventListener('click', async (e) => {
         break;
       case 'edit-course':
         courseModal(true);
+        break;
+      case 'edit-course-card':
+        await openCourse(id);
+        courseModal(true);
+        break;
+      case 'edit-member':
+        memberModal(current.members.find(x => x.id === id));
         break;
       case 'demo-course':
         // Materia completa con alumnos ficticios para conocer la plataforma (se crea en el servidor, src/server/demo.js).
@@ -1098,3 +1149,18 @@ if (document.modelContext?.registerTool) {
     }
   });
 }
+// Vista previa de la portada y del color en el editor del curso (12.25).
+document.addEventListener('change', (e) => {
+  const preview = document.getElementById('coverPreview');
+  if (!preview) return;
+  if (e.target.matches('#modal input[name="theme"]')) {
+    const n = Number(e.target.value);
+    preview.dataset.theme = n || courseTheme(current?.course?.id || '');
+  }
+  if (e.target.matches('#modal input[name="coverFile"]') && e.target.files?.[0]) {
+    const url = URL.createObjectURL(e.target.files[0]);
+    preview.classList.add('has-cover');
+    preview.style.setProperty('--cover', `url('${url}')`);
+  }
+  if (e.target.matches('#modal input[name="coverRemove"]')) preview.classList.toggle('has-cover', !e.target.checked);
+});

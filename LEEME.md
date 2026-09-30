@@ -1,9 +1,23 @@
-# Enlace · versión 12.24
+# Enlace · versión 12.25
 
 Plataforma académica independiente para docentes y alumnos de cualquier academia (nació en la Academia de Física de la BUAP), con interfaz inspirada en Brightspace.
 No es el código de D2L Brightspace ni una plataforma oficial de la BUAP.
 
 Esta versión se despliega en **tu propia cuenta de Cloudflare** (Workers + D1 + R2, plan gratuito) y ya no depende de ChatGPT Sites.
+
+## Novedades de la versión 12.25 (editar curso y portada, corregir datos de alumnos)
+
+**Editar el curso**: botón **«✎ Editar curso y portada»** en el inicio del curso (y en el menú ⋯ de su tarjeta en «Mis cursos»). Ahí cambias el nombre de la materia, el grupo, el periodo y la presentación (antes solo estaba escondido en Administración del curso → Información del curso).
+- **Color de la portada**: eliges uno de seis, o «Auto».
+- **Imagen de portada**: una foto propia (JPG, PNG o WEBP). Se reduce en tu dispositivo antes de subirla (máximo 1.5 MB) y la ven solo las personas del curso, en su tarjeta y en el inicio del curso. Se puede cambiar o quitar cuando quieras.
+- Al copiar un curso a otro periodo se copia el color, pero no la imagen.
+
+**Corregir los datos de un alumno**: en Alumnos, botón **«Editar»** en cada fila, para arreglar un nombre mal escrito, la matrícula, el correo o la sección.
+- Si corriges el correo, la inscripción se liga a la cuenta con el correo correcto: el alumno ya ve el curso cuando entra.
+- Sus entregas, calificaciones y asistencia se conservan.
+- No deja poner un correo que ya es de otra persona del curso.
+
+Requiere la migración **0030**: agrega al curso la portada y el color. No borra ni modifica datos.
 
 ## Novedades de la versión 12.24 (asistencia, importar lista y calificaciones, libro de calificaciones)
 

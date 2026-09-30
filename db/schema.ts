@@ -164,6 +164,10 @@ export const courses = sqliteTable(
     // Migración 0010: periodo (por ejemplo "Otoño 2026") y archivo (solo lectura).
     period: text('period').notNull().default(''),
     archivedAt: text('archived_at'),
+    // Migración 0030: portada propia (llave de R2 `portadas/<curso>/<uuid>.<ext>`, su fecha de cambio) y color (1 a 6; 0 = automático).
+    cover: text('cover'),
+    coverUpdated: text('cover_updated'),
+    theme: integer('theme').notNull().default(0),
   },
   (t) => [index('aula_courses_owner').on(t.owner)],
 );

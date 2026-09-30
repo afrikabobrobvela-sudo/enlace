@@ -89,3 +89,54 @@ export const photoRoutes = {
     return json({ ok: true });
   },
 };
+
+// ---- Portada del curso (12.25) ----------------------------------------------------------------------------
+// Quien enseña sube una imagen (el navegador la reduce); la ven todas las personas del curso.
+export const MAX_COVER_BYTES = 1.5 * 1024 * 1024;
+
+/** GET /api/course-cover/<curso> */
+export async function serveCourseCover({ db, env, user }, courseId) {
+  await access(db, user, courseId);
+  const course = await one(db, 'SELECT cover FROM aula_courses WHERE id=?', courseId);
+  if (!course?.cover) fail('Portada no disponible.', 404);
+  const object = await env.BUCKET.get(course.cover);
+  if (!object) fail('Portada no disponible.', 404);
+  return new Response(object.body, {
+    headers: {
+      ...SECURITY_HEADERS,
+      'Content-Type': TYPE_OF_EXTENSION[course.cover.split('.').pop()] || 'image/jpeg',
+      'Cache-Control': 'private, max-age=604800',
+    },
+  });
+}
+
+export const coverRoutes = {
+  // Sube o reemplaza la portada (?course=; cuerpo: la imagen).
+  'POST /api/course/cover': async ({ db, env, user, request, url }) => {
+    const course = url.searchParams.get('course');
+    requireTeacher(await access(db, user, course));
+    const length = Number(request.headers.get('content-length') || 0);
+    if (length > MAX_COVER_BYTES) fail('La imagen es demasiado grande (máximo 1.5 MB).', 413);
+    const bytes = new Uint8Array(await request.arrayBuffer());
+    if (!bytes.length) fail('No llegó la imagen.');
+    if (bytes.length > MAX_COVER_BYTES) fail('La imagen es demasiado grande (máximo 1.5 MB).', 413);
+    const type = photoType(bytes);
+    if (!type) fail('Usa una imagen JPG, PNG o WEBP.');
+    const key = `portadas/${course}/${crypto.randomUUID()}.${EXTENSIONS[type]}`;
+    await env.BUCKET.put(key, new Blob([bytes], { type }), { httpMetadata: { contentType: type } });
+    const previous = await one(db, 'SELECT cover FROM aula_courses WHERE id=?', course);
+    const updated = nowIso();
+    await run(db, 'UPDATE aula_courses SET cover=?, cover_updated=? WHERE id=?', key, updated, course);
+    if (previous?.cover) await env.BUCKET.delete(previous.cover);
+    return json({ cover_updated: updated }, 201);
+  },
+
+  'POST /api/course/cover/delete': async ({ db, env, user, request }) => {
+    const body = await readJson(request);
+    requireTeacher(await access(db, user, body.course));
+    const row = await one(db, 'SELECT cover FROM aula_courses WHERE id=?', body.course);
+    await run(db, 'UPDATE aula_courses SET cover=NULL, cover_updated=NULL WHERE id=?', body.course);
+    if (row?.cover) await env.BUCKET.delete(row.cover);
+    return json({ ok: true });
+  },
+};
