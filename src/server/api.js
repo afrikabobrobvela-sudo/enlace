@@ -38,7 +38,7 @@ import {
   sameStructure,
   validEvents,
 } from './quizzes.js';
-import { sebAllows } from './seb.js';
+import { sebAllows, sebVerified } from './seb.js';
 import { bankImageVisible, bankRoutes } from './bank.js';
 import { coverRoutes, photoRoutes, serveCourseCover, servePhoto } from './photos.js';
 import { digestRoutes } from './digest.js';
@@ -1653,6 +1653,8 @@ const routes = {
     const body = await readJson(request);
     const { quiz } = await attemptContext(db, user, body);
     if (!lockEnabled(quiz)) return json({ ok: true });
+    // Dentro de Safe Exam Browser (verificado) no se puede salir: tocar su barra no cuenta como salida (12.31).
+    if (await sebVerified(quiz, request)) return json({ ok: true });
     const start = await openStart(db, quiz, user.id);
     if (!start || start.attempt !== Number(body.attempt)) fail('Este intento ya no está en curso.', 409);
     assertDevice(quiz, start, user);
@@ -1673,6 +1675,8 @@ const routes = {
     const body = await readJson(request);
     const { quiz } = await attemptContext(db, user, body);
     if (!lockEnabled(quiz)) return json({ locked: false });
+    // Dentro de Safe Exam Browser (verificado) no se puede salir: tocar su barra no cuenta como salida (12.31).
+    if (await sebVerified(quiz, request)) return json({ locked: false });
     const start = await openStart(db, quiz, user.id);
     if (!start || start.attempt !== Number(body.attempt)) fail('Este intento ya no está en curso.', 409);
     assertDevice(quiz, start, user);
@@ -1724,7 +1728,7 @@ const routes = {
     const course = url.searchParams.get('course');
     requireTeacher(await access(db, user, course));
     const quiz = await contentRecord(db, url.searchParams.get('quiz'), course, 'quiz');
-    const [running, blocked] = await Promise.all([
+    const [running, blocked, submitted, students] = await Promise.all([
       all(
         db,
         `SELECT s.*, coalesce(m.name, u.name) AS name, m.id AS member, m.section, d.start_at AS sec_start, d.end_at AS sec_end,
@@ -1747,8 +1751,42 @@ const routes = {
         quiz.id,
         MAX_PASSWORD_FAILURES,
       ),
+      // Resumen (12.31): quién ya terminó (con su calificación) y quién no ha empezado.
+      all(
+        db,
+        `SELECT a.user_id, a.attempt, a.score, a.correct, a.total, a.created, a.details, coalesce(m.name, a.name) AS name, m.section, m.matricula
+         FROM aula_attempts a LEFT JOIN aula_members m ON m.course=?1 AND (m.user_id=a.user_id OR 'demo:' || m.id=a.user_id)
+         WHERE a.quiz=?2 AND a.course=?1 ORDER BY a.created`,
+        course,
+        quiz.id,
+      ),
+      all(
+        db,
+        `SELECT m.id, m.name, m.section, m.matricula, coalesce(m.user_id, 'demo:' || m.id) AS who,
+                EXISTS (SELECT 1 FROM aula_quiz_access qa WHERE qa.quiz=?2 AND qa.member=m.id) AS granted
+         FROM aula_members m WHERE m.course=?1 AND m.role='student' ORDER BY m.name`,
+        course,
+        quiz.id,
+      ),
     ]);
+    const byUser = new Map();
+    for (const a of submitted) {
+      const pending = (parseJson(a.details, []) || []).filter((d) => d?.manual && !d.reviewed).length;
+      const row = byUser.get(a.user_id) || { user: a.user_id, name: a.name, section: a.section || '', matricula: a.matricula || '', attempts: 0, best: null, last: null, pending: 0 };
+      row.attempts++;
+      row.pending += pending;
+      if (!row.best || a.score > row.best.score) row.best = { score: a.score, correct: a.correct, total: a.total, attempt: a.attempt };
+      row.last = a.created;
+      byUser.set(a.user_id, row);
+    }
+    const sections = Array.isArray(quiz.data.sections) ? quiz.data.sections : [];
+    const inProgress = new Set(running.map((s) => s.user_id));
+    const notStarted = students
+      .filter((m) => (!sections.length || sections.includes(m.section)) && (!quiz.data.specialOnly || m.granted) && !byUser.has(m.who) && !inProgress.has(m.who))
+      .map((m) => ({ name: m.name, section: m.section || '', matricula: m.matricula || '' }));
     return json({
+      finished: [...byUser.values()].map((r) => ({ ...r, score: r.best.score, correct: r.best.correct, total: r.best.total })),
+      notStarted,
       running: running.map((s) => ({
         user: s.user_id,
         name: s.name,

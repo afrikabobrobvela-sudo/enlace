@@ -80,6 +80,11 @@ export async function sebAllows(quiz, request) {
   return false;
 }
 
+/** ¿La evaluación exige SEB y la solicitud viene de él con su configuración? (entonces no hay «salidas» que contar) */
+export async function sebVerified(quiz, request) {
+  return Boolean(quiz.data.settings?.seb?.required) && (await sebAllows(quiz, request));
+}
+
 /**
  * GET /seb/<evaluación>.seb: la configuración para abrir la evaluación en SEB. No pide sesión (SEB la descarga con su
  * propio navegador) y solo contiene la dirección de la evaluación; existe solo si la evaluación exige SEB.

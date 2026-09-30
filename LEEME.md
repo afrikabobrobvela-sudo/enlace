@@ -5,6 +5,17 @@ No es el código de D2L Brightspace ni una plataforma oficial de la BUAP.
 
 Esta versión se despliega en **tu propia cuenta de Cloudflare** (Workers + D1 + R2, plan gratuito) y ya no depende de ChatGPT Sites.
 
+## Novedades de la versión 12.31 (sin bloqueos falsos dentro de Safe Exam Browser y resumen de la evaluación)
+
+**Safe Exam Browser**: dentro de SEB, tocar su barra, sus avisos o cualquier parte de su ventana hacía que la página «perdiera el foco», y eso se contaba como salida y bloqueaba el examen. Ahora, cuando el alumno presenta dentro de Safe Exam Browser (verificado por Enlace), **no se cuentan salidas ni se bloquea**: SEB ya impide salir del examen. Tampoco se pide pantalla completa (SEB ya la ocupa). Fuera de SEB todo sigue igual.
+
+**Resumen en la evaluación** (para ti, en toda evaluación, no solo en modo examen): arriba de las preguntas aparece «Seguimiento en vivo» (o «Resumen de la evaluación» cuando ya cerró), que se actualiza solo cada 10 segundos:
+- cuántos **terminaron**, cuántos están **contestando**, **bloqueados** y los que **no han empezado**, el **promedio** y cuántos **aprobaron**;
+- la lista de **quienes ya terminaron con su calificación** (la mejor si tuvo varios intentos), aciertos, intentos y hora de envío;
+- los nombres de quienes no han empezado.
+
+No requiere migración.
+
 ## Novedades de la versión 12.30 (salidas cortas, duplicar evaluaciones, Safe Exam Browser en el teléfono)
 
 **Salidas cortas repetidas**: con «Bloquear si sale de la página», una salida más corta que la tolerancia (por ejemplo, ver otra pestaña 3 segundos) solo se registraba, y un alumno podía hacerlo muchas veces. Ahora **a la 3.ª salida el examen se bloquea aunque todas hayan sido cortas** (después de que le des el código, la cuenta vuelve a empezar). Consejo: para exámenes importantes elige la tolerancia «Ninguna».

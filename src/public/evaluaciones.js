@@ -676,7 +676,7 @@ function renderQuiz() {
         ? `<div class="warning-note void-note"><p><b>${emptyAttempts.length} ${emptyAttempts.length === 1 ? 'intento se cerró' : 'intentos se cerraron'} sin ninguna respuesta</b> (de ${new Set(emptyAttempts.map((a) => a.author)).size} ${new Set(emptyAttempts.map((a) => a.author)).size === 1 ? 'alumno' : 'alumnos'}): se acabó el tiempo antes de que contestaran. Si fue por la configuración, devuélvelos para que puedan volver a presentar.</p><button type="button" class="secondary" data-void-empty="${esc(q.id)}">Devolver intentos sin respuestas</button></div>`
         : ''
     }
-      ${exam ? `<section class="exam-monitor" id="examMonitor"><p class="muted">Cargando examen en curso…</p></section>` : ''}${drawNote}${questions}
+      <section class="exam-monitor" id="examMonitor"><p class="muted">Cargando quién está contestando y quién ya terminó…</p></section>${drawNote}${questions}
       <h2>Resultados</h2><div class="table-wrap"><table><thead><tr><th>Alumno</th><th>Mejor calificación</th><th>Intentos</th><th>Último envío</th>${exam ? '<th>Integridad</th>' : ''}</tr></thead><tbody>${
         rows
           .map(
@@ -686,7 +686,8 @@ function renderQuiz() {
           )
           .join('') || `<tr><td colspan="${exam ? 5 : 4}">No hay intentos registrados.</td></tr>`
       }</tbody></table></div>`;
-    if (exam) {
+    {
+      // 12.31: el seguimiento (quién contesta, quién terminó y con qué calificación) va en toda evaluación.
       loadExamMonitor(q.id);
       // El monitor se actualiza solo cada 10 s mientras está en pantalla (así aparecen los bloqueados y su código).
       clearInterval(examMonitorTimer);
@@ -1162,10 +1163,40 @@ async function loadExamMonitor(quizId) {
   const blocked = data.blocked
     .map((b) => `<li><strong>${esc(b.name)}</strong> <span class="muted">se equivocó 10 veces de contraseña</span> <button type="button" class="table-link" data-exam-unlock="${esc(b.user)}">Desbloquear</button></li>`)
     .join('');
-  box.innerHTML = `<div class="exam-monitor-head"><h2>Examen en curso</h2><button type="button" class="secondary" data-exam-refresh>Actualizar</button></div>
+  // Resumen (12.31): quién terminó y con qué calificación, quién sigue y quién no ha empezado.
+  const passing = gradingSettings().final?.passing ?? 6;
+  const finished = (data.finished || []).filter(inView).sort((a, b) => (a.last < b.last ? 1 : -1));
+  const notStarted = (data.notStarted || []).filter(inView);
+  const scores = finished.map((r) => r.score);
+  const average = scores.length ? scores.reduce((n, x) => n + x, 0) / scores.length : null;
+  const passed = scores.filter((x) => x >= passing).length;
+  const q = find(quizId);
+  const closedNow = q?.data.settings?.closesAt && Date.parse(q.data.settings.closesAt) < Date.now();
+  const finishedRows = finished
+    .map(
+      (r) => `<tr><td>${esc(r.name)}${r.matricula ? `<div class="table-subtext">${esc(r.matricula)}</div>` : ''}</td><td class="${r.score >= passing ? 'grade-pass' : 'grade-low'}"><b>${r.score.toFixed(2)}</b> / 10${
+        r.pending ? `<div class="table-subtext">${r.pending} por calificar</div>` : ''
+      }</td><td>${r.correct} de ${r.total}</td><td>${r.attempts}</td><td>${esc(new Date(r.last).toLocaleTimeString('es-MX', { timeStyle: 'short' }))}</td></tr>`,
+    )
+    .join('');
+  box.innerHTML = `<div class="exam-monitor-head"><h2>${closedNow ? 'Resumen de la evaluación' : 'Seguimiento en vivo'}</h2><button type="button" class="secondary" data-exam-refresh>Actualizar</button></div>
+    <div class="monitor-stats">
+      <div><b>${finished.length}</b><span>terminaron</span></div>
+      <div><b>${data.running.filter((r) => !r.locked).length}</b><span>contestando</span></div>
+      <div><b>${data.running.filter((r) => r.locked).length + data.blocked.length}</b><span>bloqueados</span></div>
+      <div><b>${notStarted.length}</b><span>no han empezado</span></div>
+      <div><b>${average === null ? '—' : average.toFixed(2)}</b><span>promedio</span></div>
+      <div><b>${scores.length ? `${passed} de ${scores.length}` : '—'}</b><span>aprobados (≥ ${passing})</span></div>
+    </div>
     ${locked ? `<h3>Bloqueados por salir de la página</h3><p class="muted">Dile a cada alumno su código (en persona) o pulsa «Permitir continuar».</p><ul class="exam-locked-list">${locked}</ul>` : ''}
-    ${running ? `<ul>${running}</ul>` : locked ? '' : '<p class="muted">Nadie está contestando en este momento.</p>'}
-    ${blocked ? `<h3>Bloqueados</h3><ul>${blocked}</ul>` : ''}`;
+    ${running ? `<h3>Contestando ahora</h3><ul>${running}</ul>` : ''}
+    ${blocked ? `<h3>Bloqueados</h3><ul>${blocked}</ul>` : ''}
+    ${
+      finished.length
+        ? `<h3>Ya terminaron (${finished.length})</h3><div class="table-wrap"><table class="keep-table monitor-finished"><thead><tr><th>Alumno</th><th>Calificación</th><th>Aciertos</th><th>Intentos</th><th>Envió</th></tr></thead><tbody>${finishedRows}</tbody></table></div><p class="muted">Con varios intentos se muestra el mejor. El detalle de cada intento y la integridad están abajo, en «Resultados».</p>`
+        : '<p class="muted">Todavía nadie ha terminado.</p>'
+    }
+    ${notStarted.length ? `<details class="monitor-pending"><summary>No han empezado (${notStarted.length})</summary><p>${notStarted.map((m) => esc(m.name)).join(' · ')}</p></details>` : ''}`;
 }
 
 document.addEventListener('click', async (e) => {
@@ -1244,6 +1275,7 @@ function examIntroHtml(exam, used) {
 }
 
 function enterFullscreen() {
+  if (isSafeExamBrowser()) return; // SEB ya ocupa toda la pantalla (12.31)
   const root = document.documentElement;
   const go = root.requestFullscreen || root.webkitRequestFullscreen;
   try {
@@ -1367,6 +1399,9 @@ function examPrint() {
 
 /** Salir de la página (otra pestaña, otra aplicación, bloquear el teléfono): se registra al volver, con la duración. */
 function examAwayCheck() {
+  // Dentro de Safe Exam Browser no se puede salir del examen; al tocar su barra o sus avisos la página pierde el foco
+  // y eso se confundía con una salida que bloqueaba el examen (12.31).
+  if (isSafeExamBrowser()) return;
   if (!examState || examState.ignoreBlur) return;
   const away = document.visibilityState === 'hidden' || !document.hasFocus();
   if (away && !examState.awaySince) {
@@ -1477,6 +1512,7 @@ document.addEventListener('submit', async (e) => {
 });
 
 function examFullscreenCheck() {
+  if (isSafeExamBrowser()) return;
   if (!examState) return;
   const bar = document.getElementById('examFullscreenBar');
   if (isFullscreen()) return bar?.remove();

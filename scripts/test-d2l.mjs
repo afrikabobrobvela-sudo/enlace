@@ -264,10 +264,42 @@ const hashWith = async (url, key) => [...new Uint8Array(await crypto.subtle.dige
 await call('raul', '/api/attempt/start', { course: c, quiz: facil.id }, 403);
 await call('raul', '/api/attempt/start', { course: c, quiz: facil.id }, 200, { 'X-SafeExamBrowser-ConfigKeyHash': await hashWith('https://t.local/api/attempt/start', configKey) });
 await call('raul', '/api/attempt', { course: c, quiz: facil.id, answers: { 0: 0 } }, 201, { 'X-SafeExamBrowser-ConfigKeyHash': await hashWith('https://t.local/api/attempt', configKey) });
+// 12.31: dentro de SEB (verificado) tocar su barra o sus avisos no cuenta como salida ni bloquea.
+const sebExam = await saveQuiz({ title: 'SEB con bloqueo', questions: [mixed[1]], settings: { seb: { required: true }, exam: { enabled: true, lockOnLeave: true, lockGrace: 0 } } });
+const sebHeaders = async (path) => ({ 'X-SafeExamBrowser-ConfigKeyHash': await hashWith('https://t.local' + path, configKey) });
+const sebConfigKey = await (async () => {
+  const x = await (await worker.fetch(new Request(`https://t.local/seb/${sebExam.id}.seb`), env)).text();
+  const d2 = {};
+  for (const [, k, v] of x.matchAll(/<key>([^<]+)<\/key>\n\t(<true\/>|<false\/>|<integer>-?\d+<\/integer>|<string>[^<]*<\/string>)/g)) d2[k] = v === '<true/>' ? true : v === '<false/>' ? false : v.startsWith('<integer>') ? Number(v.slice(9, -10)) : v.slice(8, -9).replace(/&amp;/g, '&');
+  delete d2.originatorVersion;
+  const ks = Object.keys(d2).sort((a2, b2) => a2.toLowerCase().localeCompare(b2.toLowerCase(), 'en'));
+  return [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`{${ks.map((k) => `${JSON.stringify(k)}:${JSON.stringify(d2[k])}`).join(',')}}`)))].map((b) => b.toString(16).padStart(2, '0')).join('');
+})();
+const inSeb = async (path) => ({ 'X-SafeExamBrowser-ConfigKeyHash': await hashWith('https://t.local' + path, sebConfigKey) });
+const sebStart = await call('luis', '/api/attempt/start', { course: c, quiz: sebExam.id }, 200, await inSeb('/api/attempt/start'));
+for (let k = 0; k < 4; k++) {
+  await call('luis', '/api/attempt/away', { course: c, quiz: sebExam.id, attempt: sebStart.attempt }, 200, await inSeb('/api/attempt/away'));
+  const back = await call('luis', '/api/attempt/back', { course: c, quiz: sebExam.id, attempt: sebStart.attempt, seconds: 30 }, 200, await inSeb('/api/attempt/back'));
+  assert.equal(back.locked, false, 'Dentro de SEB no se bloquea');
+}
+await call('luis', '/api/attempt', { course: c, quiz: sebExam.id, answers: { 0: 0 } }, 201, await inSeb('/api/attempt'));
+checks++;
+void sebHeaders;
+
 // Sin exigir SEB, o evaluación inexistente: no hay configuración.
 assert.equal((await worker.fetch(new Request(`https://t.local/seb/${tipos.id}.seb`), env)).status, 404);
 assert.equal((await worker.fetch(new Request('https://t.local/seb/no-existe.seb'), env)).status, 404);
 checks += 4;
+
+// ---- 12.31: resumen del monitor (quién terminó, con qué calificación, y quién no ha empezado) ------------
+const resumen = await call('docente', `/api/exam/monitor?course=${c}&quiz=${parcial.id}`);
+const anaRow = resumen.finished.find((r) => r.name === 'ana');
+assert.deepEqual([anaRow.correct, anaRow.total, anaRow.attempts, anaRow.score.toFixed(2)], [59, 60, 1, '9.83'], 'Ana: 59 de 60 tras recalificar');
+const luisRow = resumen.finished.find((r) => r.name === 'luis');
+assert.deepEqual([luisRow.attempts, luisRow.score >= 2], [2, true], 'Con dos intentos, el mejor');
+assert.deepEqual(resumen.notStarted.map((m) => m.name).sort(), ['eva', 'raul'], 'Eva y Raúl no han empezado');
+await call('ana', `/api/exam/monitor?course=${c}&quiz=${parcial.id}`, undefined, 403);
+checks += 2;
 
 // ---- Vista previa del docente ----------------------------------------------------------------------------
 await call('ana', '/api/quiz/preview', { course: c, quiz: parcial.id }, 403);
