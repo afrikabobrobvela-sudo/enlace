@@ -5,6 +5,16 @@ No es el código de D2L Brightspace ni una plataforma oficial de la BUAP.
 
 Esta versión se despliega en **tu propia cuenta de Cloudflare** (Workers + D1 + R2, plan gratuito) y ya no depende de ChatGPT Sites.
 
+## Novedades de la versión 12.30 (salidas cortas, duplicar evaluaciones, Safe Exam Browser en el teléfono)
+
+**Salidas cortas repetidas**: con «Bloquear si sale de la página», una salida más corta que la tolerancia (por ejemplo, ver otra pestaña 3 segundos) solo se registraba, y un alumno podía hacerlo muchas veces. Ahora **a la 3.ª salida el examen se bloquea aunque todas hayan sido cortas** (después de que le des el código, la cuenta vuelve a empezar). Consejo: para exámenes importantes elige la tolerancia «Ninguna».
+
+**Duplicar una evaluación**: botón **«Duplicar»** en la página de la evaluación. Copia preguntas, preguntas al azar y toda la configuración. Puedes crearla en este curso o en otro donde también enseñes (las imágenes se copian; las secciones, la categoría de calificación y las condiciones no, porque son del curso de origen). La copia queda **oculta y sin intentos**: revisa sus fechas y publícala.
+
+**Safe Exam Browser en el teléfono**: si Enlace pide Safe Exam Browser a mitad del examen (por ejemplo, porque el alumno empezó en su celular), ahora aparece el aviso completo con el botón y dónde descargarlo, no solo un mensaje. En **Android** explica que Safe Exam Browser no existe ahí y que debe presentar desde una computadora, un iPad o un iPhone. En iPhone lleva a la App Store.
+
+No requiere migración.
+
 ## Novedades de la versión 12.29 (corrección urgente: «ya usaste tus intentos»)
 
 **El problema**: con «El tiempo empieza a la hora de inicio, igual para todos», el límite es el mismo para todos: *hora de inicio + tiempo límite* (por ejemplo, abre 7:00 con 30 minutos → todos terminan a las 7:30), aunque la evaluación cierre más tarde. Si un alumno tocaba «Comenzar examen» después de esa hora, Enlace abría un intento ya vencido, lo cerraba en 0 y, en el mismo toque, hacía lo mismo con los demás intentos. Por eso decía «Ya usaste tus 2 intentos» sin haber contestado nada.

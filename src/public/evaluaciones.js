@@ -438,6 +438,40 @@ const isSafeExamBrowser = () => /\bSEB\//.test(navigator.userAgent || '');
 const sebLink = (quizId) => `${location.protocol === 'https:' ? 'sebs' : 'seb'}://${location.host}/seb/${encodeURIComponent(quizId)}.seb`;
 const SEB_DOWNLOAD = 'https://safeexambrowser.org/download_en.html';
 
+const isAndroid = () => /Android/i.test(navigator.userAgent || '');
+const isIOS = () => /iPhone|iPad|iPod/i.test(navigator.userAgent || '') || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
+/** Aviso para el alumno fuera de SEB (12.30): el botón, dónde descargarlo y qué hacer en un teléfono Android. */
+function sebRequiredHtml(quizId) {
+  if (isAndroid()) {
+    return `<div class="seb-notice warning-note" id="sebRequired"><p>Esta evaluación solo se puede presentar en <b>Safe Exam Browser</b>, que <b>no existe para Android</b>.</p>
+      <p>Preséntala desde una <b>computadora</b> (Windows o Mac) o un <b>iPad o iPhone</b> con Safe Exam Browser instalado: entra a Enlace ahí, abre esta evaluación y toca «Abrir en Safe Exam Browser».</p>
+      <p class="muted">Si no tienes ninguno de esos equipos, avísale a tu docente. <a href="${SEB_DOWNLOAD}" target="_blank" rel="noopener">Más información de Safe Exam Browser</a></p></div>`;
+  }
+  return `<div class="seb-notice warning-note" id="sebRequired"><p>Esta evaluación solo se puede presentar en <b>Safe Exam Browser</b>.</p>
+    <p><a class="primary button-link" href="${esc(sebLink(quizId))}">Abrir en Safe Exam Browser</a></p>
+    <p class="muted">¿No lo tienes? ${
+      isIOS()
+        ? '<a href="https://apps.apple.com/app/safeexambrowser/id1155002964" target="_blank" rel="noopener">Instálalo gratis desde la App Store</a>'
+        : `<a href="${SEB_DOWNLOAD}" target="_blank" rel="noopener">Descárgalo gratis</a> (Windows, Mac, iPad o iPhone)`
+    }, y vuelve a tocar el botón. Dentro de Safe Exam Browser entra a Enlace con tu cuenta.</p></div>`;
+}
+
+/** El servidor pidió Safe Exam Browser (al empezar, guardar o enviar): se muestra el aviso con el botón. */
+function showSebRequired(quizId) {
+  clearInterval(quizTimer);
+  stopExam();
+  attemptSave = null;
+  const box = document.getElementById('quizAttemptBox') || document.getElementById('main');
+  if (!box) return;
+  document.querySelector('#quizAttempt')?.remove();
+  document.querySelector('.exam-intro')?.remove();
+  document.querySelector('[data-quiz-start]')?.remove();
+  document.querySelector('[data-quiz-code]')?.remove();
+  if (!document.getElementById('sebRequired')) box.insertAdjacentHTML('afterbegin', sebRequiredHtml(quizId));
+  document.getElementById('sebRequired')?.scrollIntoView?.({ block: 'center' });
+}
+
 function sebSettingsHtml(seb) {
   return `<fieldset class="quiz-settings"><legend>Safe Exam Browser</legend>
     <label class="check-label"><input type="checkbox" name="seb" ${seb?.required ? 'checked' : ''}> Exigir Safe Exam Browser: solo se puede empezar, guardar y enviar desde él</label>
@@ -635,7 +669,7 @@ function renderQuiz() {
     const sebInfo = settings.seb?.required
       ? `<p class="real-status">Exige <b>Safe Exam Browser</b>: tus alumnos ven el botón «Abrir en Safe Exam Browser». <a href="${esc(sebLink(q.id))}">Probarlo aquí</a> · <a href="/seb/${esc(q.id)}.seb" download>Descargar la configuración (.seb)</a></p>`
       : '';
-    $('#main').innerHTML = `${head}<p class="quiz-meta">${total.exact ? '' : 'Aprox. '}${total.total} ${total.total === 1 ? 'punto' : 'puntos'} por alumno.</p>${sebInfo}<div class="toolbar">${button('Editar evaluación', 'edit-quiz', q.id, 'secondary')}<button class="secondary" type="button" data-quiz-preview="${esc(q.id)}">Vista previa</button>${specialAccessButton('quiz', q.id)}${
+    $('#main').innerHTML = `${head}<p class="quiz-meta">${total.exact ? '' : 'Aprox. '}${total.total} ${total.total === 1 ? 'punto' : 'puntos'} por alumno.</p>${sebInfo}<div class="toolbar">${button('Editar evaluación', 'edit-quiz', q.id, 'secondary')}<button class="secondary" type="button" data-quiz-preview="${esc(q.id)}">Vista previa</button><button class="secondary" type="button" data-quiz-duplicate="${esc(q.id)}">Duplicar</button>${specialAccessButton('quiz', q.id)}${
       essays ? `<button class="${toReview ? 'primary' : 'secondary'}" type="button" data-essay-review="${esc(q.id)}">Revisar respuestas escritas${toReview ? ` (${toReview} por calificar)` : ''}</button>` : ''
     }${attempts.length ? `<button class="secondary" type="button" data-quiz-stats="${esc(q.id)}">Estadísticas</button><button class="secondary" type="button" data-quiz-export="${esc(q.id)}">Exportar a Excel</button>` : ''}<button class="secondary" data-bank-save="${esc(q.id)}">Guardar en el banco</button>${sectionFilterHtml()}</div>${sectionDatesSummary(q.id)}${
       emptyAttempts.length
@@ -691,11 +725,7 @@ function renderQuiz() {
   // 12.29: con el tiempo fijo, después de «inicio + tiempo límite» ya no hay tiempo para nadie.
   const fixedEnd = settings.timerMode === 'fixed' && settings.opensAt && settings.timeLimit ? Date.parse(settings.opensAt) + settings.timeLimit * 60_000 : null;
   const timeOver = fixedEnd && fixedEnd < Date.now() && !closed;
-  const sebNotice = settings.needsSeb && left > 0 && !isSafeExamBrowser()
-    ? `<div class="seb-notice warning-note"><p>Esta evaluación solo se puede presentar en <b>Safe Exam Browser</b>.</p>
-        <p><a class="primary button-link" href="${esc(sebLink(q.id))}">Abrir en Safe Exam Browser</a></p>
-        <p class="muted">¿No lo tienes? <a href="${SEB_DOWNLOAD}" target="_blank" rel="noopener">Descárgalo gratis</a> (Windows, Mac o iPad), instálalo y vuelve a tocar el botón. Dentro de Safe Exam Browser entra a Enlace con tu cuenta.</p></div>`
-    : '';
+  const sebNotice = settings.needsSeb && left > 0 && !isSafeExamBrowser() ? sebRequiredHtml(q.id) : '';
   $('#main').innerHTML = `${head}${lastHtml}${history}${sebNotice}${
     sebNotice
       ? '' // fuera de Safe Exam Browser no hay botón para empezar (el servidor tampoco lo permitiría)
@@ -797,6 +827,7 @@ async function saveAttemptProgress() {
   } catch (error) {
     if (attemptSave !== state) return;
     if (error.data?.closed) return attemptClosed(error.message);
+    if (error.data?.needsSeb) return showSebRequired(state.quizId);
     attemptSaveStatus('Sin conexión: se volverá a intentar', 'is-error');
     state.timer = setTimeout(() => saveAttemptProgress(), 10_000);
   }
@@ -815,7 +846,13 @@ async function attemptClosed(message) {
 }
 
 async function startQuizAttempt(quizId, extra = {}) {
-  const data = await request('/api/attempt/start', { course: current.course.id, quiz: quizId, ...extra });
+  let data;
+  try {
+    data = await request('/api/attempt/start', { course: current.course.id, quiz: quizId, ...extra });
+  } catch (error) {
+    if (error.data?.needsSeb) showSebRequired(quizId);
+    throw error;
+  }
   const offset = data.serverNow - Date.now();
   const exam = data.exam;
   // Preguntas por página (12.27); en el examen «una pregunta a la vez» manda.
@@ -849,6 +886,7 @@ async function startQuizAttempt(quizId, extra = {}) {
         attemptClosed(error.message);
         return error.message;
       }
+      if (error.data?.needsSeb) showSebRequired(quizId);
       throw error;
     }
     releaseActiveExam();
@@ -921,6 +959,34 @@ document.addEventListener('click', async (e) => {
   } catch (error) {
     toast(error.message);
   }
+});
+
+// ---- Duplicar una evaluación (12.30) ---------------------------------------------------------------------
+
+function duplicateQuizModal(q) {
+  const targets = (courses || []).filter((c) => c.canTeach && !c.archived_at);
+  modal(
+    'Duplicar evaluación',
+    `${field('Título de la copia', 'title', `Copia de ${q.data.title}`, 'text', 'required maxlength="200"')}
+      <label>Curso donde se crea<select name="target">${targets
+        .map((c) => `<option value="${esc(c.id)}" ${c.id === current.course.id ? 'selected' : ''}>${esc(c.name)}${c.group_name ? ` · ${esc(c.group_name)}` : ''}${c.id === current.course.id ? ' (este curso)' : ''}</option>`)
+        .join('')}</select></label>
+      <p class="muted">Se copian las preguntas, las preguntas al azar y toda la configuración (tiempo, intentos, modo examen, código, Safe Exam Browser). La copia queda <b>oculta</b> y sin intentos: revisa las fechas y publícala cuando quieras. En otro curso no se copian las secciones, la categoría de calificación ni las condiciones (son de este curso).</p>`,
+    async (f) => {
+      const r = await request('/api/quiz/duplicate', { course: current.course.id, quiz: q.id, target: f.get('target'), title: f.get('title') });
+      if (r.course === current.course.id) {
+        detail = r.id;
+        section = 'quiz';
+      }
+      return r.course === current.course.id ? 'Evaluación duplicada (oculta). Revisa sus fechas antes de publicarla.' : 'Evaluación duplicada en el otro curso (oculta).';
+    },
+    'Duplicar',
+  );
+}
+
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('[data-quiz-duplicate]');
+  if (b) duplicateQuizModal(find(b.dataset.quizDuplicate));
 });
 
 // ---- Vista previa del docente (12.27) -----------------------------------------------------------------
@@ -1166,7 +1232,7 @@ function examIntroHtml(exam, used) {
     <li>No se puede copiar, pegar ni usar el menú del botón derecho.</li>
     <li>No se permiten capturas de pantalla: cada pregunta lleva tu nombre como marca de agua, en computadora la tecla de captura tapa el examen y queda registrada, y el examen no se puede imprimir.</li>
     ${exam.oneByOne ? `<li>Verás una pregunta a la vez${exam.noBack ? ' y <strong>no podrás regresar</strong> a las anteriores' : ''}.</li>` : ''}
-    ${exam.lockOnLeave ? `<li><strong>Si sales de la página${exam.lockGrace ? ` más de ${exam.lockGrace} segundos` : ''} (otra aplicación, WhatsApp, bloquear el teléfono), el examen se bloquea</strong> y necesitarás un código de tu docente para continuar. El tiempo sigue corriendo. Silencia las notificaciones antes de empezar.</li>` : ''}
+    ${exam.lockOnLeave ? `<li><strong>Si sales de la página${exam.lockGrace ? ` más de ${exam.lockGrace} segundos` : ''} (otra aplicación, WhatsApp, bloquear el teléfono), el examen se bloquea</strong> y necesitarás un código de tu docente para continuar. <strong>A la 3.ª salida se bloquea aunque sean salidas cortas.</strong> El tiempo sigue corriendo. Silencia las notificaciones antes de empezar.</li>` : ''}
     ${exam.checksLocation ? '<li>Se pedirá tu ubicación para confirmar que estás en el salón (solo se guarda la distancia).</li>' : ''}
     <li>Tus respuestas se guardan mientras contestas: si se cierra la página, vuelve a entrar y continúa donde ibas.</li></ul>
     <form id="examStart" class="real-form">
@@ -1443,6 +1509,7 @@ async function saveExamProgress() {
     if (error.status === 423) showExamLock();
     if (error.data?.otherDevice) showOtherDevice();
     if (error.data?.closed) attemptClosed(error.message);
+    else if (error.data?.needsSeb) showSebRequired(state.quizId);
     else attemptSaveStatus('Sin conexión: se volverá a intentar', 'is-error');
     throw error;
   }

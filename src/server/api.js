@@ -271,6 +271,20 @@ async function lockAttempt(db, start, seconds, reason = 'salida') {
  * ¿Debe quedar bloqueado? Si salió (away_since) y ya pasó la tolerancia, se bloquea. Sirve al volver a la página y
  * al retomar tras cerrar el navegador. Devuelve true si el intento está bloqueado.
  */
+export const SHORT_EXITS_LOCK = 3;
+
+/** Salidas de la página registradas desde el último desbloqueo (o desde el inicio). */
+function exitsSinceUnlock(start) {
+  let events = [];
+  try {
+    events = JSON.parse(start.events || '[]');
+  } catch {
+    events = [];
+  }
+  const last = events.map((e) => e.kind).lastIndexOf('unlocked');
+  return events.slice(last + 1).filter((e) => e.kind === 'left').length;
+}
+
 async function applyLock(db, quiz, start, seconds = null) {
   if (!lockEnabled(quiz) || !start) return false;
   if (start.locked_at) return true;
@@ -1553,6 +1567,52 @@ const routes = {
     return json({ voided: rows.length, students: new Set(rows.map((r) => r.user_id)).size });
   },
 
+  // Duplicar una evaluación (12.30), en el mismo curso o en otro donde también enseñe. La copia queda oculta, sin
+  // intentos ni fecha de publicación. En otro curso no se llevan lo que depende del curso de origen (secciones,
+  // categoría de calificación, condiciones, acceso especial) y las imágenes se enlazan al mismo archivo guardado.
+  'POST /api/quiz/duplicate': async ({ db, user, request }) => {
+    const body = await readJson(request);
+    requireTeacher(await access(db, user, body.course));
+    const target = String(body.target || body.course);
+    const other = target !== body.course;
+    if (other) {
+      requireTeacher(await access(db, user, target));
+      const archived = await one(db, 'SELECT archived_at FROM aula_courses WHERE id=?', target);
+      if (archived?.archived_at) fail('El curso de destino está archivado: desarchívalo para agregarle evaluaciones.', 409);
+    }
+    const quiz = await contentRecord(db, String(body.quiz ?? ''), body.course, 'quiz');
+    const { publishAt: _p, specialOnly: _s, emailedAt: _e, ...rest } = quiz.data;
+    const data = { ...structuredClone(rest), title: text(body.title || `Copia de ${quiz.data.title}`, 200), visible: false };
+    if (other) {
+      delete data.sections;
+      delete data.grade;
+      delete data.conditions;
+      // Imágenes de las preguntas: una fila nueva en el curso destino que apunta al mismo archivo de R2.
+      const images = [...new Set(data.questions.map((q) => q.image).filter(Boolean))];
+      if (images.length) {
+        const files = await all(db, "SELECT * FROM aula_files WHERE course=? AND scope='material' AND id IN (SELECT value FROM json_each(?))", body.course, JSON.stringify(images));
+        const map = new Map(files.map((f) => [f.id, crypto.randomUUID()]));
+        await run(
+          db,
+          `INSERT INTO aula_files (id,course,owner,scope,name,size,mime,created,r2_key)
+           SELECT json_extract(value,'$.id'), ?1, ?2, 'material', json_extract(value,'$.name'), json_extract(value,'$.size'),
+                  json_extract(value,'$.mime'), ?3, json_extract(value,'$.key') FROM json_each(?4)`,
+          target,
+          user.id,
+          nowIso(),
+          JSON.stringify(files.map((f) => ({ id: map.get(f.id), name: f.name, size: f.size, mime: f.mime, key: f.r2_key || f.id }))),
+        );
+        for (const q of data.questions) {
+          if (!q.image) continue;
+          if (map.has(q.image)) q.image = map.get(q.image);
+          else delete q.image;
+        }
+      }
+    }
+    const saved = await saveContentRecord(db, null, data, user.id, target, 'quiz');
+    return json({ id: saved.id, course: target }, 201);
+  },
+
   // Vista previa del docente (12.27): un sorteo nuevo cada vez (preguntas, orden y datos), tal como lo recibiría un
   // alumno. No se guarda ningún intento. Con `answers` (y la misma `seed`) califica esa vista previa.
   'POST /api/quiz/preview': async ({ db, user, request }) => {
@@ -1619,6 +1679,12 @@ const routes = {
     if (start.locked_at) return json({ locked: true });
     const reported = Math.min(Math.max(Number(body.seconds) || 0, 0), 86_400);
     const measured = start.away_since ? (Date.now() - Date.parse(start.away_since)) / 1000 : 0;
+    // 12.30: salidas cortas repetidas (ver otra pestaña 3 o 4 segundos, varias veces) también bloquean: a la
+    // SHORT_EXITS_LOCK.ª salida desde el último desbloqueo, aunque cada una haya durado menos que la tolerancia.
+    if (reported > 0 && exitsSinceUnlock(start) + 1 >= SHORT_EXITS_LOCK) {
+      await lockAttempt(db, start, Math.max(reported, measured), 'salidas repetidas');
+      return json({ locked: true, repeated: true });
+    }
     const locked = await applyLock(db, quiz, { ...start, away_since: start.away_since || nowIso() }, Math.max(reported, measured));
     return json({ locked });
   },
