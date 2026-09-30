@@ -5,6 +5,25 @@ No es el código de D2L Brightspace ni una plataforma oficial de la BUAP.
 
 Esta versión se despliega en **tu propia cuenta de Cloudflare** (Workers + D1 + R2, plan gratuito) y ya no depende de ChatGPT Sites.
 
+## Novedades de la versión 12.26 (parciales, categorías y qué cuenta en cada una)
+
+En **Calificaciones → Administrar calificaciones** (con «Usar categorías con pesos»):
+
+**Parciales**: botón **«Dividir por parciales»** (2, 3 o 4). Cada parcial tiene un peso en la calificación final y sus propias categorías (Exámenes, Tareas…), cuyo peso es sobre ese parcial. Las categorías que no son de un parcial (por ejemplo **Laboratorio** o la asistencia) quedan en «Toda la materia» y pesan directo en la final. Arriba de todo se ve si cada suma da 100 %.
+- Al dividir, tus categorías actuales se copian a cada parcial; lo que ya estaba en ellas queda en el Parcial 1.
+- Se pueden agregar o quitar parciales, renombrarlos y mover una categoría de parcial.
+- En el libro aparece una columna por parcial; el alumno ve su calificación por parcial en «Mis calificaciones»; el Excel también la incluye.
+
+**Categorías**: agrega las que quieras (Laboratorio, Proyecto, Participación…; al escribir el nombre salen sugerencias). En «Opciones» de cada categoría:
+- **Distribución**: cada elemento pesa según su valor, o todos pesan igual.
+- **No contar las más bajas / más altas**: por ejemplo, se descarta la peor tarea de cada alumno.
+
+**Qué cuenta en cada categoría**: la tabla de abajo ahora incluye **actividades, evaluaciones y foros**. Al elegir una categoría para un foro se crea su actividad «Participación» para calificarlo. En las evaluaciones también se elige qué intento cuenta.
+
+**Desde la actividad**: el editor de cada actividad tiene **«Libro de calificaciones»**, para elegir su categoría (con su parcial) y su valor sin salir de ahí.
+
+Requiere la migración **0031**: agrega columnas para los parciales y las opciones de categoría. No borra ni modifica datos; los cursos existentes se calculan igual.
+
 ## Novedades de la versión 12.25 (editar curso y portada, corregir datos de alumnos)
 
 **Editar el curso**: botón **«✎ Editar curso y portada»** en el inicio del curso (y en el menú ⋯ de su tarjeta en «Mis cursos»). Ahí cambias el nombre de la materia, el grupo, el periodo y la presentación (antes solo estaba escondido en Administración del curso → Información del curso).

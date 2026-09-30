@@ -191,7 +191,7 @@ export async function courseGradebook(db, course, { teacher, userId, memberId = 
   ];
   const weights = weightsRecord(course, settings, tasks);
   if (weights) records.push(weights);
-  const categories = await all(db, 'SELECT id, name, weight, source FROM aula_grade_categories WHERE course=? ORDER BY position, name', course);
+  const categories = await all(db, 'SELECT id, name, weight, source, term, distribution, drop_low, drop_high FROM aula_grade_categories WHERE course=? ORDER BY position, name', course);
   records.push(gradingRecord(course, settings, categories));
   if (teacher) {
     // Rúbricas asignadas a actividades de este curso (aunque su autor haya dejado de compartirlas).
@@ -199,6 +199,16 @@ export async function courseGradebook(db, course, { teacher, userId, memberId = 
     records.push(...rubrics.map(rubricRecord));
   }
   return records;
+}
+
+/** Parciales guardados en aula_grade_settings.terms ('' = sin parciales). */
+export function parseTerms(value) {
+  try {
+    const list = JSON.parse(value || '[]');
+    return Array.isArray(list) ? list : [];
+  } catch {
+    return [];
+  }
 }
 
 /** Cómo se calcula la calificación del curso: esquema, categorías y reglas de la calificación final. */
@@ -210,7 +220,18 @@ export function gradingRecord(course, settings, categories) {
     revision: settings?.revision ?? 0,
     data: {
       scheme: settings?.scheme ?? 'tasks',
-      categories: categories.map((c) => ({ id: c.id, name: c.name, weight: c.weight, source: c.source })),
+      categories: categories.map((c) => ({
+        id: c.id,
+        name: c.name,
+        weight: c.weight,
+        source: c.source,
+        term: c.term || '',
+        distribution: c.distribution || 'manual',
+        dropLow: c.drop_low || 0,
+        dropHigh: c.drop_high || 0,
+      })),
+      // Parciales (12.26): [{ id, name, weight }]; vacío = sin parciales.
+      terms: parseTerms(settings?.terms),
       final: {
         decimals: settings?.final_decimals ?? 1,
         rounding: settings?.final_rounding ?? 'half_up',
@@ -276,7 +297,13 @@ export function taskFields(input, fileIds) {
     end: isoDate(input.end),
     rubric: input.rubric ? String(input.rubric) : null,
     groupCategory: optionalText(input.groupCategory, 100),
+    // 12.26: dónde cuenta en el libro (categoría y valor). Sin la llave, no se toca lo que ya tenía.
+    gradebook:
+      input.gradebook === undefined
+        ? undefined
+        : { category: input.gradebook?.category ? String(input.gradebook.category) : null, points: Number(input.gradebook?.points ?? 1) },
   };
+  if (fields.gradebook && !(fields.gradebook.points > 0 && fields.gradebook.points <= 1000)) fail('El valor de la actividad en su categoría va de 0.01 a 1000.');
   if (!Number.isInteger(fields.maxFiles) || fields.maxFiles < 1 || fields.maxFiles > 5) fail('Selecciona de uno a cinco archivos.');
   if (fields.extensions.some((x) => !/^[a-z0-9]{1,12}$/.test(x))) fail('Escribe extensiones separadas por comas: pdf, docx, jpg.');
   if (fields.start && fields.end && fields.start > fields.end) fail('La fecha final debe ser posterior a la inicial.');
@@ -290,6 +317,10 @@ export async function saveTask(db, { course, userId, id, revision, fields }) {
     const current = id ? await one(db, 'SELECT rubric FROM aula_tasks WHERE id=? AND course=?', id, course) : null;
     // Una rúbrica propia o compartida (o la que ya tenía la actividad, aunque su autor dejara de compartirla).
     if (!rubric || (rubric.owner !== userId && rubric.shared !== 1 && current?.rubric !== fields.rubric)) fail('Rúbrica no disponible.');
+  }
+  const gradebook = fields.gradebook;
+  if (gradebook?.category && !(await one(db, "SELECT id FROM aula_grade_categories WHERE id=? AND course=? AND source='tasks'", gradebook.category, course))) {
+    fail('Elige una categoría del libro de calificaciones de este curso.');
   }
   const values = [
     fields.title,
@@ -314,9 +345,13 @@ export async function saveTask(db, { course, userId, id, revision, fields }) {
     const result = await run(
       db,
       `UPDATE aula_tasks SET title=?,body=?,visible=?,submission_mode=?,max_files=?,extensions=?,file_ids=?,
-         allow_resubmit=?,due=?,start_at=?,end_at=?,rubric=?,group_category=?,sections=?,conditions=?,revision=revision+1,updated=?
-       WHERE id=? AND course=? AND revision=?`,
+         allow_resubmit=?,due=?,start_at=?,end_at=?,rubric=?,group_category=?,sections=?,conditions=?,
+         category=CASE WHEN ?16 THEN ?17 ELSE category END, points=CASE WHEN ?16 THEN ?18 ELSE points END,revision=revision+1,updated=?19
+       WHERE id=?20 AND course=?21 AND revision=?22`,
       ...values,
+      gradebook ? 1 : 0,
+      gradebook?.category ?? null,
+      gradebook?.points ?? 1,
       now,
       id,
       course,
@@ -329,11 +364,14 @@ export async function saveTask(db, { course, userId, id, revision, fields }) {
   await run(
     db,
     `INSERT INTO aula_tasks (id,course,author,title,body,visible,submission_mode,max_files,extensions,file_ids,
-       allow_resubmit,due,start_at,end_at,rubric,group_category,sections,conditions,revision,created,updated) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,?,?)`,
+       allow_resubmit,due,start_at,end_at,rubric,group_category,sections,conditions,category,points,revision,created,updated)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,?,?)`,
     newId,
     course,
     userId,
     ...values,
+    gradebook?.category ?? null,
+    gradebook?.points ?? 1,
     now,
     now,
   );

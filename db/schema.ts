@@ -361,6 +361,8 @@ export const gradeSettings = sqliteTable(
     passingGrade: real('passing_grade').notNull().default(6),
     failingAs: real('failing_as'), // p. ej. 5; NULL = la calculada
     missingAsZero: integer('missing_as_zero').notNull().default(0),
+    // Migración 0031: parciales (JSON [{ id, name, weight }]; '' = sin parciales). Su peso es sobre la calificación final.
+    terms: text('terms').notNull().default(''),
   },
   () => [
     check('aula_grade_settings_scheme_check', sql`scheme IN ('tasks', 'categories')`),
@@ -384,6 +386,14 @@ export const gradeCategories = sqliteTable(
     weight: real('weight').notNull(),
     source: text('source').notNull().default('tasks'), // tasks | attendance
     position: integer('position').notNull().default(0),
+    // Migración 0031: parcial al que pertenece (id dentro de aula_grade_settings.terms; '' = toda la materia).
+    // Dentro de un parcial, su peso es sobre ese parcial.
+    term: text('term').notNull().default(''),
+    // Migración 0031: 'manual' (cada elemento pesa según su valor) o 'equal' (todos pesan igual).
+    distribution: text('distribution').notNull().default('manual'),
+    // Migración 0031: calificaciones más bajas / más altas que no cuentan (por alumno).
+    dropLow: integer('drop_low').notNull().default(0),
+    dropHigh: integer('drop_high').notNull().default(0),
     updated: text('updated').notNull(),
   },
   (t) => [

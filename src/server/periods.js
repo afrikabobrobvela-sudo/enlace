@@ -112,7 +112,18 @@ export const periodRoutes = {
       conditions: remap(t.conditions || '', map),
     }));
     const fileRows = files.map((f) => ({ id: map.get(f.id), owner: f.owner, name: f.name, size: f.size, mime: f.mime, key: f.r2_key || f.id }));
-    const categoryRows = categories.map((c) => ({ id: map.get(c.id), name: c.name, weight: c.weight, source: c.source, position: c.position }));
+    const categoryRows = categories.map((c) => ({
+      id: map.get(c.id),
+      name: c.name,
+      weight: c.weight,
+      source: c.source,
+      position: c.position,
+      // Los ids de parcial son internos del curso: se copian tal cual junto con aula_grade_settings.terms.
+      term: c.term || '',
+      distribution: c.distribution || 'manual',
+      drop_low: c.drop_low || 0,
+      drop_high: c.drop_high || 0,
+    }));
 
     const statements = [
       db
@@ -121,8 +132,8 @@ export const periodRoutes = {
         .bind(id, user.id, name, group, remap(a.course.intro, map), now, user.academy_id ?? a.course.academy_id ?? null, user.unit_id ?? a.course.unit_id ?? null, period, a.course.theme ?? 0),
       db
         .prepare(
-          `INSERT INTO aula_grade_settings (course,revision,updated,updated_by,scheme,final_decimals,final_rounding,passing_grade,failing_as,missing_as_zero)
-           SELECT ?1,1,?2,?3,scheme,final_decimals,final_rounding,passing_grade,failing_as,missing_as_zero FROM aula_grade_settings WHERE course=?4`,
+          `INSERT INTO aula_grade_settings (course,revision,updated,updated_by,scheme,final_decimals,final_rounding,passing_grade,failing_as,missing_as_zero,terms)
+           SELECT ?1,1,?2,?3,scheme,final_decimals,final_rounding,passing_grade,failing_as,missing_as_zero,terms FROM aula_grade_settings WHERE course=?4`,
         )
         .bind(id, now, user.id, source),
       db
@@ -140,9 +151,10 @@ export const periodRoutes = {
         .bind(id, now, JSON.stringify(sectionRows)),
       db
         .prepare(
-          `INSERT INTO aula_grade_categories (id,course,name,weight,source,position,updated)
+          `INSERT INTO aula_grade_categories (id,course,name,weight,source,position,term,distribution,drop_low,drop_high,updated)
            SELECT json_extract(value,'$.id'), ?1, json_extract(value,'$.name'), json_extract(value,'$.weight'),
-                  json_extract(value,'$.source'), json_extract(value,'$.position'), ?2 FROM json_each(?3)`,
+                  json_extract(value,'$.source'), json_extract(value,'$.position'), json_extract(value,'$.term'),
+                  json_extract(value,'$.distribution'), json_extract(value,'$.drop_low'), json_extract(value,'$.drop_high'), ?2 FROM json_each(?3)`,
         )
         .bind(id, now, JSON.stringify(categoryRows)),
       db

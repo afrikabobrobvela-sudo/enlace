@@ -218,6 +218,13 @@
       "when": 1790728013179,
       "tag": "0030_portada_curso",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "6",
+      "when": 1790796115259,
+      "tag": "0031_parciales",
+      "breakpoints": true
     }
   ]
 }

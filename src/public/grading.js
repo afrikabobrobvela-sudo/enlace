@@ -36,29 +36,43 @@ function computeGrade({ tasks, grades, settings, weights, attendancePercent = nu
       let value = null;
       if (category.source === 'attendance') value = attendancePercent === null ? null : attendancePercent / 10;
       else {
-        let points = 0;
-        let earned = 0;
+        let items = [];
         for (const task of tasks.filter((t) => t.data.category === category.id)) {
           const grade = gradeFor(task);
-          if (grade === null) continue;
-          earned += grade * task.data.points;
-          points += task.data.points;
+          if (grade !== null) items.push({ grade: Number(grade), points: task.data.points });
         }
         for (const quiz of quizzes.filter((q) => q.data.grade?.category === category.id)) {
           const grade = quizGrades.get(quiz.id);
-          if (grade === null || grade === undefined) continue;
-          earned += grade * quiz.data.grade.points;
-          points += quiz.data.grade.points;
+          if (grade !== null && grade !== undefined) items.push({ grade: Number(grade), points: quiz.data.grade.points });
         }
-        value = points ? earned / points : null;
+        items = dropExtremes(items, category.dropLow || 0, category.dropHigh || 0);
+        const weightOf = (item) => (category.distribution === 'equal' ? 1 : item.points);
+        const points = items.reduce((n, item) => n + weightOf(item), 0);
+        value = points ? items.reduce((n, item) => n + item.grade * weightOf(item), 0) / points : null;
       }
-      if (value !== null) {
-        sum += value * category.weight;
-        total += category.weight;
-      }
-      return { id: category.id, name: category.name, weight: category.weight, value };
+      return { id: category.id, name: category.name, weight: category.weight, term: category.term || '', value };
     });
-    return { value: total ? sum / total : null, categories };
+    // Parciales (12.26): cada uno promedia sus categorías con sus pesos; la final junta parciales y categorías
+    // de toda la materia. En ambos niveles, lo que aún no tiene calificación no cuenta y se normaliza el resto.
+    const weighted = (list) => {
+      let sum = 0;
+      let total = 0;
+      for (const item of list) {
+        if (item.value === null) continue;
+        sum += item.value * item.weight;
+        total += item.weight;
+      }
+      return total ? sum / total : null;
+    };
+    const termList = (settings.terms || []).map((term) => ({
+      id: term.id,
+      name: term.name,
+      weight: term.weight,
+      value: weighted(categories.filter((c) => c.term === term.id)),
+    }));
+    const known = new Set(termList.map((t) => t.id));
+    const top = [...termList, ...categories.filter((c) => !c.term || !known.has(c.term))];
+    return { value: weighted(top), categories, terms: termList };
   }
   const valid = weights && tasks.every((t) => Number.isFinite(weights[t.id]));
   for (const task of tasks) {
@@ -68,7 +82,44 @@ function computeGrade({ tasks, grades, settings, weights, attendancePercent = nu
     sum += grade * weight;
     total += weight;
   }
-  return { value: total ? sum / total : null, categories: [] };
+  return { value: total ? sum / total : null, categories: [], terms: [] };
+}
+
+/** Quita las N calificaciones más bajas y las N más altas (sin dejar la categoría vacía). */
+function dropExtremes(items, low, high) {
+  if (!low && !high) return items;
+  const sorted = [...items].sort((a, b) => a.grade - b.grade);
+  if (sorted.length - low - high < 1) return sorted.length ? sorted.slice(Math.min(low, sorted.length - 1)).slice(0, 1) : sorted;
+  return sorted.slice(low, sorted.length - high);
+}
+
+/** <option> de las categorías del curso (agrupadas por parcial) para los editores de actividades y evaluaciones. */
+function gradebookCategoryOptions(selected, empty) {
+  const settings = gradingSettings();
+  const draft = {
+    terms: (settings.terms || []).map((t) => ({ key: t.id, name: t.name })),
+    categories: settings.categories.map((c) => ({ key: c.id, name: `${c.name} (${c.weight} %)`, source: c.source, term: c.term || '' })),
+  };
+  return draftCategoryOptions(draft, selected || '', empty);
+}
+
+/** Editor de la actividad: en qué categoría del libro cuenta y con qué valor (como «Está en el cuaderno de calificaciones»). */
+function taskGradebookHtml(data) {
+  const settings = gradingSettings();
+  const usable = settings.scheme === 'categories' && settings.categories.some((c) => c.source === 'tasks');
+  if (!usable) {
+    return `<details open><summary>Libro de calificaciones</summary><div class="details-body"><p class="muted">Esta actividad cuenta con los pesos por actividad del curso. Para enlazarla a una categoría (Tareas, Laboratorio, Parcial 1…), organiza la calificación por categorías en Calificaciones → Administrar calificaciones.</p></div></details>`;
+  }
+  return `<details open><summary>Libro de calificaciones</summary><div class="details-body">
+    <label>Cuenta en la categoría<select name="gradeCategory">${gradebookCategoryOptions(data.category, 'No cuenta en la calificación')}</select></label>
+    <label>Valor dentro de la categoría<input name="gradePoints" type="number" min="0.01" max="1000" step="0.01" value="${esc(data.points ?? 1)}" class="grade-input"></label>
+    <p class="muted">Con valor 2 cuenta el doble que una actividad con valor 1 de la misma categoría. También puedes acomodarlo todo en Calificaciones → Administrar calificaciones.</p></div></details>`;
+}
+
+/** Nombre de la categoría con su parcial («Parcial 1 · Tareas»). */
+function categoryLabel(category, settings = gradingSettings()) {
+  const term = category.term && (settings.terms || []).find((t) => t.id === category.term);
+  return term ? `${term.name} · ${category.name}` : category.name;
 }
 
 function roundGrade(value, decimals, rounding) {
@@ -196,7 +247,10 @@ function myGradesHtml() {
       const state = graded ? '' : s?.data.submitted ? 'Por calificar' : due && Date.parse(due) < now ? 'Sin entrega' : 'Pendiente';
       const detailText = [
         !graded && !s?.data.submitted && due && Date.parse(due) >= now ? 'vence ' + fmt(due) : '',
-        cats.find((c) => c.id === t.data.category)?.name,
+        (() => {
+          const c = cats.find((x) => x.id === t.data.category);
+          return c ? categoryLabel(c, grading) : '';
+        })(),
         weighted ? `peso ${weights[t.id]} %` : '',
       ]
         .filter(Boolean)
@@ -217,7 +271,10 @@ function myGradesHtml() {
       const best = counted ? quizScore(q, member.id) : shown.length ? Math.max(...shown) : null;
       const note = [
         attempts.length ? `${attempts.length} ${attempts.length === 1 ? 'intento' : 'intentos'}` : '',
-        counted ? `cuenta en ${cats.find((c) => c.id === q.data.grade.category)?.name || 'la calificación'} · ${QUIZ_POLICIES[q.data.grade.policy] || QUIZ_POLICIES.best}` : 'no cuenta en el promedio',
+        counted ? `cuenta en ${(() => {
+          const c = cats.find((x) => x.id === q.data.grade.category);
+          return c ? categoryLabel(c, grading) : 'la calificación';
+        })()} · ${QUIZ_POLICIES[q.data.grade.policy] || QUIZ_POLICIES.best}` : 'no cuenta en el promedio',
       ]
         .filter(Boolean)
         .join(' · ');
@@ -233,8 +290,14 @@ function myGradesHtml() {
     </section>
     ${
       cats.length
-        ? `<section class="panel"><h2>Por categoría</h2><ul class="my-grade-list">${result.categories
-            .map((c) => `<li class="my-grade-item"><div class="my-grade-row is-static"><span class="my-grade-title">${esc(c.name)}<small>${c.weight} % del promedio</small></span><span class="my-grade-value ${c.value === null ? 'is-pending' : tone(c.value)}">${c.value === null ? 'Sin calificar' : formatGrade(c.value)}</span></div></li>`)
+        ? `${
+            result.terms?.length
+              ? `<section class="panel"><h2>Por parcial</h2><ul class="my-grade-list">${result.terms
+                  .map((t) => `<li class="my-grade-item"><div class="my-grade-row is-static"><span class="my-grade-title">${esc(t.name)}<small>${t.weight} % de la calificación final</small></span><span class="my-grade-value ${t.value === null ? 'is-pending' : tone(t.value)}">${t.value === null ? 'Sin calificar' : formatGrade(t.value)}</span></div></li>`)
+                  .join('')}</ul></section>`
+              : ''
+          }<section class="panel"><h2>Por categoría</h2><ul class="my-grade-list">${result.categories
+            .map((c) => `<li class="my-grade-item"><div class="my-grade-row is-static"><span class="my-grade-title">${esc(categoryLabel(c, grading))}<small>${c.weight} % ${c.term ? 'del parcial' : 'del promedio'}</small></span><span class="my-grade-value ${c.value === null ? 'is-pending' : tone(c.value)}">${c.value === null ? 'Sin calificar' : formatGrade(c.value)}</span></div></li>`)
             .join('')}</ul></section>`
         : ''
     }
@@ -274,42 +337,156 @@ function gradingManageHtml(weightsHtml = '') {
     <h2 class="grading-subtitle">Rúbricas</h2><div id="rubricBank"><p class="muted">Cargando rúbricas…</p></div>`;
 }
 
+const CATEGORY_SUGGESTIONS = ['Exámenes', 'Tareas', 'Laboratorio', 'Prácticas', 'Proyecto', 'Participación', 'Foros', 'Evaluaciones en línea', 'Exposiciones', 'Examen departamental', 'Asistencia'];
+const round2 = (n) => Math.round(n * 100) / 100;
+
+/** Borrador de «Cómo se calcula»: parciales, categorías y lo que cuenta en cada una (actividades, evaluaciones y foros). */
+function newCategoryDraft(tasks) {
+  const settings = gradingSettings();
+  const graded = new Set(tasks.map((t) => t.data.forum).filter(Boolean));
+  return {
+    course: current.course.id,
+    terms: (settings.terms || []).map((t) => ({ key: t.id, name: t.name, weight: t.weight })),
+    categories: settings.categories.length
+      ? settings.categories.map((c) => ({ key: c.id, name: c.name, weight: c.weight, source: c.source, term: c.term || '', distribution: c.distribution || 'manual', dropLow: c.dropLow || 0, dropHigh: c.dropHigh || 0 }))
+      : [
+          { key: 'n1', name: 'Exámenes', weight: 60, source: 'tasks', term: '', distribution: 'manual', dropLow: 0, dropHigh: 0 },
+          { key: 'n2', name: 'Tareas', weight: 40, source: 'tasks', term: '', distribution: 'manual', dropLow: 0, dropHigh: 0 },
+        ],
+    tasks: Object.fromEntries(tasks.map((t) => [t.id, { category: t.data.category || '', points: t.data.points ?? 1 }])),
+    quizzes: Object.fromEntries(records('quiz').map((q) => [q.id, { category: q.data.grade?.category || '', points: q.data.grade?.points ?? 10, policy: q.data.grade?.policy || 'best' }])),
+    forums: Object.fromEntries(records('forum').filter((f) => !graded.has(f.id)).map((f) => [f.id, { category: '', points: 1 }])),
+  };
+}
+
+const newCategory = (term = '', name = '', weight = 0) => ({ key: 'n' + Date.now() + Math.random().toString(36).slice(2, 6), name, weight, source: 'tasks', term, distribution: 'manual', dropLow: 0, dropHigh: 0 });
+
+/** Sumas que deben dar 100: el nivel superior (parciales + toda la materia) y cada parcial. */
+function draftTotals(draft) {
+  const general = draft.categories.filter((c) => !c.term).reduce((n, c) => n + (Number(c.weight) || 0), 0);
+  const top = draft.terms.reduce((n, t) => n + (Number(t.weight) || 0), 0) + general;
+  const list = [{ label: draft.terms.length ? 'Parciales y categorías de toda la materia' : 'Categorías', sum: top }];
+  for (const term of draft.terms) {
+    list.push({ label: term.name || 'Parcial sin nombre', sum: draft.categories.filter((c) => c.term === term.key).reduce((n, c) => n + (Number(c.weight) || 0), 0) });
+  }
+  return list.map((t) => ({ ...t, ok: Math.abs(t.sum - 100) <= 0.01 }));
+}
+
+const draftTotalsHtml = (draft) =>
+  draftTotals(draft)
+    .map((t) => `<span class="${t.ok ? 'grading-ok' : 'error'}">${esc(t.label)}: ${round2(t.sum)} %${t.ok ? ' ✓' : ' (deben sumar 100 %)'}</span>`)
+    .join('');
+
+/** «Parcial 1 · Tareas» (la lista cerrada muestra solo la opción, sin el grupo). */
+function draftCategoryName(draft, c) {
+  const term = c.term && draft.terms.find((t) => t.key === c.term);
+  return term ? `${term.name || 'Parcial'} · ${c.name || 'Sin nombre'}` : c.name || 'Sin nombre';
+}
+
+/** <option> de categorías de actividades agrupadas por parcial. */
+function draftCategoryOptions(draft, selected, empty = 'Sin categoría (no cuenta)') {
+  const option = (c) => `<option value="${esc(c.key)}" ${selected === c.key ? 'selected' : ''}>${esc(draftCategoryName(draft, c))}</option>`;
+  const usable = draft.categories.filter((c) => c.source === 'tasks');
+  const general = usable.filter((c) => !c.term || !draft.terms.some((t) => t.key === c.term));
+  return `<option value="">${esc(empty)}</option>${draft.terms
+    .map((t) => {
+      const inside = usable.filter((c) => c.term === t.key);
+      return inside.length ? `<optgroup data-term="${esc(t.key)}" label="${esc(t.name || 'Parcial')}">${inside.map(option).join('')}</optgroup>` : '';
+    })
+    .join('')}${general.length ? (draft.terms.length ? `<optgroup label="Toda la materia">${general.map(option).join('')}</optgroup>` : general.map(option).join('')) : ''}`;
+}
+
+function categoryRowHtml(draft, c, i) {
+  const termSelect = draft.terms.length
+    ? `<td><select data-cat="term" data-index="${i}" aria-label="Parcial de ${esc(c.name)}"><option value="">Toda la materia</option>${draft.terms
+        .map((t) => `<option value="${esc(t.key)}" ${c.term === t.key ? 'selected' : ''}>${esc(t.name || 'Parcial')}</option>`)
+        .join('')}</select></td>`
+    : '';
+  const tasksSource = c.source !== 'attendance';
+  return `<tr>
+      <td><input data-cat="name" data-index="${i}" value="${esc(c.name)}" list="categorySuggestions" aria-label="Nombre de la categoría" maxlength="80" required placeholder="Por ejemplo, Laboratorio"></td>
+      ${termSelect}
+      <td><input data-cat="weight" data-index="${i}" type="number" min="0" max="100" step="0.01" value="${esc(c.weight)}" aria-label="Peso de ${esc(c.name)}" class="grade-input" required></td>
+      <td><select data-cat="source" data-index="${i}" aria-label="Qué se promedia"><option value="tasks">Actividades, evaluaciones y foros</option><option value="attendance" ${c.source === 'attendance' ? 'selected' : ''}>Porcentaje de asistencia</option></select>
+        ${
+          tasksSource
+            ? `<details class="cat-options"><summary>Opciones${c.distribution === 'equal' || c.dropLow || c.dropHigh ? ' •' : ''}</summary>
+          <label>Distribución<select data-cat="distribution" data-index="${i}"><option value="manual">Cada elemento pesa según su valor</option><option value="equal" ${c.distribution === 'equal' ? 'selected' : ''}>Todos los elementos pesan igual</option></select></label>
+          <label>No contar las más bajas<input data-cat="dropLow" data-index="${i}" type="number" min="0" max="20" step="1" value="${esc(c.dropLow || 0)}" class="grade-input"></label>
+          <label>No contar las más altas<input data-cat="dropHigh" data-index="${i}" type="number" min="0" max="20" step="1" value="${esc(c.dropHigh || 0)}" class="grade-input"></label>
+          <p class="muted">Por alumno: por ejemplo, con 1 en «más bajas» se descarta su peor tarea de la categoría.</p></details>`
+            : ''
+        }</td>
+      <td><button type="button" class="danger-link" data-grading="remove-category" data-index="${i}">Quitar</button></td></tr>`;
+}
+
 function categoriesFormHtml(tasks) {
   const settings = gradingSettings();
-  categoryDraft ??= {
-    course: current.course.id,
-    categories: settings.categories.length
-      ? settings.categories.map((c) => ({ key: c.id, name: c.name, weight: c.weight, source: c.source }))
-      : [{ key: 'n1', name: 'Exámenes', weight: 60, source: 'tasks' }, { key: 'n2', name: 'Tareas', weight: 40, source: 'tasks' }],
-    tasks: Object.fromEntries(tasks.map((t) => [t.id, { category: t.data.category || '', points: t.data.points ?? 1 }])),
-  };
+  categoryDraft ??= newCategoryDraft(tasks);
   const draft = categoryDraft;
-  const total = draft.categories.reduce((n, c) => n + (Number(c.weight) || 0), 0);
-  const options = (selected) =>
-    `<option value="">Sin categoría (no cuenta)</option>${draft.categories
-      .filter((c) => c.source === 'tasks')
-      .map((c) => `<option value="${esc(c.key)}" ${selected === c.key ? 'selected' : ''}>${esc(c.name || 'Sin nombre')}</option>`)
-      .join('')}`;
-  const loose = tasks.filter((t) => !draft.tasks[t.id]?.category).length;
+  const hasTerms = draft.terms.length > 0;
+  const cols = hasTerms ? 5 : 4;
+  const groupRows = (term, label, hint) => {
+    const rows = draft.categories.map((c, i) => [c, i]).filter(([c]) => (term ? c.term === term.key : !c.term || !draft.terms.some((t) => t.key === c.term)));
+    const sum = rows.reduce((n, [c]) => n + (Number(c.weight) || 0), 0);
+    return `${hasTerms ? `<tr class="grading-group"><th colspan="${cols}">${esc(label)} <span class="muted">${hint}${term ? ` · suman ${round2(sum)} %` : ''}</span></th></tr>` : ''}${rows.map(([c, i]) => categoryRowHtml(draft, c, i)).join('')}
+      <tr class="grading-add"><td colspan="${cols}"><button type="button" class="table-link" data-grading="add-category" data-term="${esc(term?.key || '')}">＋ Agregar categoría${hasTerms ? (term ? ` en ${esc(term.name || 'el parcial')}` : ' de toda la materia') : ''}</button></td></tr>`;
+  };
+  const termsHtml = hasTerms
+    ? `<div class="table-wrap"><table class="grading-table terms-table"><thead><tr><th>Parcial</th><th>Peso en la calificación final (%)</th><th aria-label="Quitar"></th></tr></thead><tbody>
+      ${draft.terms
+        .map(
+          (t, i) => `<tr><td><input data-term-field="name" data-index="${i}" value="${esc(t.name)}" maxlength="60" required aria-label="Nombre del parcial"></td>
+        <td><input data-term-field="weight" data-index="${i}" type="number" min="0" max="100" step="0.01" value="${esc(t.weight)}" class="grade-input" required aria-label="Peso de ${esc(t.name)}"></td>
+        <td><button type="button" class="danger-link" data-grading="remove-term" data-index="${i}">Quitar</button></td></tr>`,
+        )
+        .join('')}</tbody></table></div>
+      <div class="grading-row"><button type="button" class="secondary" data-grading="add-term">＋ Agregar parcial</button><button type="button" class="table-link" data-grading="remove-terms">Quitar todos los parciales</button></div>`
+    : `<div class="grading-row"><p class="muted">¿Tu materia se evalúa por parciales? Divídela y cada parcial tendrá sus propias categorías (Exámenes, Tareas…) con un peso en la calificación final. Categorías como Laboratorio pueden quedar para toda la materia.</p>
+      <label class="inline-label">Parciales<select id="termCount">${[2, 3, 4].map((n) => `<option ${n === 3 ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
+      <button type="button" class="secondary" data-grading="split-terms">Dividir por parciales</button></div>`;
+  const options = (selected) => draftCategoryOptions(draft, selected);
+  const forumTask = new Map(tasks.filter((t) => t.data.forum).map((t) => [t.id, records('forum').find((f) => f.id === t.data.forum)]));
+  const itemRow = (kind, id, title, type, value, extra = '') => `<tr><td>${esc(title)}</td><td><span class="item-kind kind-${kind}">${type}</span></td>
+      <td><select data-${kind}-category="${esc(id)}" aria-label="Categoría de ${esc(title)}">${options(value.category || '')}</select></td>
+      <td><input data-${kind}-points="${esc(id)}" type="number" min="0.01" max="1000" step="0.01" value="${esc(value.points)}" class="grade-input" aria-label="Valor de ${esc(title)}"></td><td>${extra}</td></tr>`;
+  const quizList = records('quiz');
+  const forumList = records('forum').filter((f) => draft.forums[f.id]);
+  const items =
+    tasks.map((t) => itemRow('task', t.id, t.data.title, forumTask.get(t.id) ? 'Foro' : 'Actividad', draft.tasks[t.id] || { points: 1 })).join('') +
+    quizList
+      .map((q) =>
+        itemRow(
+          'quiz',
+          q.id,
+          q.data.title,
+          'Evaluación',
+          draft.quizzes[q.id],
+          `<select data-quiz-policy="${esc(q.id)}" aria-label="Qué intento cuenta">${Object.entries(QUIZ_POLICIES)
+            .map(([k, v]) => `<option value="${k}" ${draft.quizzes[q.id].policy === k ? 'selected' : ''}>Cuenta ${v}</option>`)
+            .join('')}</select>`,
+        ),
+      )
+      .join('') +
+    forumList.map((f) => itemRow('forum', f.id, f.data.title, 'Foro', draft.forums[f.id], '<span class="muted">Al elegir categoría se crea «Participación» para calificarlo.</span>')).join('');
+  const loose = tasks.filter((t) => !draft.tasks[t.id]?.category).length + quizList.filter((q) => !draft.quizzes[q.id]?.category).length;
   return `<form id="categoriesForm" class="real-form">
-    <div class="table-wrap"><table class="grading-table"><thead><tr><th>Categoría</th><th>Peso (%)</th><th>Se calcula con</th><th><span class="sr-only">Quitar</span></th></tr></thead><tbody>
-    ${draft.categories.map((c, i) => `<tr>
-      <td><input data-cat="name" data-index="${i}" value="${esc(c.name)}" aria-label="Nombre de la categoría" maxlength="80" required></td>
-      <td><input data-cat="weight" data-index="${i}" type="number" min="0" max="100" step="0.01" value="${esc(c.weight)}" aria-label="Peso de ${esc(c.name)}" class="grade-input" required></td>
-      <td><select data-cat="source" data-index="${i}" aria-label="Qué se promedia"><option value="tasks">Actividades</option><option value="attendance" ${c.source === 'attendance' ? 'selected' : ''}>Porcentaje de asistencia</option></select></td>
-      <td><button type="button" class="danger-link" data-grading="remove-category" data-index="${i}">Quitar</button></td></tr>`).join('')}
+    <datalist id="categorySuggestions">${CATEGORY_SUGGESTIONS.map((n) => `<option value="${esc(n)}">`).join('')}</datalist>
+    <h2 class="grading-subtitle">Parciales</h2>
+    ${termsHtml}
+    <h2 class="grading-subtitle">Categorías</h2>
+    <p class="muted">${hasTerms ? 'Dentro de cada parcial, el peso de sus categorías es sobre ese parcial (deben sumar 100 %). Las de «Toda la materia» pesan directo en la calificación final, junto con los parciales.' : 'Agrega las que necesites (Laboratorio, Proyecto, Participación…). Sus pesos deben sumar 100 %.'}</p>
+    <div class="table-wrap"><table class="grading-table"><thead><tr><th>Categoría</th>${hasTerms ? '<th>Parcial</th>' : ''}<th>Peso (%)</th><th>Se calcula con</th><th aria-label="Quitar"></th></tr></thead><tbody>
+    ${hasTerms ? draft.terms.map((t) => groupRows(t, t.name || 'Parcial', 'peso dentro del parcial')).join('') + groupRows(null, 'Toda la materia', 'peso directo en la final') : groupRows(null)}
     </tbody></table></div>
-    <div class="grading-row"><button type="button" class="secondary" data-grading="add-category">＋ Agregar categoría</button>
-      <p class="${Math.abs(total - 100) <= 0.01 ? 'grading-ok' : 'error'}" id="categoryTotal">Suman ${Math.round(total * 100) / 100} %${Math.abs(total - 100) <= 0.01 ? '.' : ': deben sumar 100 %.'}</p></div>
-    <h3>Actividades</h3>
-    <p class="muted">Dentro de cada categoría, el valor indica cuánto pesa cada actividad (con valor 2 cuenta el doble que con 1).${loose ? ` ${loose === 1 ? 'Una actividad sin categoría no cuenta' : `${loose} actividades sin categoría no cuentan`} en la calificación.` : ''}</p>
-    <div class="table-wrap"><table class="grading-table"><thead><tr><th>Actividad</th><th>Categoría</th><th>Valor</th></tr></thead><tbody>
-    ${tasks.map((t) => `<tr><td>${esc(t.data.title)}</td>
-      <td><select data-task-category="${t.id}" aria-label="Categoría de ${esc(t.data.title)}">${options(draft.tasks[t.id]?.category || '')}</select></td>
-      <td><input data-task-points="${t.id}" type="number" min="0.01" max="1000" step="0.01" value="${esc(draft.tasks[t.id]?.points ?? 1)}" class="grade-input" aria-label="Valor de ${esc(t.data.title)}"></td></tr>`).join('') || '<tr><td colspan="3">Todavía no hay actividades.</td></tr>'}
+    <p class="grading-totals" id="categoryTotal">${draftTotalsHtml(draft)}</p>
+    <h2 class="grading-subtitle">Qué cuenta en cada categoría</h2>
+    <p class="muted">Enlaza aquí actividades, evaluaciones y foros. El valor indica cuánto pesa cada elemento dentro de su categoría (con 2 cuenta el doble que con 1).${loose ? ` ${loose === 1 ? 'Un elemento sin categoría no cuenta' : `${loose} elementos sin categoría no cuentan`} en la calificación.` : ''} Una evaluación sin intentos de un alumno no cuenta como cero.</p>
+    <div class="table-wrap"><table class="grading-table items-table"><thead><tr><th>Elemento</th><th>Tipo</th><th>Categoría</th><th>Valor</th><th aria-label="Opciones"></th></tr></thead><tbody>
+    ${items || '<tr><td colspan="5">Todavía no hay actividades, evaluaciones ni foros.</td></tr>'}
     </tbody></table></div>
     <p class="form-error error" hidden></p>
-    <div class="form-actions"><button class="primary">Guardar categorías</button>
+    <div class="form-actions"><button class="primary">Guardar</button>
       ${settings.scheme === 'categories' ? '<button type="button" class="secondary" data-grading="use-tasks">Volver a pesos por actividad</button>' : '<button type="button" class="secondary" data-grading="cancel">Cancelar</button>'}</div>
   </form>`;
 }
@@ -317,12 +494,50 @@ function categoriesFormHtml(tasks) {
 function syncCategoryDraft() {
   const form = document.getElementById('categoriesForm');
   if (!form || !categoryDraft) return;
+  const numeric = new Set(['weight', 'dropLow', 'dropHigh']);
   form.querySelectorAll('[data-cat]').forEach((input) => {
     const category = categoryDraft.categories[Number(input.dataset.index)];
-    if (category) category[input.dataset.cat] = input.dataset.cat === 'weight' ? Number(input.value) : input.value;
+    if (category) category[input.dataset.cat] = numeric.has(input.dataset.cat) ? Number(input.value) : input.value;
   });
-  form.querySelectorAll('[data-task-category]').forEach((select) => (categoryDraft.tasks[select.dataset.taskCategory].category = select.value));
-  form.querySelectorAll('[data-task-points]').forEach((input) => (categoryDraft.tasks[input.dataset.taskPoints].points = Number(input.value)));
+  form.querySelectorAll('[data-term-field]').forEach((input) => {
+    const term = categoryDraft.terms[Number(input.dataset.index)];
+    if (term) term[input.dataset.termField] = input.dataset.termField === 'weight' ? Number(input.value) : input.value;
+  });
+  for (const kind of ['task', 'quiz', 'forum']) {
+    const bucket = categoryDraft[kind + (kind === 'quiz' ? 'zes' : 's')];
+    form.querySelectorAll(`[data-${kind}-category]`).forEach((select) => bucket[select.getAttribute(`data-${kind}-category`)] && (bucket[select.getAttribute(`data-${kind}-category`)].category = select.value));
+    form.querySelectorAll(`[data-${kind}-points]`).forEach((input) => bucket[input.getAttribute(`data-${kind}-points`)] && (bucket[input.getAttribute(`data-${kind}-points`)].points = Number(input.value)));
+  }
+  form.querySelectorAll('[data-quiz-policy]').forEach((select) => (categoryDraft.quizzes[select.dataset.quizPolicy].policy = select.value));
+}
+
+/** Divide en N parciales: cada uno recibe las categorías de actividades actuales (la asistencia queda para toda la materia). */
+function splitDraftInTerms(draft, count) {
+  const general = draft.categories.filter((c) => c.source === 'attendance');
+  let base = draft.categories.filter((c) => c.source !== 'attendance');
+  if (!base.length) base = [newCategory('', 'Exámenes', 60), newCategory('', 'Tareas', 40)];
+  const sum = base.reduce((n, c) => n + (Number(c.weight) || 0), 0);
+  const share = (c) => (sum ? round2(((Number(c.weight) || 0) * 100) / sum) : round2(100 / base.length));
+  const rest = 100 - general.reduce((n, c) => n + (Number(c.weight) || 0), 0);
+  const each = Math.floor((rest / count) * 100) / 100;
+  draft.terms = Array.from({ length: count }, (_, i) => ({ key: 't' + Date.now() + i, name: `Parcial ${i + 1}`, weight: i === count - 1 ? round2(rest - each * (count - 1)) : each }));
+  const categories = [];
+  draft.terms.forEach((term, i) => {
+    // El primer parcial conserva las categorías originales (y lo que ya estaba enlazado a ellas).
+    for (const c of base) categories.push(i === 0 ? { ...c, term: term.key, weight: share(c) } : { ...newCategory(term.key, c.name, share(c)), distribution: c.distribution, dropLow: c.dropLow, dropHigh: c.dropHigh });
+  });
+  draft.categories = [...categories, ...general.map((c) => ({ ...c, term: '' }))];
+}
+
+/** Al quitar un parcial, sus categorías pasan a «Toda la materia» con el nombre del parcial para no repetirse. */
+function removeDraftTerm(draft, index) {
+  const [term] = draft.terms.splice(index, 1);
+  if (!term) return;
+  for (const c of draft.categories) {
+    if (c.term !== term.key) continue;
+    c.term = '';
+    c.name = `${c.name} (${term.name || 'parcial'})`.slice(0, 80);
+  }
 }
 
 function bindGradingManage() {
@@ -330,25 +545,45 @@ function bindGradingManage() {
   if (categoriesForm) {
     categoriesForm.addEventListener('input', () => {
       syncCategoryDraft();
-      const total = categoryDraft.categories.reduce((n, c) => n + (Number(c.weight) || 0), 0);
-      const box = document.getElementById('categoryTotal');
-      const ok = Math.abs(total - 100) <= 0.01;
-      box.className = ok ? 'grading-ok' : 'error';
-      box.textContent = `Suman ${Math.round(total * 100) / 100} %${ok ? '.' : ': deben sumar 100 %.'}`;
+      document.getElementById('categoryTotal').innerHTML = draftTotalsHtml(categoryDraft);
+    });
+    // Cambiar el parcial o el tipo de una categoría reacomoda la tabla (y las listas de categorías).
+    categoriesForm.addEventListener('change', (event) => {
+      const target = event.target;
+      if (target.matches('[data-cat="name"], [data-term-field="name"]')) {
+        // Solo cambia el texto de las listas (volver a dibujar aquí perdería el clic que causó el cambio).
+        syncCategoryDraft();
+        const isTerm = target.matches('[data-term-field]');
+        const item = (isTerm ? categoryDraft.terms : categoryDraft.categories)[Number(target.dataset.index)];
+        if (!item) return;
+        if (isTerm) categoriesForm.querySelectorAll('optgroup').forEach((g) => g.dataset.term === item.key && (g.label = item.name || 'Parcial'));
+        for (const c of isTerm ? categoryDraft.categories.filter((x) => x.term === item.key) : [item]) {
+          categoriesForm.querySelectorAll(`[data-task-category] option[value="${CSS.escape(c.key)}"], [data-quiz-category] option[value="${CSS.escape(c.key)}"], [data-forum-category] option[value="${CSS.escape(c.key)}"]`).forEach((o) => (o.textContent = draftCategoryName(categoryDraft, c)));
+        }
+        if (isTerm) categoriesForm.querySelectorAll(`[data-cat="term"] option[value="${CSS.escape(item.key)}"]`).forEach((o) => (o.textContent = item.name || 'Parcial'));
+        return;
+      }
+      if (!target.matches('[data-cat="term"], [data-cat="source"]')) return;
+      syncCategoryDraft();
+      render();
     });
     bindForm('#categoriesForm', async () => {
       syncCategoryDraft();
       const grading = records('grading')[0];
-      await request('/api/grades/scheme', {
+      const draft = categoryDraft;
+      const result = await request('/api/grades/scheme', {
         course: current.course.id,
         revision: grading?.revision ?? 0,
         scheme: 'categories',
-        categories: categoryDraft.categories.map(({ key, name, weight, source }) => ({ key, name, weight, source })),
-        assignments: Object.entries(categoryDraft.tasks).map(([task, value]) => ({ task, category: value.category || null, points: value.points })),
+        terms: draft.terms.map(({ key, name, weight }) => ({ key, name, weight })),
+        categories: draft.categories.map(({ key, name, weight, source, term, distribution, dropLow, dropHigh }) => ({ key, name, weight, source, term, distribution, dropLow, dropHigh })),
+        assignments: Object.entries(draft.tasks).map(([task, value]) => ({ task, category: value.category || null, points: value.points })),
+        quizzes: Object.entries(draft.quizzes).map(([quiz, value]) => ({ quiz, category: value.category || null, points: value.points, policy: value.policy })),
+        forums: Object.entries(draft.forums).filter(([, value]) => value.category).map(([forum, value]) => ({ forum, category: value.category, points: value.points })),
       });
       categoryDraft = null;
       categoryEditing = false;
-      return 'Categorías guardadas.';
+      return result.forums ? `Guardado. Se ${result.forums === 1 ? 'creó una actividad' : `crearon ${result.forums} actividades`} de participación para calificar los foros.` : 'Guardado.';
     });
   }
   bindForm('#finalRules', async (f) => {
@@ -374,14 +609,35 @@ document.addEventListener('click', async (event) => {
     categoryEditing = false;
     categoryDraft = null;
   }
+  const button = event.target.closest('[data-grading]');
   if (action === 'add-category') {
     syncCategoryDraft();
-    categoryDraft.categories.push({ key: 'n' + Date.now(), name: '', weight: 0, source: 'tasks' });
+    categoryDraft.categories.push(newCategory(button.dataset.term || ''));
   }
   if (action === 'remove-category') {
     syncCategoryDraft();
-    const [removed] = categoryDraft.categories.splice(Number(event.target.dataset.index), 1);
-    for (const value of Object.values(categoryDraft.tasks)) if (value.category === removed?.key) value.category = '';
+    const [removed] = categoryDraft.categories.splice(Number(button.dataset.index), 1);
+    for (const bucket of [categoryDraft.tasks, categoryDraft.quizzes, categoryDraft.forums]) {
+      for (const value of Object.values(bucket)) if (value.category === removed?.key) value.category = '';
+    }
+  }
+  if (action === 'split-terms') {
+    syncCategoryDraft();
+    splitDraftInTerms(categoryDraft, Number(document.getElementById('termCount')?.value) || 3);
+  }
+  if (action === 'add-term') {
+    syncCategoryDraft();
+    const term = { key: 't' + Date.now(), name: `Parcial ${categoryDraft.terms.length + 1}`, weight: 0 };
+    categoryDraft.terms.push(term);
+    categoryDraft.categories.push(newCategory(term.key, 'Exámenes', 60), newCategory(term.key, 'Tareas', 40));
+  }
+  if (action === 'remove-term') {
+    syncCategoryDraft();
+    removeDraftTerm(categoryDraft, Number(button.dataset.index));
+  }
+  if (action === 'remove-terms') {
+    syncCategoryDraft();
+    while (categoryDraft.terms.length) removeDraftTerm(categoryDraft, 0);
   }
   if (action === 'use-tasks') {
     try {
@@ -389,7 +645,8 @@ document.addEventListener('click', async (event) => {
         course: current.course.id,
         revision: records('grading')[0]?.revision ?? 0,
         scheme: 'tasks',
-        categories: gradingSettings().categories.map((c) => ({ key: c.id, name: c.name, weight: c.weight, source: c.source })),
+        terms: (gradingSettings().terms || []).map((t) => ({ key: t.id, name: t.name, weight: t.weight })),
+        categories: gradingSettings().categories.map((c) => ({ key: c.id, name: c.name, weight: c.weight, source: c.source, term: c.term, distribution: c.distribution, dropLow: c.dropLow, dropHigh: c.dropHigh })),
       });
       categoryEditing = false;
       categoryDraft = null;

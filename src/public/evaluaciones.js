@@ -245,9 +245,7 @@ function quizGradeHtml(grade) {
   }
   const policy = grade?.policy || 'best';
   return `<fieldset class="quiz-settings"><legend>Calificación</legend><div class="quiz-grid">
-    <label>Cuenta en la calificación<select name="gradeCategory"><option value="">No cuenta (solo práctica)</option>${cats
-      .map((c) => `<option value="${esc(c.id)}" ${grade?.category === c.id ? 'selected' : ''}>${esc(c.name)} (${c.weight} %)</option>`)
-      .join('')}</select></label>
+    <label>Cuenta en la calificación<select name="gradeCategory">${gradebookCategoryOptions(grade?.category, 'No cuenta (solo práctica)')}</select></label>
     <label>Valor dentro de la categoría (puntos)<input name="gradePoints" type="number" min="0.1" max="1000" step="0.1" value="${esc(grade?.points ?? 10)}"></label>
     <label>Con varios intentos, cuenta<select name="gradePolicy">${Object.entries(QUIZ_POLICIES)
       .map(([k, v]) => `<option value="${k}" ${policy === k ? 'selected' : ''}>${v}</option>`)

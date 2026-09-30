@@ -1294,3 +1294,19 @@ article.course .course-cover.has-cover .course-letter { opacity: 0; }
 @media (max-width: 720px) {
   .hub-banner .hub-edit { position: static; margin-top: 10px; }
 }
+
+/* ---- 12.26: parciales y categorías ---- */
+.grading-table tr.grading-group th { background: var(--canvas); color: var(--brand); font-size: 0.95rem; text-transform: none; letter-spacing: 0; padding-top: 0.9rem; }
+.grading-table tr.grading-group .muted { font-weight: 400; font-size: 0.85rem; }
+.grading-table tr.grading-add td { padding-top: 0.25rem; padding-bottom: 0.6rem; border-top: 0; }
+.grading-table .cat-options { margin-top: 0.4rem; font-size: 0.9rem; }
+.grading-table .cat-options summary { cursor: pointer; color: var(--link); }
+.grading-table .cat-options label { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; margin-top: 0.4rem; }
+.grading-table .cat-options select { min-width: 0; width: auto; max-width: 16rem; }
+.grading-totals { display: flex; flex-wrap: wrap; gap: 0.35rem 1.25rem; margin: 0.75rem 0; }
+.item-kind { display: inline-block; padding: 0.1rem 0.5rem; border-radius: 999px; font-size: 0.8rem; background: var(--canvas); color: var(--ink-soft); white-space: nowrap; }
+.item-kind.kind-quiz { background: #eef3ff; color: #2f4aa0; }
+.item-kind.kind-forum { background: #f3eefc; color: #5b3a96; }
+.gradebook .term-col { background: #eef6fb; font-weight: 600; }
+.inline-label { display: inline-flex; align-items: center; gap: 0.5rem; }
+.inline-label select { width: auto; }
