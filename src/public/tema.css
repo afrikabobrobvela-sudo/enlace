@@ -1310,3 +1310,34 @@ article.course .course-cover.has-cover .course-letter { opacity: 0; }
 .gradebook .term-col { background: #eef6fb; font-weight: 600; }
 .inline-label { display: inline-flex; align-items: center; gap: 0.5rem; }
 .inline-label select { width: auto; }
+
+/* ---- 12.27: evaluaciones al estilo Brightspace ---- */
+.quiz-save-status { margin-left: auto; font-size: 0.85rem; color: var(--ink-faint); }
+.quiz-save-status.is-saved { color: var(--success); }
+.quiz-save-status.is-saved::before { content: '✓ '; }
+.quiz-save-status.is-error { color: #a4461b; }
+.quiz-attempt-head .quiz-clock { margin-left: 12px; }
+.quiz-hint-box { margin-top: 10px; font-size: 0.92rem; }
+.quiz-hint-box > summary { cursor: pointer; color: var(--link); font-weight: 600; }
+.quiz-hint-box p { margin: 6px 0 0; padding: 8px 12px; border-radius: var(--radius-sm); background: #fff8e6; color: var(--ink); }
+.quiz-total { margin: 10px 0 4px; }
+.draw-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; margin: 6px 0; }
+.draw-row .draw-pool { flex: 1 1 9rem; font-weight: 600; }
+.draw-row .draw-field { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.draw-row input[type='number'] { width: 4.6rem !important; min-width: 0; }
+/* Vista previa (dentro de la ventana, donde las etiquetas de formulario van en columna): opciones como en el intento. */
+#quizPreviewQuestions .quiz-question label { display: flex; flex-direction: row; align-items: center; gap: 10px; font-weight: 400; }
+#quizPreviewQuestions .quiz-question input[type='radio'], #quizPreviewQuestions .quiz-question input[type='checkbox'] { width: auto !important; flex: none; margin: 0; }
+#quizPreviewQuestions .quiz-question .quiz-match-row span { flex: 1 1 auto; }
+.draw-all { padding-top: 8px; border-top: 1px dashed var(--line-strong); }
+.quiz-weights { margin-top: 8px; }
+.quiz-weights > summary { cursor: pointer; color: var(--link); font-size: 0.92rem; }
+.quiz-weights input[type='number'] { width: 6rem; }
+.import-groups { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 8px 0; }
+.import-groups select { width: auto; }
+.warning-text { color: #8a5a00; font-size: 0.88rem; }
+.bank-import-topics { columns: 2 16rem; margin: 6px 0 10px; padding-left: 1.2rem; }
+.preview-mark { font-weight: 700; margin-left: 6px; }
+.preview-mark.ok { color: var(--success); }
+.preview-mark.bad { color: #b3261e; }
+.preview-mark.partial, .preview-mark.pending { color: #8a5a00; }

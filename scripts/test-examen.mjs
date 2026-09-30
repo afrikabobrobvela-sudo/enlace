@@ -68,7 +68,13 @@ checks += 3;
 await call('ana', '/api/attempt/start', { course: c, quiz: q.id }, 400);
 const mal = await call('ana', '/api/attempt/start', { course: c, quiz: q.id, password: 'newton' }, 400);
 assert.match(mal.error, /quedan 8 intentos/);
-for (let i = 0; i < 7; i++) await call('ana', '/api/attempt/start', { course: c, quiz: q.id, password: 'x' + i }, 400);
+for (let i = 0; i < 3; i++) await call('ana', '/api/attempt/start', { course: c, quiz: q.id, password: 'x' + i }, 400);
+// 12.27: como máximo 5 códigos equivocados por minuto.
+assert.match((await call('ana', '/api/attempt/start', { course: c, quiz: q.id, password: 'x3' }, 429)).error, /Espera un minuto/);
+assert.match((await call('ana', '/api/attempt/start', { course: c, quiz: q.id, password: 'gauss' }, 429)).error, /Espera un minuto/); // ni la correcta
+store.raw().prepare("UPDATE aula_exam_tries SET last_failure='2020-01-01T00:00:00.000Z'").run(); // pasó el minuto
+for (let i = 3; i < 7; i++) await call('ana', '/api/attempt/start', { course: c, quiz: q.id, password: 'x' + i }, 400);
+checks += 2;
 await call('ana', '/api/attempt/start', { course: c, quiz: q.id, password: 'otra' }, 429);
 await call('ana', '/api/attempt/start', { course: c, quiz: q.id, password: 'gauss' }, 429); // bloqueada aunque ya la sepa
 let monitor = await call('docente', `/api/exam/monitor?course=${c}&quiz=${q.id}`);
@@ -129,13 +135,15 @@ const intento = (await call('docente', '/api/course?id=' + c)).records.find((x) 
 assert.equal(intento.data.integrity.events.length, 4);
 checks += 3;
 
-// ---- Sin modo examen no hay guardado progresivo ni contraseña ----
+// ---- Sin modo examen: sin contraseña ni registro de salidas, pero (12.27) las respuestas sí se guardan ----
 const normal = await call('docente', '/api/record', { course: c, kind: 'quiz', data: { title: 'Tarea', visible: true, questions: preguntas } }, 201);
 await call('ana', '/api/attempt/start', { course: c, quiz: normal.id });
-await call('ana', '/api/attempt/progress', { course: c, quiz: normal.id, attempt: 1, answers: {} }, 400);
+await call('ana', '/api/attempt/progress', { course: c, quiz: normal.id, attempt: 1, answers: { 0: 1 }, events: [{ kind: 'left', seconds: 9 }] });
+const retomadoNormal = await call('ana', '/api/attempt/start', { course: c, quiz: normal.id });
+assert.deepEqual([retomadoNormal.saved, retomadoNormal.exam], [{ 0: 1 }, null], 'Al recargar vuelven las respuestas guardadas');
 const libre = await call('ana', '/api/attempt', { course: c, quiz: normal.id, answers: correcta }, 201);
 assert.equal(libre.data.integrity, null);
-checks++;
+checks += 2;
 
 assert.deepEqual(store.raw().prepare('PRAGMA foreign_key_check').all(), []);
 console.log(`PASS: ${checks} verificaciones del modo examen — contraseña con bloqueo, ubicación del salón, respuestas guardadas, sin regresar, salidas registradas y monitor del docente.`);

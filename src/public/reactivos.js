@@ -67,7 +67,13 @@ function newQuestionBodyHtml(q, i, numericBody) {
         .join('')}</div>
         ${q.options.length < 10 ? '<button type="button" class="text-btn" data-quiz="add-option">＋ Opción</button>' : ''}
         <p class="muted">Marca con la casilla todas las opciones correctas; el alumno puede elegir varias.</p>
-        ${scoringSelect(q, 'Todo o nada (solo si elige exactamente las correctas)', 'Parcial (correctas elegidas menos incorrectas)')}`;
+        <label>Calificación<select data-f="scoring">${[
+          ['all', 'Todo o nada (solo si elige exactamente las correctas)'],
+          ['partial', 'Parcial (correctas elegidas menos incorrectas)'],
+          ['each', 'Por opción (cada opción bien marcada o bien sin marcar vale lo mismo, como «Respuestas correctas» de Brightspace)'],
+        ]
+          .map(([v, label]) => `<option value="${v}" ${q.scoring === v ? 'selected' : ''}>${label}</option>`)
+          .join('')}</select></label>`;
     case 'fill':
       return `<p class="muted">Escribe en el enunciado cada espacio entre dobles corchetes con su respuesta: «La unidad de fuerza es el [[newton]]». Si se aceptan varias, sepáralas con una barra: [[newton|N]]. Cada espacio vale lo mismo.</p>${exactCheck(q)}`;
     case 'matching':
@@ -80,6 +86,7 @@ function newQuestionBodyHtml(q, i, numericBody) {
         .join('')}</div>
         ${q.pairs.length < 10 ? '<button type="button" class="text-btn" data-quiz="add-pair">＋ Pareja</button>' : ''}
         <label>Respuestas de más (opcional, una por renglón; no le corresponden a ningún elemento)<textarea data-f="extra" rows="2">${esc((q.extra || []).join('\n'))}</textarea></label>
+        <label class="check-label"><input type="checkbox" data-f="reuse" ${q.reuse ? 'checked' : ''}> Una misma respuesta puede ser la pareja de varios elementos (se muestra una sola vez)</label>
         ${scoringSelect(q, 'Todo o nada', 'Parcial (cada pareja vale lo mismo)')}`;
     case 'ordering':
       return `<label>Elementos en el orden correcto (uno por renglón; el alumno los recibe revueltos)<textarea data-f="items" rows="4" required>${esc((q.items || []).join('\n'))}</textarea></label>
@@ -88,7 +95,8 @@ function newQuestionBodyHtml(q, i, numericBody) {
       return `<label>Guía para calificar (opcional; solo la ves tú)<textarea data-f="guide" rows="2" maxlength="3000">${esc(q.guide || '')}</textarea></label>
         <p class="muted">El alumno escribe su respuesta y tú la calificas después, desde «Revisar respuestas escritas» en la evaluación. Mientras tanto cuenta 0.</p>`;
     case 'short':
-      return `<label>Respuestas aceptadas (una por renglón)<textarea data-f="answers" rows="3" required>${esc((q.answers || []).join('\n'))}</textarea></label>${exactCheck(q)}`;
+      return `<label>Respuestas aceptadas (una por renglón)<textarea data-f="answers" rows="3" required>${esc((q.answers || []).join('\n'))}</textarea></label>${exactCheck(q)}
+        <label>Tolerancia numérica (opcional; si la respuesta es un número, se acepta a esta distancia: con 0.1, 2.1 acepta de 2.0 a 2.2)<input data-f="tolerance" type="number" min="0" step="any" value="${esc(q.tolerance ?? '')}"></label>`;
     case 'multishort':
       return `<div class="quiz-grid"><label>Espacios para responder<input data-f="boxes" type="number" min="1" max="10" value="${esc(q.boxes)}"></label></div>
         <label>Respuestas aceptadas (una por renglón; alternativas de la misma con barra: metro|m)<textarea data-f="answers" rows="4" required>${esc((q.answers || []).join('\n'))}</textarea></label>
@@ -121,13 +129,16 @@ function readNewQuestionBody(box, type, i, readNumeric) {
         pairs: [...box.querySelectorAll('[data-pair]')].map((row) => ({ left: row.querySelector('[data-p="left"]').value, right: row.querySelector('[data-p="right"]').value })),
         extra: lines(get('extra')?.value),
         scoring,
+        ...(get('reuse')?.checked ? { reuse: true } : {}),
       };
     case 'ordering':
       return { items: lines(get('items')?.value), scoring };
     case 'essay':
       return { guide: get('guide')?.value || '' };
-    case 'short':
-      return { answers: lines(get('answers')?.value), exact: get('exact')?.checked === true };
+    case 'short': {
+      const tolerance = get('tolerance')?.value;
+      return { answers: lines(get('answers')?.value), exact: get('exact')?.checked === true, ...(tolerance !== undefined && tolerance !== '' ? { tolerance: Number(tolerance) } : {}) };
+    }
     case 'multishort':
       return { answers: lines(get('answers')?.value), boxes: Number(get('boxes')?.value || 1), exact: get('exact')?.checked === true };
     case 'sigfig':
@@ -150,17 +161,17 @@ function newQuestionAnswerHtml(x) {
     case 'truefalse':
       return `<p>Respuesta: <b>${x.correct ? 'Verdadero' : 'Falso'}</b></p>`;
     case 'multi':
-      return `<ol type="A">${x.options.map((o, j) => `<li>${esc(o)} ${x.correct.includes(j) ? '✓' : ''}</li>`).join('')}</ol><p class="muted">${x.scoring === 'partial' ? 'Crédito parcial' : 'Todo o nada'}</p>`;
+      return `<ol type="A">${x.options.map((o, j) => `<li>${esc(o)} ${x.correct.includes(j) ? '✓' : ''}</li>`).join('')}</ol><p class="muted">${x.scoring === 'partial' ? 'Crédito parcial' : x.scoring === 'each' ? 'Por opción' : 'Todo o nada'}</p>`;
     case 'fill':
       return `<p class="muted">Espacios: ${[...String(x.text).matchAll(/\[\[([^\]]+)\]\]/g)].map((m) => `<code>${esc(m[1])}</code>`).join(' · ')}${x.exact ? ' · distingue mayúsculas y acentos' : ''}</p>`;
     case 'matching':
-      return `<ul>${x.pairs.map((p) => `<li>${esc(p.left)} ↔ <b>${esc(p.right)}</b></li>`).join('')}</ul>${x.extra?.length ? `<p class="muted">De más: ${x.extra.map(esc).join(', ')}</p>` : ''}`;
+      return `<ul>${x.pairs.map((p) => `<li>${esc(p.left)} ↔ <b>${esc(p.right)}</b></li>`).join('')}</ul>${x.extra?.length ? `<p class="muted">De más: ${x.extra.map(esc).join(', ')}</p>` : ''}${x.reuse ? '<p class="muted">Las respuestas repetidas se muestran una vez.</p>' : ''}`;
     case 'ordering':
       return `<ol>${x.items.map((o) => `<li>${esc(o)}</li>`).join('')}</ol>`;
     case 'essay':
       return `<p class="muted">Respuesta escrita: la calificas tú.${x.guide ? ` Guía: ${esc(x.guide)}` : ''}</p>`;
     case 'short':
-      return `<p>Se acepta: ${x.answers.map((a) => `<code>${esc(a)}</code>`).join(' · ')}</p>`;
+      return `<p>Se acepta: ${x.answers.map((a) => `<code>${esc(a)}</code>`).join(' · ')}${x.tolerance !== undefined ? ` · tolerancia ±${esc(x.tolerance)}` : ''}</p>`;
     case 'multishort':
       return `<p>${x.boxes} ${x.boxes === 1 ? 'respuesta' : 'respuestas'} de: ${x.answers.map((a) => `<code>${esc(a)}</code>`).join(' · ')}</p>`;
     case 'sigfig':

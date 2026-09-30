@@ -5,6 +5,38 @@ No es el código de D2L Brightspace ni una plataforma oficial de la BUAP.
 
 Esta versión se despliega en **tu propia cuenta de Cloudflare** (Workers + D1 + R2, plan gratuito) y ya no depende de ChatGPT Sites.
 
+## Novedades de la versión 12.27 (evaluaciones al estilo Brightspace)
+
+Se integró al sistema de evaluaciones de Enlace lo que faltaba del módulo de Brightspace. No es un sistema aparte: tus evaluaciones, bancos, calificaciones y exámenes de siempre siguen igual.
+
+**Importar el CSV de Brightspace** (el de la biblioteca de preguntas):
+- En una evaluación: «Importar examen (Brightspace, Word, Excel o texto)» o, dentro del editor, «Importar preguntas». Puedes elegir **varios archivos a la vez**.
+- En el banco de preguntas: «Importar preguntas»; cada archivo queda en su tema (o por el ID de Brightspace, por ejemplo QUIM-P01).
+- Se reconocen los 8 tipos: elección múltiple (con crédito parcial por opción), verdadero/falso, selección múltiple, coincidencia, ordenamiento, respuesta corta, para completar y respuesta escrita. También puntos, pista, retroalimentación y comentarios por opción.
+- Subíndices y superíndices (H₂O, ψ²) y acentos se conservan, también si vienen en HTML.
+- Antes de agregar ves cuántas se entendieron y, de las que no, el renglón y el motivo.
+- Con el banco de Química: 121 preguntas, 0 errores, 12 grupos.
+
+**Grupos al azar con puntos**: en «Preguntas al azar» eliges, por grupo, cuántas recibe cada alumno y cuántos puntos vale cada una (o para todos los grupos a la vez). Se muestra el **total de puntos**: 12 grupos × 5 preguntas × 1 punto = 60.
+
+**Vista previa** (en la página de la evaluación): un sorteo nuevo cada vez, tal como lo recibiría un alumno. Puedes contestarla y revisar tus respuestas. No se guarda nada.
+
+**Preguntas por página** (Configuración): por ejemplo, de 5 en 5.
+
+**Las respuestas se guardan solas en cualquier evaluación** (antes solo en el modo examen). Si el alumno recarga la página o se le va el internet, vuelve a entrar y sigue con las mismas preguntas y sus respuestas. Si se acaba el tiempo, el intento se envía con lo que tenía guardado.
+
+**Safe Exam Browser** (opcional): la evaluación puede exigirlo. Pega la Config Key de tu archivo .seb (en la herramienta de configuración de SEB: «Exam» → «Use Browser Exam Key and Config Key»). Desde otro navegador no se puede empezar, guardar ni enviar.
+
+**Código para empezar**: además del bloqueo a los 10 intentos, ahora hay un máximo de 5 códigos equivocados por minuto. El código sigue siendo visible solo para ti; los alumnos nunca lo reciben.
+
+También:
+- Selección múltiple califica «por opción», como «Respuestas correctas» de Brightspace.
+- Coincidencia admite una respuesta que es pareja de varios elementos.
+- Respuesta corta puede tener tolerancia numérica.
+- Una evaluación admite hasta 300 preguntas.
+
+Requiere la migración **0032**: agrega dos columnas al registro de códigos equivocados. No borra ni modifica datos.
+
 ## Novedades de la versión 12.26 (parciales, categorías y qué cuenta en cada una)
 
 En **Calificaciones → Administrar calificaciones** (con «Usar categorías con pesos»):

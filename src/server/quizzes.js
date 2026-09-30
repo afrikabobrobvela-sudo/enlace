@@ -4,7 +4,8 @@ import { distanceMeters } from './attendance.js';
 import { NEW_TYPES, gradeNew, instanceNew, publicNew, validateNew } from './reactivos.js';
 import { fail, isoDate, text } from './http.js';
 
-export const MAX_QUESTIONS = 100;
+// 12.27: un banco de Brightspace completo (121 preguntas en 12 grupos) cabe en una sola evaluación.
+export const MAX_QUESTIONS = 300;
 const MAX_POOL_NAME = 80;
 const TIME_GRACE_MS = 60_000; // margen para la conexión al enviar
 const VARIABLE = /^[A-Za-z_][A-Za-z0-9_]{0,15}$/;
@@ -143,10 +144,26 @@ export function questionFields(q, label) {
     const validOptions =
       Array.isArray(q.options) && q.options.length >= 2 && q.options.length <= 6 && Number.isInteger(q.correct) && q.correct >= 0 && q.correct < q.options.length;
     if (!validOptions) fail(`${label}: agrega de 2 a 6 opciones y marca la correcta.`);
-    fields = { options: q.options.map((o) => text(o, 1500)), correct: q.correct };
+    fields = { options: q.options.map((o) => text(o, 1500)), correct: q.correct, ...choiceWeights(q, label) };
   } else if (type !== 'numeric') fields = validateNew(type, q, label, numericFields);
   else fields = numericFields(q, label);
   return { type, text: prompt, ...fields, ...extraFields(q, label, fields.options), ...image, ...pool };
+}
+
+/**
+ * Crédito parcial por opción (12.27, como los «pesos» de Brightspace): `weights[k]` es el % que vale elegir la opción k.
+ * La marcada como correcta siempre vale 100 %. Solo se guarda si alguna otra opción da crédito.
+ */
+function choiceWeights(q, label) {
+  if (!Array.isArray(q.weights)) return {};
+  if (q.weights.length !== q.options.length) fail(`${label}: indica el crédito de cada opción.`);
+  const weights = q.weights.map((w) => {
+    const n = Number(w ?? 0);
+    if (!Number.isFinite(n) || n < 0 || n > 100) fail(`${label}: el crédito de cada opción va de 0 a 100 %.`);
+    return Math.round(n * 100) / 100;
+  });
+  weights[q.correct] = 100;
+  return weights.some((w, k) => k !== q.correct && w > 0) ? { weights } : {};
 }
 
 /**
@@ -162,6 +179,9 @@ function extraFields(q, label, options) {
   }
   const explanation = String(q.explanation ?? '').trim().slice(0, 3000);
   if (explanation) extra.explanation = explanation;
+  // Pista (12.27): la ve el alumno mientras contesta, si la abre.
+  const hint = String(q.hint ?? '').trim().slice(0, 1000);
+  if (hint) extra.hint = hint;
   if (options && Array.isArray(q.optionFeedback)) {
     const notes = options.map((_, i) => String(q.optionFeedback[i] ?? '').trim().slice(0, 1000));
     if (notes.some(Boolean)) extra.optionFeedback = notes;
@@ -240,6 +260,9 @@ export function quizFields(input) {
   // Qué ve el alumno al terminar: su calificación (o «pendiente») y si acertó cada pregunta.
   // `releaseAt`: hasta esa fecha el alumno no ve nada (ni calificación ni aciertos), por ejemplo mientras otros
   // grupos aún no presentan; después, lo que indiquen las casillas.
+  // Preguntas por página (12.27; 0 = todas juntas). En el modo examen «una pregunta a la vez» manda.
+  const perPage = Number(input.settings?.perPage ?? 0);
+  if (!Number.isInteger(perPage) || perPage < 0 || perPage > 50) fail('Las preguntas por página van de 0 (todas juntas) a 50.');
   const releaseAt = isoDate(input.settings?.results?.releaseAt || '');
   const results = {
     score: input.settings?.results?.score !== false,
@@ -258,10 +281,45 @@ export function quizFields(input) {
       ...(opensAt ? { opensAt } : {}),
       ...(closesAt ? { closesAt } : {}),
       timerMode,
+      ...(perPage ? { perPage } : {}),
       results,
       exam: examFields(input.settings?.exam),
+      ...sebFields(input.settings?.seb),
     },
   };
+}
+
+// ---- Safe Exam Browser (12.27) ---------------------------------------------------------------------
+// SEB manda en cada solicitud la cabecera X-SafeExamBrowser-ConfigKeyHash = SHA-256(URL completa + Config Key) (o
+// X-SafeExamBrowser-RequestHash con la Browser Exam Key). El docente copia la llave de su archivo .seb.
+
+const SEB_KEY = /^[0-9a-f]{64}$/;
+
+/** `{ seb: { keys } }` si la evaluación exige Safe Exam Browser; las llaves nunca llegan al alumno. */
+function sebFields(input) {
+  if (!input || input.required !== true) return {};
+  const keys = [...new Set((Array.isArray(input.keys) ? input.keys : String(input.keys ?? '').split(/[\s,;]+/)).map((k) => String(k).trim().toLowerCase()).filter(Boolean))];
+  if (!keys.length) fail('Para exigir Safe Exam Browser, pega la Config Key de tu archivo .seb (64 caracteres).');
+  if (keys.length > 10 || keys.some((k) => !SEB_KEY.test(k))) fail('Cada llave de Safe Exam Browser tiene 64 caracteres hexadecimales (0-9 y a-f). Puedes pegar hasta 10.');
+  return { seb: { required: true, keys } };
+}
+
+async function sha256hex(value) {
+  const bytes = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value)));
+  return [...bytes].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+/** ¿La solicitud viene de Safe Exam Browser con una configuración permitida? (true si la evaluación no lo exige) */
+export async function sebAllows(quiz, request) {
+  const keys = quiz.data.settings?.seb?.keys || [];
+  if (!keys.length) return true;
+  const url = request.url.split('#')[0];
+  const sent = [request.headers.get('X-SafeExamBrowser-ConfigKeyHash'), request.headers.get('X-SafeExamBrowser-RequestHash')]
+    .map((h) => String(h || '').trim().toLowerCase())
+    .filter((h) => SEB_KEY.test(h));
+  if (!sent.length) return false;
+  for (const key of keys) if (sent.includes(await sha256hex(url + key))) return true;
+  return false;
 }
 
 // ---- Modo examen ---------------------------------------------------------------------------------
@@ -300,7 +358,9 @@ function examFields(input) {
 export function publicSettings(settings) {
   if (!settings) return settings;
   // El código de la sección del alumno (startCode) tampoco llega: solo se avisa que hace falta uno.
-  const { startCode, ...rest } = settings;
+  const { startCode, seb, ...rest } = settings;
+  // Safe Exam Browser: el alumno sabe que se exige, no las llaves.
+  if (seb) rest.needsSeb = true;
   if (!rest.exam) return startCode ? { ...rest, needsCode: true } : rest;
   const { password, place, ...exam } = rest.exam;
   return { ...rest, ...(startCode || password ? { needsCode: true } : {}), exam: { ...exam, needsPassword: Boolean(startCode || password), checksLocation: Boolean(place) } };
@@ -386,7 +446,7 @@ export function finalAnswers(quiz, instance, start, submitted) {
 /** Forma canónica de una pregunta (las de versiones anteriores no tienen `type`: son de opción múltiple). */
 const canonical = (q) => {
   if (NEW_TYPES.includes(q.type)) {
-    const { image: _image, points: _p, explanation: _e, optionFeedback: _o, ...rest } = q;
+    const { image: _image, points: _p, explanation: _e, optionFeedback: _o, hint: _h, ...rest } = q;
     return rest;
   }
   return canonicalOld(q);
@@ -394,7 +454,7 @@ const canonical = (q) => {
 const canonicalOld = (q) => ({
   ...(q.type === 'numeric'
     ? { type: 'numeric', text: q.text, answer: q.answer, tolerance: q.tolerance, unit: q.unit, variables: q.variables }
-    : { type: 'choice', text: q.text, options: q.options, correct: q.correct }),
+    : { type: 'choice', text: q.text, options: q.options, correct: q.correct, ...(q.weights ? { weights: q.weights } : {}) }),
   ...(q.pool ? { pool: q.pool } : {}),
 });
 
@@ -403,7 +463,7 @@ const canonicalOld = (q) => ({
  * tolerancia, forma de calificar), el valor en puntos y la retroalimentación. Lo demás (enunciado, opciones, datos,
  * parejas…) es lo que el alumno vio: no cambia. En «Para completar», las respuestas van dentro de [[ ]] del enunciado.
  */
-const KEY_FIELDS = ['correct', 'answer', 'answers', 'tolerance', 'scoring', 'exact', 'figures', 'penalty', 'points', 'explanation', 'optionFeedback', 'image', 'guide'];
+const KEY_FIELDS = ['correct', 'answer', 'answers', 'tolerance', 'scoring', 'exact', 'figures', 'penalty', 'points', 'explanation', 'optionFeedback', 'image', 'guide', 'hint', 'weights'];
 /** JSON con las llaves ordenadas (las preguntas de versiones anteriores guardan sus campos en otro orden). */
 const stable = (value) =>
   Array.isArray(value)
@@ -429,9 +489,9 @@ function structureOf(q) {
 function keyOf(q) {
   const type = q.type || 'choice';
   const points = q.points || 1;
-  if (type === 'choice') return { correct: q.correct, points };
+  if (type === 'choice') return { correct: q.correct, points, ...(q.weights ? { weights: q.weights } : {}) };
   if (type === 'numeric') return { answer: q.answer, tolerance: q.tolerance, points };
-  const { explanation: _e, optionFeedback: _o, image: _i, guide: _g, ...rest } = q;
+  const { explanation: _e, optionFeedback: _o, image: _i, guide: _g, hint: _h, ...rest } = q;
   return { ...rest, type, points };
 }
 
@@ -513,7 +573,9 @@ export function quizInstance(quiz, userId, attempt) {
   const random = generator(seedOf(`${quiz.id}:${userId}:${attempt}`));
   const valuesOf = (q, rnd) => Object.fromEntries((q.variables || []).map((v) => [v.name, Number((v.min + rnd() * (v.max - v.min)).toFixed(v.decimals))]));
   const showValues = (q, values) => q.text.replace(/\{([A-Za-z_][A-Za-z0-9_]*)\}/g, (all, name) => (Object.hasOwn(values, name) ? String(values[name]) : all));
-  const questions = quiz.data.questions.map((q, index) => {
+  const withHint = (item, q) => (q.hint ? { ...item, hint: q.hint } : item);
+  const questions = quiz.data.questions.map((q, index) => withHint(instanceOf(q, index), q));
+  function instanceOf(q, index) {
     if (NEW_TYPES.includes(q.type)) {
       // Azar propio de cada pregunta: así las evaluaciones de antes (solo opción múltiple y aritmética) conservan sus instancias.
       const own = generator(seedOf(`${quiz.id}:${userId}:${attempt}:q${index}`));
@@ -524,7 +586,7 @@ export function quizInstance(quiz, userId, attempt) {
     if (q.type !== 'numeric') return { index, type: 'choice', text: q.text, options: q.options, ...points, ...(q.image ? { image: q.image } : {}) };
     const values = valuesOf(q, random);
     return { index, type: 'numeric', text: showValues(q, values), unit: q.unit, values, ...points, ...(q.image ? { image: q.image } : {}) };
-  });
+  }
   if (quiz.data.settings?.shuffle) {
     for (let i = questions.length - 1; i > 0; i--) {
       const j = Math.floor(random() * (i + 1));
@@ -595,7 +657,9 @@ export function gradeAttempt(quiz, instance, answers) {
       // El alumno responde con la posición que vio; con opciones mezcladas se traduce a la opción original.
       const original = item.perm ? item.perm[raw] : raw;
       const ok = original === q.correct;
-      return { index: item.index, answer: original, correct: ok, credit: ok ? 1 : 0 };
+      // Con crédito parcial por opción (12.27), otra opción puede valer una parte.
+      const credit = ok ? 1 : q.weights ? (q.weights[original] || 0) / 100 : 0;
+      return { index: item.index, answer: original, correct: ok, credit };
     }
     const value = parseNumber(raw);
     if (!Number.isFinite(value)) fail(`Escribe un número en la pregunta ${n + 1} (por ejemplo 9.8).`);

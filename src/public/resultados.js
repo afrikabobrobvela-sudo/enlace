@@ -38,7 +38,8 @@ function answerText(question, d) {
   if (type === 'multi') return a.map((j) => MULTI_LETTERS[j] || '?').join(', ');
   if (type === 'truefalse') return a === true ? 'Verdadero' : 'Falso';
   if (type === 'matching') {
-    const rights = [...question.pairs.map((p) => p.right), ...(question.extra || [])];
+    const all = [...question.pairs.map((p) => p.right), ...(question.extra || [])];
+    const rights = question.reuse ? [...new Set(all)] : all; // 12.27: respuestas repetidas aparecen una vez
     return question.pairs.map((p, i) => `${p.left} → ${a[i] === null || a[i] === undefined ? '—' : rights[a[i]] ?? '?'}`).join('; ');
   }
   if (type === 'ordering') return `Lugares: ${a.map((p) => (p === null ? '—' : p + 1)).join(', ')}`;

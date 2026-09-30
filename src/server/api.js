@@ -35,6 +35,7 @@ import {
   keyChanged,
   sameDraw,
   sameStructure,
+  sebAllows,
   validEvents,
 } from './quizzes.js';
 import { bankImageVisible, bankRoutes } from './bank.js';
@@ -346,6 +347,61 @@ async function openStart(db, quiz, userId) {
     userId,
   );
 }
+
+const PREVIEW_SEED = /^vista:[0-9a-f-]{36}$/;
+const SEB_MESSAGE = 'Esta evaluación solo se puede presentar en Safe Exam Browser. Ábrela con el archivo de configuración que te dio tu docente.';
+const CODE_PER_MINUTE = 5;
+
+/** Safe Exam Browser (12.27): si la evaluación lo exige, cada solicitud del intento debe venir de él. */
+async function assertSeb(quiz, request) {
+  if (!(await sebAllows(quiz, request))) fail(SEB_MESSAGE, 403, { needsSeb: true });
+}
+
+/**
+ * Cierra un intento cuyo tiempo se acabó sin enviarse: se califica con lo que dejó guardado (o 0). Lo usan empezar,
+ * guardar y enviar (12.27): pasado el límite, guardar responde 409 y el intento ya queda enviado.
+ */
+async function closeExpiredAttempt(db, quiz, user, start) {
+  let saved = null;
+  try {
+    saved = start.progress ? JSON.parse(start.progress) : null;
+  } catch {
+    saved = null;
+  }
+  const instance = quizInstance(quiz, user.id, start.attempt);
+  let graded = { correct: 0, total: instance.length, score: 0, details: null };
+  if (saved && Object.keys(saved).length) {
+    try {
+      graded = gradeAttempt(quiz, instance, finalAnswers(quiz, instance, start, saved));
+    } catch {
+      // Una respuesta guardada inválida no impide cerrar el intento.
+    }
+  }
+  await run(
+    db,
+    `INSERT OR IGNORE INTO aula_attempts (id,course,quiz,user_id,name,answers,correct,total,score,created,attempt,details,integrity)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    attemptId(quiz.id, user.id, start.attempt),
+    quiz.course,
+    quiz.id,
+    user.id,
+    user.name,
+    JSON.stringify(graded.details ? graded.details.map((d) => d.answer) : []),
+    graded.correct,
+    graded.total,
+    graded.score,
+    nowIso(),
+    start.attempt,
+    graded.details ? JSON.stringify(graded.details) : null,
+    quiz.data.settings?.exam ? JSON.stringify(integritySummary(start)) : null,
+  );
+}
+
+const EXPIRED_MESSAGE = 'Se terminó el tiempo: tu evaluación se envió con las respuestas que tenías guardadas.';
+const expired = (quiz, start) => {
+  const deadline = deadlineOf(quiz, start.started);
+  return Boolean(deadline && Date.now() > Date.parse(deadline) + 60_000);
+};
 
 async function attemptContext(db, user, body) {
   const a = await access(db, user, body.course);
@@ -1283,6 +1339,7 @@ const routes = {
   'POST /api/attempt/start': async ({ db, user, request }) => {
     const body = await readJson(request);
     const { quiz } = await attemptContext(db, user, body);
+    await assertSeb(quiz, request);
     const max = quiz.data.settings?.attempts || 1;
     const exam = quiz.data.settings?.exam || null;
     for (;;) {
@@ -1296,14 +1353,21 @@ const routes = {
         // empezar; retomar tras recargar no lo pide.
         const code = startCodeOf(quiz.data.settings);
         if (code) {
-          const tries = await one(db, 'SELECT failures FROM aula_exam_tries WHERE quiz=? AND user_id=?', quiz.id, user.id);
+          const tries = await one(db, 'SELECT failures, recent, last_failure FROM aula_exam_tries WHERE quiz=? AND user_id=?', quiz.id, user.id);
           if ((tries?.failures || 0) >= MAX_PASSWORD_FAILURES) fail('Demasiados códigos equivocados. Pide a tu docente que te desbloquee.', 429);
+          // Además, como máximo 5 códigos equivocados por minuto (12.27): así no se puede probar códigos en serie.
+          const minuteAgo = new Date(Date.now() - 60_000).toISOString();
+          if ((tries?.recent || 0) >= CODE_PER_MINUTE && tries.last_failure > minuteAgo) fail('Demasiados códigos equivocados seguidos. Espera un minuto y vuelve a intentarlo.', 429);
           if (!sameSecret(String(body.password ?? '').trim(), code)) {
             await run(
               db,
-              'INSERT INTO aula_exam_tries (quiz,user_id,failures) VALUES (?,?,1) ON CONFLICT(quiz,user_id) DO UPDATE SET failures=failures+1',
+              `INSERT INTO aula_exam_tries (quiz,user_id,failures,recent,last_failure) VALUES (?1,?2,1,1,?3)
+               ON CONFLICT(quiz,user_id) DO UPDATE SET failures=failures+1,
+                 recent=CASE WHEN last_failure > ?4 THEN recent+1 ELSE 1 END, last_failure=?3`,
               quiz.id,
               user.id,
+              nowIso(),
+              minuteAgo,
             );
             const left = MAX_PASSWORD_FAILURES - (tries?.failures || 0) - 1;
             fail(left > 0 ? `Código incorrecto. Te ${left === 1 ? 'queda 1 intento' : `quedan ${left} intentos`}.` : 'Demasiados códigos equivocados. Pide a tu docente que te desbloquee.', left > 0 ? 400 : 429);
@@ -1325,41 +1389,9 @@ const routes = {
       }
       const { started } = start;
       const deadline = deadlineOf(quiz, started);
-      // Un intento cuyo tiempo se acabó sin enviarse se cierra: con lo que dejó guardado (modo examen) o con 0.
-      if (deadline && Date.now() > Date.parse(deadline) + 60_000) {
-        let saved = null;
-        try {
-          saved = start.progress ? JSON.parse(start.progress) : null;
-        } catch {
-          saved = null;
-        }
-        const instance = quizInstance(quiz, user.id, attempt);
-        let graded = { correct: 0, total: instance.length, score: 0, details: null };
-        if (saved && Object.keys(saved).length) {
-          try {
-            graded = gradeAttempt(quiz, instance, finalAnswers(quiz, instance, start, saved));
-          } catch {
-            // Una respuesta guardada inválida no impide cerrar el intento.
-          }
-        }
-        await run(
-          db,
-          `INSERT OR IGNORE INTO aula_attempts (id,course,quiz,user_id,name,answers,correct,total,score,created,attempt,details,integrity)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-          attemptId(quiz.id, user.id, attempt),
-          quiz.course,
-          quiz.id,
-          user.id,
-          user.name,
-          JSON.stringify(graded.details ? graded.details.map((d) => d.answer) : []),
-          graded.correct,
-          graded.total,
-          graded.score,
-          nowIso(),
-          attempt,
-          graded.details ? JSON.stringify(graded.details) : null,
-          exam ? JSON.stringify(integritySummary(start)) : null,
-        );
+      // Un intento cuyo tiempo se acabó sin enviarse se cierra con lo que dejó guardado (o con 0).
+      if (expired(quiz, start)) {
+        await closeExpiredAttempt(db, quiz, user, start);
         continue;
       }
       // Retomar desde otra sesión o dispositivo: se registra (y con bloqueo al salir, se bloquea).
@@ -1380,8 +1412,10 @@ const routes = {
       }
       return json({
         attempt, started, deadline, attemptsLeft: max - done.n, serverNow: Date.now(), questions,
+        // 12.27: las respuestas guardadas vuelven en cualquier evaluación (recargar la página no pierde nada).
+        saved, perPage: quiz.data.settings?.perPage || 0,
         exam: exam
-          ? { oneByOne: exam.oneByOne, noBack: exam.noBack, position: start.position, answers: saved, flagged: Boolean(start.flag), lockOnLeave: Boolean(exam.lockOnLeave), lockGrace: exam.lockGrace ?? 0, locked }
+          ? { oneByOne: exam.oneByOne, noBack: exam.noBack, position: start.position, flagged: Boolean(start.flag), lockOnLeave: Boolean(exam.lockOnLeave), lockGrace: exam.lockGrace ?? 0, locked }
           : null,
       });
     }
@@ -1391,14 +1425,20 @@ const routes = {
   'POST /api/attempt/progress': async ({ db, user, request }) => {
     const body = await readJson(request);
     const { quiz } = await attemptContext(db, user, body);
-    if (!quiz.data.settings?.exam) fail('Esta evaluación no está en modo examen.');
+    await assertSeb(quiz, request);
+    // 12.27: se guarda en cualquier evaluación (antes solo en modo examen); las salidas y el bloqueo, solo en examen.
+    const exam = quiz.data.settings?.exam || null;
     const start = await openStart(db, quiz, user.id);
     if (!start || start.attempt !== Number(body.attempt)) fail('Este intento ya no está en curso. Recarga la página.', 409);
+    if (expired(quiz, start)) {
+      await closeExpiredAttempt(db, quiz, user, start);
+      fail(EXPIRED_MESSAGE, 409, { closed: true });
+    }
     assertInTime(quiz, start.started);
-    assertDevice(quiz, start, user);
-    if (start.locked_at) fail(LOCKED_MESSAGE, 423, { locked: true });
-    const events = validEvents(body.events);
-    const noBack = quiz.data.settings.exam.noBack;
+    if (exam) assertDevice(quiz, start, user);
+    if (exam && start.locked_at) fail(LOCKED_MESSAGE, 423, { locked: true });
+    const events = exam ? validEvents(body.events) : [];
+    const noBack = Boolean(exam?.noBack);
     const position = Number.isInteger(body.position) ? Math.min(Math.max(body.position, 0), questionCount(quiz.data)) : start.position;
     let answers = null;
     if (body.answers && typeof body.answers === 'object' && !Array.isArray(body.answers)) {
@@ -1441,6 +1481,7 @@ const routes = {
   'POST /api/attempt': async ({ db, user, request }) => {
     const body = await readJson(request);
     const { quiz } = await attemptContext(db, user, body);
+    await assertSeb(quiz, request);
     const max = quiz.data.settings?.attempts || 1;
     const done = await one(db, 'SELECT count(*) AS n, coalesce(max(attempt),0) AS last FROM aula_attempts WHERE quiz=? AND user_id=?', quiz.id, user.id);
     if (done.n >= max) fail(max === 1 ? 'Ya enviaste esta evaluación. Se permite un intento.' : `Ya usaste tus ${max} intentos.`, 409);
@@ -1448,6 +1489,11 @@ const routes = {
     const start = await one(db, 'SELECT * FROM aula_attempt_starts WHERE quiz=? AND user_id=? AND attempt=?', quiz.id, user.id, attempt);
     const exam = quiz.data.settings?.exam || null;
     if ((quiz.data.settings?.timeLimit || exam) && !start) fail('Comienza el intento antes de enviarlo.', 409);
+    // Tarde de más: se cierra con lo guardado (no con lo que llegue ahora).
+    if (start && expired(quiz, start)) {
+      await closeExpiredAttempt(db, quiz, user, start);
+      fail(EXPIRED_MESSAGE, 409, { closed: true });
+    }
     if (start) assertInTime(quiz, start.started);
     if (exam) assertDevice(quiz, start, user);
     if (exam && (await applyLock(db, quiz, start))) fail(LOCKED_MESSAGE, 423, { locked: true });
@@ -1477,6 +1523,18 @@ const routes = {
       fail('Este intento ya se envió. Recarga la página.', 409);
     }
     return json(studentAttemptView(attemptRecord(await one(db, 'SELECT * FROM aula_attempts WHERE id=?', id)), quiz), 201);
+  },
+
+  // Vista previa del docente (12.27): un sorteo nuevo cada vez (preguntas, orden y datos), tal como lo recibiría un
+  // alumno. No se guarda ningún intento. Con `answers` (y la misma `seed`) califica esa vista previa.
+  'POST /api/quiz/preview': async ({ db, user, request }) => {
+    const body = await readJson(request);
+    requireTeacher(await access(db, user, body.course));
+    const quiz = await contentRecord(db, String(body.quiz ?? ''), body.course, 'quiz');
+    const seed = PREVIEW_SEED.test(String(body.seed ?? '')) ? String(body.seed) : `vista:${crypto.randomUUID()}`;
+    const instance = quizInstance(quiz, seed, 1);
+    if (body.answers !== undefined) return json({ seed, ...gradeAttempt(quiz, instance, body.answers) });
+    return json({ seed, perPage: quiz.data.settings?.perPage || 0, questions: instance.map(({ values: _v, perm: _p, key: _k, ...q }) => q) });
   },
 
   // El docente califica las respuestas escritas de un intento (y puede ajustar el crédito de cualquier otra pregunta).

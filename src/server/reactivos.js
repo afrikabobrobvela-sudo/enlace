@@ -69,7 +69,8 @@ export function validateNew(type, q, label, numericFields) {
       const options = stringList(q.options, label, { min: 2, max: 10, what: 'opciones', length: 1500 });
       const correct = Array.isArray(q.correct) ? [...new Set(q.correct.filter((k) => Number.isInteger(k) && k >= 0 && k < options.length))].sort((a, b) => a - b) : [];
       if (!correct.length) fail(`${label}: marca al menos una opción correcta.`);
-      return { options, correct, scoring: q.scoring === 'partial' ? 'partial' : 'all' };
+      // 'each' (12.27, «respuestas correctas» de Brightspace): cada opción bien marcada o bien dejada sin marcar suma.
+      return { options, correct, scoring: ['partial', 'each'].includes(q.scoring) ? q.scoring : 'all' };
     }
     case 'fill': {
       const blanks = [...String(q.text ?? '').matchAll(BLANK)];
@@ -82,14 +83,23 @@ export function validateNew(type, q, label, numericFields) {
       const pairs = q.pairs.map((p) => ({ left: String(p?.left ?? '').trim().slice(0, 500), right: String(p?.right ?? '').trim().slice(0, 500) })).filter((p) => p.left || p.right);
       if (pairs.length < 2 || pairs.length > 10 || pairs.some((p) => !p.left || !p.right)) fail(`${label}: agrega de 2 a 10 parejas completas.`);
       const extra = Array.isArray(q.extra) ? q.extra.map((x) => String(x ?? '').trim().slice(0, 500)).filter(Boolean).slice(0, 5) : [];
-      return { pairs, extra, scoring: q.scoring === 'all' ? 'all' : 'partial' };
+      // `reuse` (12.27): una misma respuesta sirve para varios elementos (en Brightspace, varias «Choice» con el mismo
+      // «Match»); el alumno la ve una sola vez. Solo se guarda si de verdad hay respuestas repetidas.
+      const repeated = new Set(pairs.map((p) => p.right)).size < pairs.length;
+      return { pairs, extra, scoring: q.scoring === 'all' ? 'all' : 'partial', ...(q.reuse === true && repeated ? { reuse: true } : {}) };
     }
     case 'ordering':
       return { items: stringList(q.items, label, { min: 2, max: 10, what: 'elementos para ordenar', length: 500 }), scoring: q.scoring === 'all' ? 'all' : 'partial' };
     case 'essay':
       return { guide: String(q.guide ?? '').trim().slice(0, 3000) };
-    case 'short':
-      return { answers: stringList(q.answers, label, { min: 1, max: 20, what: 'respuestas aceptadas' }), exact: q.exact === true };
+    case 'short': {
+      const answers = stringList(q.answers, label, { min: 1, max: 20, what: 'respuestas aceptadas' });
+      // Tolerancia numérica (12.27, opcional): si la respuesta es un número, se acepta a esa distancia de uno aceptado.
+      if (q.tolerance === undefined || q.tolerance === null || q.tolerance === '') return { answers, exact: q.exact === true };
+      const tolerance = Number(q.tolerance);
+      if (!Number.isFinite(tolerance) || tolerance < 0 || tolerance > 1e9) fail(`${label}: la tolerancia debe ser un número positivo.`);
+      return { answers, exact: q.exact === true, tolerance };
+    }
     case 'multishort': {
       const answers = stringList(q.answers, label, { min: 1, max: 20, what: 'respuestas aceptadas' });
       const boxes = Number(q.boxes);
@@ -142,7 +152,9 @@ export function instanceNew(q, index, random, { shuffleOptions, values, shown })
       return { ...base, text: maskBlanks(q.text), parts };
     }
     case 'matching': {
-      const rights = [...q.pairs.map((p) => p.right), ...q.extra];
+      const all = [...q.pairs.map((p) => p.right), ...q.extra];
+      // Con respuestas que se repiten (`reuse`), cada una aparece una sola vez.
+      const rights = q.reuse ? [...new Set(all)] : all;
       const perm = derange(rights.length, random);
       return { ...base, lefts: q.pairs.map((p) => p.left), rights: perm.map((i) => rights[i]), key: { perm } };
     }
@@ -180,8 +192,10 @@ export function gradeNew(q, item, raw, { evaluateAnswer, parseNumber, position }
       const right = chosen.filter((k) => q.correct.includes(k)).length;
       const wrong = chosen.length - right;
       const exact = right === q.correct.length && !wrong;
-      // Parcial: correctas elegidas menos incorrectas elegidas, sin bajar de cero.
-      const credit = exact ? 1 : q.scoring === 'partial' ? Math.max(0, (right - wrong) / q.correct.length) : 0;
+      // Parcial: correctas elegidas menos incorrectas elegidas, sin bajar de cero. Por opción: cada opción en su
+      // estado correcto (marcada si es correcta, sin marcar si no) vale lo mismo.
+      const byOption = () => fraction(q.options.filter((_, k) => chosen.includes(k) === q.correct.includes(k)).length, q.options.length);
+      const credit = exact ? 1 : q.scoring === 'partial' ? Math.max(0, (right - wrong) / q.correct.length) : q.scoring === 'each' ? byOption() : 0;
       return { answer: chosen, credit };
     }
     case 'fill': {
@@ -192,7 +206,11 @@ export function gradeNew(q, item, raw, { evaluateAnswer, parseNumber, position }
     }
     case 'matching': {
       const answer = ints(raw, item.key.perm.length);
-      const marks = q.pairs.map((_, i) => answer[i] !== null && answer[i] !== undefined && item.key.perm[answer[i]] === i);
+      // Con respuestas repetidas (`reuse`) se compara el texto: cualquiera de los elementos que la comparten acierta.
+      const shown = q.reuse ? [...new Set([...q.pairs.map((p) => p.right), ...q.extra])] : null;
+      const marks = q.pairs.map((p, i) =>
+        answer[i] === null || answer[i] === undefined ? false : shown ? shown[item.key.perm[answer[i]]] === p.right : item.key.perm[answer[i]] === i,
+      );
       const right = marks.filter(Boolean).length;
       return { answer: answer.map((j) => (j === null || j === undefined ? null : item.key.perm[j])), credit: q.scoring === 'all' ? (right === q.pairs.length ? 1 : 0) : fraction(right, q.pairs.length), marks };
     }
@@ -209,7 +227,11 @@ export function gradeNew(q, item, raw, { evaluateAnswer, parseNumber, position }
     }
     case 'short': {
       if (typeof raw !== 'string') bad();
-      return { answer: raw.slice(0, MAX_ANSWER), credit: q.answers.some((a) => matches(raw, a, q.exact)) ? 1 : 0 };
+      const value = parseNumber(raw);
+      const near = q.tolerance !== undefined && Number.isFinite(value)
+        ? q.answers.some((a) => alternatives(a).some((alt) => Number.isFinite(parseNumber(alt)) && Math.abs(parseNumber(alt) - value) <= q.tolerance + 1e-12))
+        : false;
+      return { answer: raw.slice(0, MAX_ANSWER), credit: near || q.answers.some((a) => matches(raw, a, q.exact)) ? 1 : 0 };
     }
     case 'multishort': {
       const answer = strings(raw, q.boxes);

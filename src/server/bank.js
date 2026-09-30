@@ -3,7 +3,7 @@
 // cambiar o borrar una pregunta del banco no altera evaluaciones ya hechas ni sus intentos.
 import { access, requireTeacher } from './access.js';
 import { all, fail, json, nowIso, one, readJson, run } from './http.js';
-import { questionFields, questionFingerprint } from './quizzes.js';
+import { MAX_QUESTIONS, questionFields, questionFingerprint } from './quizzes.js';
 
 export const MAX_BANK_QUESTIONS = 2000; // por docente
 const MAX_PER_REQUEST = 100;
@@ -183,7 +183,8 @@ export const bankRoutes = {
     requireStaff(user);
     const body = await readJson(request);
     requireTeacher(await access(db, user, body.course));
-    const ids = idList(body.ids);
+    // Hasta 300 (12.27): un examen completo de Brightspace, como el de Química, viene de 12 temas del banco.
+    const ids = idList(body.ids, MAX_QUESTIONS);
     const rows = await all(
       db,
       `SELECT b.* FROM aula_question_bank b JOIN aula_users o ON o.id=b.owner_id

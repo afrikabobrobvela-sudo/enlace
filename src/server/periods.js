@@ -5,7 +5,8 @@ import { all, fail, json, nowIso, one, optionalText, readJson, run, text } from 
 const COPY_KINDS = ['module', 'material', 'notice', 'forum', 'quiz'];
 const ARCHIVED = 'Este curso está archivado: solo se puede consultar. Desarchívalo en Administración del curso para hacer cambios.';
 /** Rutas que sí funcionan en un curso archivado. */
-const ARCHIVE_EXEMPT = new Set(['POST /api/course/archive', 'POST /api/course/copy', 'DELETE /api/course', 'POST /api/course/transfer']);
+// La vista previa de una evaluación (12.27) no escribe nada: también sirve en un curso archivado.
+const ARCHIVE_EXEMPT = new Set(['POST /api/course/archive', 'POST /api/course/copy', 'DELETE /api/course', 'POST /api/course/transfer', 'POST /api/quiz/preview']);
 
 /**
  * Un curso archivado es de solo lectura para todos. Se revisa antes de cualquier escritura con curso:

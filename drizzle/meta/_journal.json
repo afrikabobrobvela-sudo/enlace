@@ -225,6 +225,13 @@
       "when": 1790796115259,
       "tag": "0031_parciales",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "6",
+      "when": 1790799229954,
+      "tag": "0032_codigo_por_minuto",
+      "breakpoints": true
     }
   ]
 }

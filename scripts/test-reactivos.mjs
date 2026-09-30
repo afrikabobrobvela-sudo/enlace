@@ -182,7 +182,7 @@ await call('beto', '/api/attempt/start', { course: c, quiz: examen.id });
 const parcial = { 1: [0], 2: ['newton'], 3: [1, null, 0], 4: [3, 2, 1, 0], 5: 'Borrador de mi respuesta', 7: ['m', ''] };
 await call('beto', '/api/attempt/progress', { course: c, quiz: examen.id, attempt: 1, answers: parcial, position: 0, events: [] });
 const retomado = await call('beto', '/api/attempt/start', { course: c, quiz: examen.id });
-assert.deepEqual(retomado.exam.answers, parcial, 'Al retomar recupera listas y textos');
+assert.deepEqual(retomado.saved, parcial, 'Al retomar recupera listas y textos');
 const final = await call('beto', '/api/attempt', { course: c, quiz: examen.id, answers: parcial }, 201);
 assert.equal(final.data.pending, 1);
 checks += 2;

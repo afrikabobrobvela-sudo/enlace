@@ -670,6 +670,9 @@ export const examTries = sqliteTable(
     quiz: text('quiz').notNull(),
     userId: text('user_id').notNull(),
     failures: integer('failures').notNull().default(0),
+    // Migración 0032: fallos del último minuto (máximo 5 por minuto, además del bloqueo a los 10).
+    recent: integer('recent').notNull().default(0),
+    lastFailure: text('last_failure').notNull().default(''),
   },
   (t) => [primaryKey({ columns: [t.quiz, t.userId] })],
 );

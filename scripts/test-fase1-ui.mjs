@@ -48,6 +48,7 @@ load('evaluaciones.js');
 load('banco.js');
 load('oficina.js');
 load('resultados.js');
+load('d2l.js');
 load('importar.js');
 load('foros.js');
 load('condiciones.js');

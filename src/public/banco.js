@@ -73,7 +73,7 @@ async function renderBank() {
     <div class="bank-scope" role="group" aria-label="Qué preguntas ver">
       <button type="button" data-bank-scope="mine" class="${mine ? 'active' : ''}">Mis preguntas${bankState.mine ? ` (${bankState.mine.length})` : ''}</button>
       <button type="button" data-bank-scope="shared" class="${mine ? '' : 'active'}">De mi academia</button></div>
-    <div class="toolbar bank-toolbar">${mine ? '<button class="primary" data-bank-new>Nueva pregunta</button>' : ''}
+    <div class="toolbar bank-toolbar">${mine ? '<button class="primary" data-bank-new>Nueva pregunta</button><button class="secondary" data-bank-import>Importar preguntas (Brightspace, Word, Excel)</button>' : ''}
       <input type="search" data-bank-search placeholder="Buscar en enunciados y opciones…" aria-label="Buscar pregunta" value="${esc(bankState.search)}">
       <select data-bank-topic aria-label="Tema"><option value="">Todos los temas (${items.length})</option>${topics
         .map((t) => `<option value="${esc(t)}" ${t === bankState.topic ? 'selected' : ''}>${esc(bankTopicName(t))} (${items.filter((i) => i.topic === t).length})</option>`)
@@ -135,6 +135,7 @@ document.addEventListener('click', async (e) => {
     return renderBank();
   }
   if (e.target.closest('[data-bank-new]')) return bankQuestionModal(null);
+  if (e.target.closest('[data-bank-import]')) return bankImportModal();
   const save = e.target.closest('[data-bank-save]');
   if (save) return saveQuizToBankModal(find(save.dataset.bankSave));
   const edit = e.target.closest('[data-bank-edit]');
@@ -278,7 +279,7 @@ document.addEventListener('click', async (e) => {
     quizDraft = readQuizQuestions();
     // Si el editor solo tenía la pregunta vacía del principio, se reemplaza.
     if (quizDraft.length === 1 && !quizDraft[0].text.trim()) quizDraft = [];
-    const room = 100 - quizDraft.length;
+    const room = QUIZ_MAX_QUESTIONS - quizDraft.length;
     quizDraft.push(...r.questions.slice(0, room));
     renderQuizQuestions();
     dirty = true;
@@ -286,12 +287,96 @@ document.addEventListener('click', async (e) => {
     const skipped = r.questions.length - Math.min(room, r.questions.length);
     toast(
       `Se agregaron ${Math.min(room, r.questions.length)} preguntas.` +
-        (skipped ? ` ${skipped} no cupieron (máximo 100).` : '') +
+        (skipped ? ` ${skipped} no cupieron (máximo ${QUIZ_MAX_QUESTIONS}).` : '') +
         (r.missingImages ? ` ${r.missingImages} llegaron sin imagen (el archivo ya no existe).` : ''),
     );
   } catch (error) {
     toast(error.message);
     add.disabled = false;
+  }
+});
+
+// ---- Importar al banco (12.27): CSV de Brightspace (uno o varios, cada uno a un tema) y los demás formatos ----------
+
+let bankImport = { files: [], mode: 'auto' };
+
+function renderBankImportPreview() {
+  const box = document.getElementById('bankImportPreview');
+  if (!box) return;
+  const { files, mode } = bankImport;
+  if (!files.length) return (box.innerHTML = '');
+  assignImportGroups(files, mode === 'single' ? 'none' : mode, true);
+  const items = files.flatMap(({ file, items }) => items.map((r) => ({ ...r, file })));
+  const ok = items.filter((r) => r.question);
+  const topics = new Map();
+  for (const r of ok) topics.set(r.question.pool || '', (topics.get(r.question.pool || '') || 0) + 1);
+  const where = (r) => `${files.length > 1 ? `${r.file}, renglón` : 'Renglón'} ${r.line}`;
+  const problems = items.filter((r) => r.error || r.warnings?.length);
+  box.innerHTML = `<p class="real-status">${ok.length} de ${items.length} ${items.length === 1 ? 'pregunta se entendió' : 'preguntas se entendieron'}.</p>
+    ${mode === 'single' ? '' : `<ul class="bank-import-topics">${[...topics].map(([t, n]) => `<li><b>${esc(bankTopicName(t))}</b>: ${n} ${n === 1 ? 'pregunta' : 'preguntas'}</li>`).join('')}</ul>`}
+    ${problems.length ? `<ul class="import-list">${problems.map((r) => `<li class="${r.error ? 'has-error' : ''}">${esc(r.source)}<br><span class="${r.error ? 'error' : 'warning-text'}">${esc(where(r))}: ${esc(r.error || `${r.warnings.join('; ')}.`)}</span></li>`).join('')}</ul>` : ''}`;
+}
+
+function bankImportModal() {
+  bankImport = { files: [], mode: 'auto' };
+  modal(
+    'Importar preguntas al banco',
+    `<p class="muted">Elige uno o varios archivos: el <b>CSV de la biblioteca de preguntas de Brightspace</b> (se reconocen sus 8 tipos: MC, TF, MS, M, O, SA, FIB y WR) o preguntas en Word, Excel o texto. Las que ya estén en tu banco no se repiten.</p>
+      <label class="secondary file-button">Elegir archivos<input type="file" accept=".csv,.docx,.xlsx,.txt" multiple data-bank-import-file hidden></label>
+      <label>Tema de cada pregunta<select name="topicMode" data-bank-import-mode>
+        <option value="auto">Automático (por archivo, o por el ID de Brightspace si un archivo trae varios grupos)</option>
+        <option value="file">Uno por archivo (el nombre del archivo)</option>
+        <option value="id">Por el ID de Brightspace (QUIM-P01-01 → QUIM-P01)</option>
+        <option value="single">Todas en un solo tema…</option></select></label>
+      <label data-bank-import-single hidden>Nombre del tema<input name="topic" maxlength="80" placeholder="Por ejemplo: Química — Parcial 1"></label>
+      <label class="check-label"><input type="checkbox" name="shared"> Compartir con los docentes de mi academia</label>
+      <div id="bankImportPreview"></div>`,
+    async (f) => {
+      const ok = bankImport.files.flatMap(({ items }) => items).filter((r) => r.question);
+      if (!ok.length) throw new Error('Elige al menos un archivo con preguntas.');
+      const single = bankImport.mode === 'single';
+      if (single && !String(f.get('topic') || '').trim()) throw new Error('Escribe el nombre del tema.');
+      const byTopic = new Map();
+      for (const { question } of ok) {
+        const { pool, ...rest } = question;
+        const topic = single ? String(f.get('topic')).trim() : pool || '';
+        (byTopic.get(topic) || byTopic.set(topic, []).get(topic)).push(rest);
+      }
+      let saved = 0;
+      let repeated = 0;
+      // De 100 en 100 (lo que acepta el servidor por solicitud).
+      for (const [topic, questions] of byTopic) {
+        for (let i = 0; i < questions.length; i += 100) {
+          const r = await request('/api/bank', { course: current.course.id, topic, shared: f.get('shared') === 'on', questions: questions.slice(i, i + 100) });
+          saved += r.saved;
+          repeated += r.repeated;
+        }
+      }
+      bankState.mine = null;
+      bankState.topic = '';
+      return `Se guardaron ${saved} ${saved === 1 ? 'pregunta' : 'preguntas'} en ${byTopic.size} ${byTopic.size === 1 ? 'tema' : 'temas'}${repeated ? ` (${repeated} ya estaban)` : ''}.`;
+    },
+    'Guardar en el banco',
+  );
+}
+
+document.addEventListener('change', async (e) => {
+  if (e.target.matches('[data-bank-import-mode]')) {
+    bankImport.mode = e.target.value;
+    document.querySelector('[data-bank-import-single]').hidden = e.target.value !== 'single';
+    return renderBankImportPreview();
+  }
+  if (!e.target.matches('[data-bank-import-file]')) return;
+  const files = [...(e.target.files || [])];
+  e.target.value = '';
+  if (!files.length) return;
+  const box = document.getElementById('bankImportPreview');
+  box.innerHTML = '<p class="muted">Leyendo…</p>';
+  try {
+    bankImport.files = await readImportFiles(files);
+    renderBankImportPreview();
+  } catch (error) {
+    box.innerHTML = `<p class="form-error error">${esc(error.message || 'No se pudo leer el archivo.')}</p>`;
   }
 });
 

@@ -10,6 +10,7 @@ let quizEditorMode = 'quiz'; // el editor de preguntas también se usa para el b
 let quizDrawCounts = new Map(); // editor: grupo → cuántas preguntas recibe cada alumno
 
 const QUIZ_LETTERS = 'ABCDEF';
+const QUIZ_MAX_QUESTIONS = 300; // igual que MAX_QUESTIONS en el servidor (12.27)
 const quizSettings = (q) => ({ attempts: 1, timeLimit: 0, shuffle: false, exam: null, ...(q?.data.settings || {}) });
 const EXAM_RADII = [100, 150, 300, 500];
 
@@ -23,6 +24,8 @@ function quizSettingsText(settings) {
   if (settings.timerMode === 'fixed') parts.push('el tiempo corre desde la hora de inicio');
   if (settings.results?.releaseAt && Date.parse(settings.results.releaseAt) > Date.now()) parts.push(`resultados a partir del ${fmt(settings.results.releaseAt)}`);
   if (settings.exam?.enabled) parts.push(`modo examen${settings.exam.oneByOne ? (settings.exam.noBack ? ', una pregunta a la vez sin regresar' : ', una pregunta a la vez') : ''}`);
+  if (settings.perPage && !settings.exam?.oneByOne) parts.push(`${settings.perPage} ${settings.perPage === 1 ? 'pregunta' : 'preguntas'} por página`);
+  if (settings.seb || settings.needsSeb) parts.push('solo en Safe Exam Browser');
   return parts.join(' · ');
 }
 
@@ -70,8 +73,8 @@ const pointsTag = (x) => (x?.points && x.points !== 1 ? ` <span class="quiz-poin
 function teacherFeedbackHtml(x) {
   const letters = x.type === 'multi' ? MULTI_LETTERS : QUIZ_LETTERS;
   const notes = (x.optionFeedback || []).map((n, k) => (n ? `<li><b>${letters[k]}:</b> ${esc(n)}</li>` : '')).join('');
-  if (!x.explanation && !notes) return '';
-  return `<div class="quiz-explanation">${x.explanation ? `<p><b>Retroalimentación:</b> ${esc(x.explanation)}</p>` : ''}${notes ? `<ul>${notes}</ul>` : ''}</div>`;
+  if (!x.explanation && !notes && !x.hint) return '';
+  return `<div class="quiz-explanation">${x.hint ? `<p><b>Pista:</b> ${esc(x.hint)}</p>` : ''}${x.explanation ? `<p><b>Retroalimentación:</b> ${esc(x.explanation)}</p>` : ''}${notes ? `<ul>${notes}</ul>` : ''}</div>`;
 }
 /** Revisión de un intento para el alumno: ✓/✗ por pregunta con la retroalimentación del docente (12.23). */
 function attemptReviewHtml(a, q, texts) {
@@ -136,7 +139,7 @@ function quizQuestionHtml(q, i) {
         )
         .join('')}</div>
       ${q.options.length < 6 ? '<button type="button" class="text-btn" data-quiz="add-option">＋ Opción</button>' : ''}
-      <p class="muted">Marca con el círculo la respuesta correcta.</p>`;
+      <p class="muted">Marca con el círculo la respuesta correcta.</p>${choiceWeightsHtml(q)}`;
   return `<fieldset class="quiz-edit-question" data-question="${i}">
     <legend>Pregunta ${i + 1}</legend>
     <div class="quiz-question-head">
@@ -157,14 +160,26 @@ function quizQuestionHtml(q, i) {
   </fieldset>`;
 }
 
+/** Crédito parcial por opción (12.27, como en Brightspace): elegir otra opción puede valer una parte de la pregunta. */
+function choiceWeightsHtml(q) {
+  const weights = q.weights || [];
+  const open = q.options.some((_, k) => k !== q.correct && weights[k] > 0);
+  return `<details class="quiz-weights" ${open ? 'open' : ''}><summary>Crédito parcial por opción (opcional)</summary>
+    <div class="quiz-option-notes">${q.options
+      .map((o, k) => `<label>${QUIZ_LETTERS[k]}${o ? ` (${esc(o.slice(0, 40))}${o.length > 40 ? '…' : ''})` : ''}<input data-w="${k}" type="number" min="0" max="100" step="1" value="${esc(k === q.correct ? 100 : weights[k] || 0)}" ${k === q.correct ? 'disabled' : ''} aria-label="Crédito de la opción ${QUIZ_LETTERS[k]} (%)"></label>`)
+      .join('')}</div>
+    <p class="muted">% de la pregunta que gana quien elige esa opción. La correcta siempre vale 100 %.</p></details>`;
+}
+
 /** Retroalimentación (12.23): la ve el alumno al revisar su intento, si la evaluación muestra qué preguntas acertó. */
 function questionFeedbackHtml(q) {
   const options = (q.type || 'choice') === 'choice' || q.type === 'multi' ? q.options || [] : [];
   const letters = q.type === 'multi' ? MULTI_LETTERS : QUIZ_LETTERS;
   const notes = q.optionFeedback || [];
-  const open = q.explanation || notes.some(Boolean);
+  const open = q.explanation || q.hint || notes.some(Boolean);
   return `<details class="quiz-feedback-edit" ${open ? 'open' : ''}><summary>Retroalimentación para el alumno${open ? '' : ' (opcional)'}</summary>
     <label>Explicación de la pregunta (la ve el alumno al revisar su intento, si activas «Qué preguntas acertó»)<textarea data-f="explanation" rows="2" maxlength="3000" placeholder="Por ejemplo: se usa la segunda ley de Newton, F = m a.">${esc(q.explanation || '')}</textarea></label>
+    <label>Pista (opcional; el alumno la puede abrir mientras contesta)<input data-f="hint" maxlength="1000" value="${esc(q.hint || '')}" placeholder="Por ejemplo: recuerda que Z es el número de protones."></label>
     ${options.length ? `<div class="quiz-option-notes">${options.map((o, k) => `<label>Si elige ${letters[k]}${o ? ` (${esc(o.slice(0, 40))}${o.length > 40 ? '…' : ''})` : ''}<input data-ofb="${k}" maxlength="1000" value="${esc(notes[k] || '')}" placeholder="Comentario para esta opción (opcional)"></label>`).join('')}</div>` : ''}
   </details>`;
 }
@@ -191,13 +206,17 @@ function readQuizQuestions() {
     const points = Number(get('points') || 1);
     if (points !== 1) image.points = points;
     if (get('explanation').trim()) image.explanation = get('explanation').trim();
+    if (get('hint').trim()) image.hint = get('hint').trim();
     const notes = [...box.querySelectorAll('[data-ofb]')].map((input) => input.value.trim());
     if (notes.some(Boolean)) image.optionFeedback = notes;
     if (isNewType(type)) return { ...image, type, text: get('text'), ...readNewQuestionBody(box, type, i, readNumeric) };
     if (type === 'numeric') return { ...image, type: 'numeric', text: get('text'), ...readNumeric() };
     const options = [...box.querySelectorAll('[data-o]')].map((input) => input.value);
     const checked = box.querySelector(`input[name="correct_${i}"]:checked`);
-    return { type: 'choice', text: get('text'), options, correct: checked ? Number(checked.value) : -1, ...image };
+    const correct = checked ? Number(checked.value) : -1;
+    const weights = options.map((_, k) => (k === correct ? 100 : Number(box.querySelector(`[data-w="${k}"]`)?.value || 0)));
+    const partial = weights.some((w, k) => k !== correct && w > 0);
+    return { type: 'choice', text: get('text'), options, correct, ...(partial ? { weights } : {}), ...image };
   });
 }
 
@@ -206,7 +225,25 @@ function renderQuizQuestions() {
   renderQuizDraw();
 }
 
-/** Preguntas al azar: por cada grupo escrito en las preguntas, cuántas recibe cada alumno. */
+/** Puntos que recibe cada alumno: las preguntas sin grupo más, por cada grupo, las que se sortean por su valor (12.27). */
+function quizTotalPoints(questions, counts) {
+  const byPool = new Map();
+  let total = 0;
+  for (const q of questions) {
+    const pool = q.pool?.trim();
+    if (!pool) total += q.points || 1;
+    else (byPool.get(pool) || byPool.set(pool, []).get(pool)).push(q.points || 1);
+  }
+  let exact = true;
+  for (const [pool, points] of byPool) {
+    const count = Math.min(Math.max(counts.get(pool) || points.length, 1), points.length);
+    if (new Set(points).size > 1 && count < points.length) exact = false;
+    total += count === points.length ? points.reduce((a, b) => a + b, 0) : (count * points.reduce((a, b) => a + b, 0)) / points.length;
+  }
+  return { total: Math.round(total * 100) / 100, exact };
+}
+
+/** Preguntas al azar: por cada grupo escrito en las preguntas, cuántas recibe cada alumno y cuánto vale cada una. */
 function renderQuizDraw() {
   const box = document.getElementById('quizDrawBox');
   if (!box) return;
@@ -215,17 +252,44 @@ function renderQuizDraw() {
   for (const q of quizDraft) if (q.pool?.trim()) sizes.set(q.pool.trim(), (sizes.get(q.pool.trim()) || 0) + 1);
   const pools = document.getElementById('quizPools');
   if (pools) pools.innerHTML = [...sizes.keys()].map((p) => `<option value="${esc(p)}">`).join('');
+  const points = quizTotalPoints(quizDraft, quizDrawCounts);
+  const totalLine = `<p class="quiz-total"><b>Total: ${points.exact ? '' : 'aprox. '}${points.total} ${points.total === 1 ? 'punto' : 'puntos'}</b> por alumno${points.exact ? '' : ' (en un grupo las preguntas valen distinto)'}. La calificación se lleva a la escala de 0 a 10.</p>`;
   if (!sizes.size) {
-    box.innerHTML = `<legend>Preguntas al azar</legend><p class="muted">Para que cada alumno reciba preguntas distintas, escribe el mismo grupo en varias preguntas (por ejemplo «Cinemática») y aquí eliges cuántas recibe de cada grupo. Las preguntas del banco llegan con su tema como grupo.</p>`;
+    box.innerHTML = `<legend>Preguntas al azar</legend>${totalLine}<p class="muted">Para que cada alumno reciba preguntas distintas, escribe el mismo grupo en varias preguntas (por ejemplo «Cinemática») y aquí eliges cuántas recibe de cada grupo. Las preguntas del banco llegan con su tema como grupo.</p>`;
     return;
   }
   let total = quizDraft.length;
+  const poolPoints = (pool) => {
+    const values = new Set(quizDraft.filter((q) => q.pool?.trim() === pool).map((q) => q.points || 1));
+    return values.size === 1 ? [...values][0] : '';
+  };
   const rows = [...sizes].map(([pool, size]) => {
     const count = Math.min(Math.max(quizDrawCounts.get(pool) || size, 1), size);
     total -= size - count;
-    return `<label class="draw-row"><span>«${esc(pool)}»: cada alumno recibe</span> <input type="number" data-draw-pool="${esc(pool)}" min="1" max="${size}" value="${count}" aria-label="Preguntas de ${esc(pool)} para cada alumno"> <span>de ${size}</span></label>`;
+    return `<div class="draw-row"><span class="draw-pool">«${esc(pool)}»</span>
+      <span class="draw-field">recibe <input type="number" data-draw-pool="${esc(pool)}" min="1" max="${size}" value="${count}" aria-label="Preguntas de ${esc(pool)} para cada alumno"> de ${size}</span>
+      <span class="draw-field">de <input type="number" data-draw-points="${esc(pool)}" min="0.1" max="100" step="0.1" value="${esc(poolPoints(pool))}" placeholder="varios" aria-label="Puntos por pregunta de ${esc(pool)}"> ${poolPoints(pool) === 1 ? 'punto' : 'puntos'} c/u</span></div>`;
   });
-  box.innerHTML = `<legend>Preguntas al azar</legend>${rows.join('')}<p class="muted">Cada alumno recibe <b>${total} de ${quizDraft.length}</b> preguntas; las que no tienen grupo le tocan a todos. En cada intento se sortean otra vez.</p>`;
+  box.innerHTML = `<legend>Preguntas al azar</legend>${rows.join('')}
+    <div class="draw-row draw-all"><span class="draw-pool">A todos los grupos</span>
+      <span class="draw-field">recibe <input type="number" data-draw-all-count min="1" max="100" placeholder="n" aria-label="Preguntas de cada grupo"></span>
+      <span class="draw-field">de <input type="number" data-draw-all-points min="0.1" max="100" step="0.1" placeholder="1" aria-label="Puntos por pregunta de todos los grupos"> c/u</span>
+      <button type="button" class="secondary" data-draw-apply>Aplicar</button></div>
+    ${totalLine}<p class="muted">Cada alumno recibe <b>${total} de ${quizDraft.length}</b> preguntas; las que no tienen grupo le tocan a todos. En cada intento se sortean otra vez.</p>`;
+}
+
+/** Puntos de todas las preguntas de un grupo (12.27; «puntos por pregunta» del grupo, como en Brightspace). */
+function setPoolPoints(pool, value) {
+  const points = Math.round(Number(value) * 100) / 100;
+  if (!(points >= 0.1 && points <= 100)) return;
+  quizDraft = readQuizQuestions();
+  for (const q of quizDraft) {
+    if (q.pool?.trim() !== pool) continue;
+    if (points === 1) delete q.points;
+    else q.points = points;
+  }
+  renderQuizQuestions();
+  dirty = true;
 }
 
 document.addEventListener('change', (e) => {
@@ -234,6 +298,30 @@ document.addEventListener('change', (e) => {
     renderQuizDraw();
   }
   if (e.target.matches('#quizDrawBox [data-draw-pool]')) renderQuizDraw();
+  if (e.target.matches('#quizDrawBox [data-draw-points]')) setPoolPoints(e.target.dataset.drawPoints, e.target.value);
+  if (e.target.matches('#quizQuestions [data-f="points"]')) {
+    quizDraft = readQuizQuestions();
+    renderQuizDraw();
+  }
+});
+
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('#quizDrawBox [data-draw-apply]')) return;
+  const box = document.getElementById('quizDrawBox');
+  const count = Number(box.querySelector('[data-draw-all-count]').value);
+  const points = Number(box.querySelector('[data-draw-all-points]').value);
+  if (Number.isInteger(count) && count >= 1) for (const input of box.querySelectorAll('[data-draw-pool]')) input.value = Math.min(count, Number(input.max));
+  renderQuizDraw();
+  if (points) {
+    quizDraft = readQuizQuestions();
+    for (const q of quizDraft) {
+      if (!q.pool?.trim()) continue;
+      if (Math.round(points * 100) / 100 === 1) delete q.points;
+      else q.points = Math.round(points * 100) / 100;
+    }
+    renderQuizQuestions();
+  }
+  dirty = true;
 });
 
 /** ¿Cuenta en la calificación? Solo con categorías: la evaluación entra a una categoría con su valor en puntos. */
@@ -266,6 +354,7 @@ function quizModal(old) {
       `<fieldset class="quiz-settings"><legend>Configuración</legend><div class="quiz-grid">
         <label>Intentos por alumno<input name="attempts" type="number" min="1" max="10" value="${settings.attempts}"></label>
         <label>Tiempo límite (minutos, 0 = sin límite)<input name="timeLimit" type="number" min="0" max="300" value="${settings.timeLimit}"></label>
+        <label>Preguntas por página (0 = todas en una página)<input name="perPage" type="number" min="0" max="50" value="${settings.perPage || 0}"></label>
       </div><label class="check-label"><input type="checkbox" name="shuffle" ${settings.shuffle ? 'checked' : ''}> Presentar las preguntas en orden aleatorio a cada alumno</label>
       <label class="check-label"><input type="checkbox" name="shuffleOptions" ${settings.shuffleOptions ? 'checked' : ''}> También el orden de las opciones de cada pregunta (distinto para cada alumno)</label></fieldset>
       <fieldset class="quiz-settings"><legend>Fechas y disponibilidad</legend><div class="quiz-grid">
@@ -280,6 +369,7 @@ function quizModal(old) {
         <label>Mostrar resultados a partir de (opcional)<input name="releaseAt" type="datetime-local" value="${esc(localDate(settings.results?.releaseAt))}"></label>
         <p class="muted">Si otros grupos aún no presentan, desmarca «Qué preguntas acertó» o pon aquí la fecha y hora en que termina el último grupo: hasta entonces nadie ve su calificación ni sus aciertos, y después se muestran solos.</p></fieldset>` +
       examSettingsHtml(settings.exam) +
+      sebSettingsHtml(settings.seb) +
       quizGradeHtml(old?.data.grade) +
       visible(old?.data.visible ?? false, old?.data.publishAt || '', [], false) +
       conditionsEditorHtml(old) +
@@ -307,6 +397,8 @@ function quizModal(old) {
             opensAt: iso(f.get('opensAt')),
             closesAt: iso(f.get('closesAt')),
             timerMode: f.get('timerFixed') === 'on' ? 'fixed' : 'attempt',
+            perPage: Number(f.get('perPage') || 0),
+            seb: f.get('seb') === 'on' ? { required: true, keys: String(f.get('sebKeys') || '') } : null,
             results: { score: f.get('showScore') === 'on', review: f.get('showReview') === 'on' ? 'marks' : 'none', releaseAt: iso(f.get('releaseAt')) },
             exam: readExamSettings(f),
           },
@@ -325,6 +417,23 @@ function quizModal(old) {
   );
   renderQuizQuestions();
 }
+
+// ---- Safe Exam Browser (12.27) ----------------------------------------------------------------
+
+const isSafeExamBrowser = () => /\bSEB\//.test(navigator.userAgent || '');
+
+function sebSettingsHtml(seb) {
+  return `<fieldset class="quiz-settings"><legend>Safe Exam Browser</legend>
+    <label class="check-label"><input type="checkbox" name="seb" ${seb?.required ? 'checked' : ''}> Exigir Safe Exam Browser: solo se puede empezar, guardar y enviar desde él</label>
+    <div class="seb-options" ${seb?.required ? '' : 'hidden'}>
+      <label>Config Key de tu archivo .seb (64 caracteres; si usas varios archivos, una por renglón)<textarea name="sebKeys" rows="2" spellcheck="false" autocomplete="off" placeholder="3f2a…">${esc((seb?.keys || []).join('\n'))}</textarea></label>
+      <p class="muted">En la herramienta de configuración de SEB, en «Exam», activa «Use Browser Exam Key and Config Key» y copia la <b>Config Key</b>. Como dirección de inicio pon la de esta evaluación. Los alumnos abren el examen con tu archivo .seb; desde otro navegador Enlace no les deja empezar.</p>
+    </div></fieldset>`;
+}
+
+document.addEventListener('change', (e) => {
+  if (e.target.matches('input[name="seb"]')) document.querySelector('.seb-options').hidden = !e.target.checked;
+});
 
 // ---- Configuración del modo examen (editor) ----------------------------------------------------
 
@@ -395,13 +504,14 @@ function quizEditorAction(action, target) {
   quizDraft = readQuizQuestions();
   const box = target.closest('[data-question]');
   const q = box ? quizDraft[Number(box.dataset.question)] : null;
-  if (action === 'add-question' && quizDraft.length < 100) quizDraft.push(blankQuestion(quizDraft.at(-1)?.type));
+  if (action === 'add-question' && quizDraft.length < QUIZ_MAX_QUESTIONS) quizDraft.push(blankQuestion(quizDraft.at(-1)?.type));
   if (action === 'remove-question') quizDraft.splice(Number(box.dataset.question), 1);
   if (action === 'add-option' && q.options.length < (q.type === 'multi' ? 10 : 6)) q.options.push('');
   if (action === 'remove-option') {
     const k = Number(target.dataset.option);
     q.options.splice(k, 1);
     q.optionFeedback?.splice(k, 1);
+    q.weights?.splice(k, 1);
     if (Array.isArray(q.correct)) q.correct = q.correct.filter((j) => j !== k).map((j) => (j > k ? j - 1 : j));
     else q.correct = q.correct === k ? 0 : q.correct > k ? q.correct - 1 : q.correct;
   }
@@ -449,8 +559,8 @@ document.addEventListener('change', (e) => {
   if (!e.target.matches('#quizQuestions [data-f="type"]')) return;
   quizDraft = readQuizQuestions();
   const i = Number(e.target.closest('[data-question]').dataset.question);
-  const { text, image, pool, points, explanation } = quizDraft[i];
-  quizDraft[i] = { ...blankQuestion(e.target.value), text, ...(image ? { image } : {}), ...(pool ? { pool } : {}), ...(points ? { points } : {}), ...(explanation ? { explanation } : {}) };
+  const { text, image, pool, points, explanation, hint } = quizDraft[i];
+  quizDraft[i] = { ...blankQuestion(e.target.value), text, ...(image ? { image } : {}), ...(pool ? { pool } : {}), ...(points ? { points } : {}), ...(explanation ? { explanation } : {}), ...(hint ? { hint } : {}) };
   renderQuizQuestions();
 });
 
@@ -458,6 +568,9 @@ document.addEventListener('change', (e) => {
 
 function renderQuiz() {
   clearInterval(quizTimer);
+  // Al volver a dibujar, lo pendiente de guardar se guarda (el intento se retoma con «Comenzar»).
+  if (attemptSave) saveAttemptProgress().catch(() => {});
+  attemptSave = null;
   stopExam(); // si la pantalla se vuelve a dibujar, el intento se retoma con "Comenzar examen" (sin contraseña)
   const q = find(detail);
   if (!q) return renderQuizzes();
@@ -473,7 +586,7 @@ function renderQuiz() {
           ? `<section class="quiz-question"><h3>${i + 1}. ${esc(x.text)}${pointsTag(x)}${poolTag(x)}</h3>${quizImageHtml(x.image, i)}<p>Respuesta: <code>${esc(x.answer)}</code> ${x.unit ? esc(x.unit) : ''} · tolerancia ${esc(x.tolerance)} %</p>${
               x.variables?.length ? `<p class="muted">Datos por alumno: ${x.variables.map((v) => `${esc(v.name)} entre ${esc(v.min)} y ${esc(v.max)}`).join('; ')}</p>` : ''
             }${teacherFeedbackHtml(x)}</section>`
-          : `<section class="quiz-question"><h3>${i + 1}. ${esc(x.text)}${pointsTag(x)}${poolTag(x)}</h3>${quizImageHtml(x.image, i)}<ol type="A">${x.options.map((o, j) => `<li>${esc(o)} ${j === x.correct ? '✓' : ''}</li>`).join('')}</ol>${teacherFeedbackHtml(x)}</section>`,
+          : `<section class="quiz-question"><h3>${i + 1}. ${esc(x.text)}${pointsTag(x)}${poolTag(x)}</h3>${quizImageHtml(x.image, i)}<ol type="A">${x.options.map((o, j) => `<li>${esc(o)} ${j === x.correct ? '✓' : x.weights?.[j] ? `<span class="muted">(${x.weights[j]} %)</span>` : ''}</li>`).join('')}</ol>${teacherFeedbackHtml(x)}</section>`,
       )
       .join('');
     // Resultados por alumno: mejor calificación y número de intentos.
@@ -498,7 +611,8 @@ function renderQuiz() {
       : '';
     const essays = q.data.questions.some((x) => x.type === 'essay');
     const toReview = attempts.filter((a) => inSelectedSection(memberOfAuthor(a.author))).reduce((n, a) => n + (a.data.pending || 0), 0);
-    $('#main').innerHTML = `${head}<div class="toolbar">${button('Editar evaluación', 'edit-quiz', q.id, 'secondary')}${specialAccessButton('quiz', q.id)}${
+    const total = quizTotalPoints(q.data.questions, new Map((settings.draw || []).map((d) => [d.pool, d.count])));
+    $('#main').innerHTML = `${head}<p class="quiz-meta">${total.exact ? '' : 'Aprox. '}${total.total} ${total.total === 1 ? 'punto' : 'puntos'} por alumno.</p><div class="toolbar">${button('Editar evaluación', 'edit-quiz', q.id, 'secondary')}<button class="secondary" type="button" data-quiz-preview="${esc(q.id)}">Vista previa</button>${specialAccessButton('quiz', q.id)}${
       essays ? `<button class="${toReview ? 'primary' : 'secondary'}" type="button" data-essay-review="${esc(q.id)}">Revisar respuestas escritas${toReview ? ` (${toReview} por calificar)` : ''}</button>` : ''
     }${attempts.length ? `<button class="secondary" type="button" data-quiz-stats="${esc(q.id)}">Estadísticas</button><button class="secondary" type="button" data-quiz-export="${esc(q.id)}">Exportar a Excel</button>` : ''}<button class="secondary" data-bank-save="${esc(q.id)}">Guardar en el banco</button>${sectionFilterHtml()}</div>${sectionDatesSummary(q.id)}
       ${exam ? `<section class="exam-monitor" id="examMonitor"><p class="muted">Cargando examen en curso…</p></section>` : ''}${drawNote}${questions}
@@ -547,7 +661,10 @@ function renderQuiz() {
   // Fechas de disponibilidad: antes de abrir o después de cerrar no hay botón para empezar.
   const notYet = settings.opensAt && Date.parse(settings.opensAt) > Date.now();
   const closed = settings.closesAt && Date.parse(settings.closesAt) < Date.now();
-  $('#main').innerHTML = `${head}${lastHtml}${history}${
+  const sebNotice = settings.needsSeb && left > 0 && !isSafeExamBrowser()
+    ? '<p class="warning-note">Esta evaluación solo se puede presentar en <b>Safe Exam Browser</b>. Ábrela con el archivo de configuración (.seb) que te dio tu docente.</p>'
+    : '';
+  $('#main').innerHTML = `${head}${lastHtml}${history}${sebNotice}${
     left > 0 && notYet
       ? `<p class="real-status">Esta evaluación se abre el <b>${esc(fmt(settings.opensAt))}</b>. Vuelve a esta página a esa hora.</p>`
       : left > 0 && closed
@@ -565,45 +682,124 @@ function renderQuiz() {
   }<div id="quizAttemptBox"></div>`;
 }
 
+/** Campos de una pregunta del intento (también los usa la vista previa del docente). */
+function attemptQuestionHtml(x, n, required) {
+  return `<fieldset class="quiz-question" data-index="${x.index}" data-position="${n}"><legend>${n + 1}. ${x.type === 'fill' ? 'Completa los espacios' : esc(x.text)}${pointsTag(x)}</legend>${quizImageHtml(x.image, n)}${
+    isNewType(x.type)
+      ? newAnswerInputHtml(x, required)
+      : x.type === 'numeric'
+      ? `<label class="quiz-number"><input name="q_${x.index}" inputmode="decimal" autocomplete="off" ${required} placeholder="Tu respuesta"> ${x.unit ? `<span>${esc(x.unit)}</span>` : ''}</label>`
+      : x.options.map((o, j) => `<label><input type="radio" ${required} name="q_${x.index}" value="${j}"> ${esc(o)}</label>`).join('')
+  }${x.hint ? `<details class="quiz-hint-box"><summary>Ver pista</summary><p>${esc(x.hint)}</p></details>` : ''}</fieldset>`;
+}
+
+/** Respuestas del intento tal como las manda el navegador ({ índice original: respuesta }). */
+function collectAttemptAnswers(form, questions) {
+  const data = new FormData(form);
+  const answers = {};
+  for (const x of questions) {
+    if (isNewType(x.type)) {
+      const answer = collectNewAnswer(data, x);
+      if (answer !== undefined) answers[x.index] = answer;
+      continue;
+    }
+    const value = data.get('q_' + x.index);
+    if (value !== null && value !== '') answers[x.index] = x.type === 'numeric' ? value : Number(value);
+  }
+  return answers;
+}
+
+/** Vuelve a poner en el formulario las respuestas guardadas (al retomar tras recargar). */
+function restoreAttemptAnswers(form, questions, answers) {
+  for (const [index, value] of Object.entries(answers || {})) {
+    const question = questions.find((x) => String(x.index) === index);
+    if (!question) continue;
+    if (isNewType(question.type)) {
+      restoreNewAnswer(form, question, value);
+      continue;
+    }
+    const input = form.querySelector(`[name="q_${index}"]${typeof value === 'number' ? `[value="${value}"]` : ''}`);
+    if (!input) continue;
+    if (input.type === 'radio') input.checked = true;
+    else input.value = value;
+  }
+}
+
+/** Páginas de preguntas (12.27): muestra la página `page` y ajusta los botones. */
+function showAttemptPage(form, page) {
+  const boxes = [...form.querySelectorAll('fieldset[data-page]')];
+  const pages = Math.max(...boxes.map((b) => Number(b.dataset.page))) + 1;
+  const current = Math.min(Math.max(page, 0), pages - 1);
+  form.dataset.page = current;
+  boxes.forEach((box) => (box.hidden = Number(box.dataset.page) !== current));
+  form.querySelector('[data-page-nav="prev"]').hidden = current === 0;
+  form.querySelector('[data-page-nav="next"]').hidden = current === pages - 1;
+  const label = form.querySelector('[data-page-label]');
+  if (label) label.textContent = `Página ${current + 1} de ${pages}`;
+  return current;
+}
+
+let attemptSave = null; // guardado automático del intento sin modo examen: { quizId, attempt, collect, timer }
+
+/** Indicador «Guardado» del intento. */
+function attemptSaveStatus(text, cls = '') {
+  const box = document.getElementById('quizSaveStatus');
+  if (!box) return;
+  box.textContent = text;
+  box.className = `quiz-save-status ${cls}`;
+}
+
+/** Guarda las respuestas del intento (12.27: en cualquier evaluación, no solo en el modo examen). */
+async function saveAttemptProgress() {
+  const state = attemptSave;
+  if (!state) return;
+  clearTimeout(state.timer);
+  attemptSaveStatus('Guardando…');
+  try {
+    await request('/api/attempt/progress', { course: current.course.id, quiz: state.quizId, attempt: state.attempt, answers: state.collect() });
+    if (attemptSave === state) attemptSaveStatus(`Guardado ${new Date().toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}`, 'is-saved');
+  } catch (error) {
+    if (attemptSave !== state) return;
+    if (error.data?.closed) return attemptClosed(error.message);
+    attemptSaveStatus('Sin conexión: se volverá a intentar', 'is-error');
+    state.timer = setTimeout(() => saveAttemptProgress(), 10_000);
+  }
+}
+
+/** El servidor cerró el intento (se acabó el tiempo): se muestra el resultado. */
+async function attemptClosed(message) {
+  clearInterval(quizTimer);
+  clearTimeout(attemptSave?.timer);
+  attemptSave = null;
+  releaseActiveExam();
+  stopExam();
+  dirty = false;
+  toast(message);
+  await reload();
+}
+
 async function startQuizAttempt(quizId, extra = {}) {
   const data = await request('/api/attempt/start', { course: current.course.id, quiz: quizId, ...extra });
   const offset = data.serverNow - Date.now();
   const exam = data.exam;
-  const required = exam ? '' : 'required'; // en el examen, lo que quede sin contestar cuenta como incorrecto
-  const questions = data.questions
-    .map(
-      (x, n) => `<fieldset class="quiz-question" data-index="${x.index}" data-position="${n}"><legend>${n + 1}. ${x.type === 'fill' ? 'Completa los espacios' : esc(x.text)}${pointsTag(x)}</legend>${quizImageHtml(x.image, n)}${
-        isNewType(x.type)
-          ? newAnswerInputHtml(x, required)
-          : x.type === 'numeric'
-          ? `<label class="quiz-number"><input name="q_${x.index}" inputmode="decimal" autocomplete="off" ${required} placeholder="Tu respuesta"> ${x.unit ? `<span>${esc(x.unit)}</span>` : ''}</label>`
-          : x.options.map((o, j) => `<label><input type="radio" ${required} name="q_${x.index}" value="${j}"> ${esc(o)}</label>`).join('')
-      }</fieldset>`,
-    )
-    .join('');
+  // Preguntas por página (12.27); en el examen «una pregunta a la vez» manda.
+  const perPage = exam?.oneByOne ? 0 : Number(data.perPage) || 0;
+  const paged = perPage > 0 && data.questions.length > perPage;
+  const required = exam || paged ? '' : 'required'; // en el examen, lo que quede sin contestar cuenta como incorrecto
+  const questions = data.questions.map((x, n) => attemptQuestionHtml(x, n, required).replace('<fieldset class="quiz-question"', `<fieldset class="quiz-question"${paged ? ` data-page="${Math.floor(n / perPage)}"` : ''}`)).join('');
   document.querySelector('[data-quiz-start]')?.remove();
   document.querySelector('[data-quiz-code]')?.remove();
   document.querySelector('.exam-intro')?.remove();
   $('#quizAttemptBox').innerHTML = `<form id="quizAttempt" class="quiz-attempt ${exam ? 'is-exam' : ''}">
-      <div class="quiz-attempt-head"><strong>Intento ${data.attempt}</strong>${exam?.oneByOne ? '<span id="examProgress" class="muted"></span>' : ''}${data.deadline ? '<span class="quiz-clock" id="quizClock" role="timer"></span>' : ''}</div>
+      <div class="quiz-attempt-head"><strong>Intento ${data.attempt}</strong>${exam?.oneByOne ? '<span id="examProgress" class="muted"></span>' : paged ? '<span class="muted" data-page-label></span>' : ''}<span id="quizSaveStatus" class="quiz-save-status" role="status" aria-live="polite"></span>${data.deadline ? '<span class="quiz-clock" id="quizClock" role="timer"></span>' : ''}</div>
       ${exam?.flagged ? '<p class="warning-note">No se pudo confirmar que estés en el salón: tu docente lo verá junto a tu examen.</p>' : ''}
       ${questions}<p class="form-error error" hidden></p>
       ${exam?.oneByOne ? '<div class="exam-nav"><button type="button" class="secondary" data-exam-nav="prev">‹ Anterior</button><button type="button" class="primary" data-exam-nav="next">Siguiente ›</button></div>' : ''}
+      ${paged ? '<div class="exam-nav"><button type="button" class="secondary" data-page-nav="prev">‹ Página anterior</button><button type="button" class="primary" data-page-nav="next">Página siguiente ›</button></div>' : ''}
       <button class="primary" id="quizSubmit">Enviar evaluación</button></form>`;
-  const collect = () => {
-    const form = new FormData($('#quizAttempt'));
-    const answers = {};
-    for (const x of data.questions) {
-      if (isNewType(x.type)) {
-        const answer = collectNewAnswer(form, x);
-        if (answer !== undefined) answers[x.index] = answer;
-        continue;
-      }
-      const value = form.get('q_' + x.index);
-      if (value !== null && value !== '') answers[x.index] = x.type === 'numeric' ? value : Number(value);
-    }
-    return answers;
-  };
+  const form = $('#quizAttempt');
+  const collect = () => collectAttemptAnswers($('#quizAttempt'), data.questions);
+  if (paged) showAttemptPage(form, 0);
   const submit = async () => {
     if (exam) await saveExamProgress(true).catch(() => {});
     const answers = collect();
@@ -613,16 +809,36 @@ async function startQuizAttempt(quizId, extra = {}) {
     } catch (error) {
       if (error.status === 423) showExamLock();
       if (error.data?.otherDevice) showOtherDevice();
+      if (error.data?.closed) {
+        attemptClosed(error.message);
+        return error.message;
+      }
       throw error;
     }
     releaseActiveExam();
     clearInterval(quizTimer);
+    clearTimeout(attemptSave?.timer);
+    attemptSave = null;
     stopExam();
     // Los enunciados tal como los vio (con sus datos), para mostrar sus ✓ y ✗ al volver a dibujar la pantalla.
     quizLastResult = { quiz: quizId, result, texts: Object.fromEntries(data.questions.map((x) => [x.index, x.text])) };
     return result.data.score === null || result.data.score === undefined ? `Evaluación enviada. ${pendingResultText(result.data)}` : `Evaluación enviada: ${result.data.score.toFixed(2)} / 10.`;
   };
   if (exam) startExam(quizId, data, collect);
+  else {
+    // Sin modo examen (12.27): las respuestas guardadas vuelven al recargar y se guardan mientras contesta.
+    restoreAttemptAnswers(form, data.questions, data.saved);
+    attemptSave = { quizId, attempt: data.attempt, collect, timer: null };
+    const queue = (delay) => {
+      if (!attemptSave) return;
+      clearTimeout(attemptSave.timer);
+      attemptSaveStatus('Cambios sin guardar…');
+      attemptSave.timer = setTimeout(() => saveAttemptProgress(), delay);
+    };
+    form.addEventListener('change', () => queue(300));
+    form.addEventListener('input', (e) => queue(e.target.matches('textarea, input[type="text"], input:not([type])') ? 1500 : 300));
+    if (data.saved && Object.keys(data.saved).length) attemptSaveStatus('Se recuperaron tus respuestas guardadas', 'is-saved');
+  }
   bindForm('#quizAttempt', submit);
   if (data.deadline) {
     const tick = () => {
@@ -648,6 +864,60 @@ async function startQuizAttempt(quizId, extra = {}) {
     quizTimer = setInterval(tick, 1000);
   }
 }
+
+document.addEventListener('click', (e) => {
+  const nav = e.target.closest('[data-page-nav]');
+  if (!nav) return;
+  const form = nav.closest('form');
+  showAttemptPage(form, Number(form.dataset.page || 0) + (nav.dataset.pageNav === 'next' ? 1 : -1));
+  if (attemptSave) saveAttemptProgress();
+  form.scrollIntoView?.({ block: 'start' });
+});
+
+// ---- Vista previa del docente (12.27) -----------------------------------------------------------------
+// Cada vista previa pide al servidor un sorteo nuevo (preguntas, orden y datos) como el de un alumno; no se guarda nada.
+
+let quizPreview = null; // { quizId, seed, questions }
+
+async function openQuizPreview(quizId) {
+  const data = await request('/api/quiz/preview', { course: current.course.id, quiz: quizId });
+  quizPreview = { quizId, seed: data.seed, questions: data.questions };
+  const total = data.questions.reduce((n, x) => n + (x.points || 1), 0);
+  modal(
+    'Vista previa',
+    `<p class="real-status">Así lo recibiría un alumno: <b>${data.questions.length} ${data.questions.length === 1 ? 'pregunta' : 'preguntas'}</b> (${Math.round(total * 100) / 100} puntos), sorteadas ahora. Cada vista previa sortea de nuevo. No se guarda nada.${data.perPage ? ` El alumno las verá de ${data.perPage} en ${data.perPage}.` : ''}</p>
+      <div id="quizPreviewQuestions" class="quiz-attempt">${data.questions.map((x, n) => attemptQuestionHtml(x, n, '')).join('')}</div>
+      <div id="quizPreviewResult"></div>
+      <p class="bank-pick-actions"><button type="button" class="primary" data-preview-grade>Revisar mis respuestas</button><button type="button" class="secondary" data-preview-again>Otra vista previa (nuevo sorteo)</button></p>`,
+    null,
+  );
+}
+
+async function gradeQuizPreview() {
+  if (!quizPreview) return;
+  const answers = collectAttemptAnswers($('#form'), quizPreview.questions);
+  const result = await request('/api/quiz/preview', { course: current.course.id, quiz: quizPreview.quizId, seed: quizPreview.seed, answers });
+  for (const box of document.querySelectorAll('#quizPreviewQuestions fieldset')) box.querySelector('.preview-mark')?.remove();
+  for (const d of result.details) {
+    const box = document.querySelector(`#quizPreviewQuestions fieldset[data-index="${d.index}"] legend`);
+    const mark = creditMark(d);
+    box?.insertAdjacentHTML('beforeend', ` <span class="preview-mark quiz-mark ${mark.cls}">${mark.icon}${mark.note}</span>`);
+  }
+  $('#quizPreviewResult').innerHTML = `<p class="quiz-result is-new">Calificación de esta vista previa: <b>${result.score.toFixed(2)} / 10</b> (${result.correct} de ${result.total} correctas${result.pending ? `; ${result.pending} escritas quedarían por revisar` : ''}).</p>`;
+}
+
+document.addEventListener('click', async (e) => {
+  const open = e.target.closest('[data-quiz-preview]');
+  const again = e.target.closest('[data-preview-again]');
+  const grade = e.target.closest('[data-preview-grade]');
+  if (!open && !again && !grade) return;
+  try {
+    if (grade) return await gradeQuizPreview();
+    await openQuizPreview(open ? open.dataset.quizPreview : quizPreview.quizId);
+  } catch (error) {
+    toast(error.message);
+  }
+});
 
 // ---- Respuestas escritas (docente) ------------------------------------------------------------------
 
@@ -877,17 +1147,7 @@ function startExam(quizId, data, collect) {
   examState = { quizId, attempt: data.attempt, exam, collect, position: exam.position || 0, events: [], awaySince: null, lastCopy: 0, saveTimer: null, ignoreBlur: false };
   document.body.classList.add('exam-running');
   // Respuestas guardadas (al retomar tras recargar).
-  for (const [index, value] of Object.entries(exam.answers || {})) {
-    const question = data.questions.find((x) => String(x.index) === index);
-    if (question && isNewType(question.type)) {
-      restoreNewAnswer(document.getElementById('quizAttempt'), question, value);
-      continue;
-    }
-    const input = document.querySelector(`#quizAttempt [name="q_${index}"]${typeof value === 'number' ? `[value="${value}"]` : ''}`);
-    if (!input) continue;
-    if (input.type === 'radio') input.checked = true;
-    else input.value = value;
-  }
+  restoreAttemptAnswers(document.getElementById('quizAttempt'), data.questions, data.saved);
   showExamQuestion();
   if (exam.locked) showExamLock();
   const form = $('#quizAttempt');
@@ -1128,10 +1388,13 @@ async function saveExamProgress() {
   const events = state.events.splice(0, 20);
   try {
     await request('/api/attempt/progress', { course: current.course.id, quiz: state.quizId, attempt: state.attempt, answers: state.collect(), position: state.position, events });
+    attemptSaveStatus(`Guardado ${new Date().toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}`, 'is-saved');
   } catch (error) {
     state.events.unshift(...events); // se reintenta en el siguiente guardado
     if (error.status === 423) showExamLock();
     if (error.data?.otherDevice) showOtherDevice();
+    if (error.data?.closed) attemptClosed(error.message);
+    else attemptSaveStatus('Sin conexión: se volverá a intentar', 'is-error');
     throw error;
   }
 }

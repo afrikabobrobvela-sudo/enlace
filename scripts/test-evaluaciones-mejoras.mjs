@@ -181,7 +181,7 @@ checks++;
 
 // ---- Navegador: importar preguntas y Excel ----
 const ctx = vm.createContext({ console, TextEncoder, TextDecoder, Blob, Response, DecompressionStream, structuredClone, URL });
-for (const file of ['reactivos.js', 'zip.js', 'oficina.js', 'importar.js']) {
+for (const file of ['reactivos.js', 'zip.js', 'oficina.js', 'd2l.js', 'importar.js']) {
   vm.runInContext(readFileSync('src/public/' + file, 'utf8').replace(/\ndocument\.addEventListener\([\s\S]*$/, ''), ctx);
 }
 const g = (name) => vm.runInContext(name, ctx);

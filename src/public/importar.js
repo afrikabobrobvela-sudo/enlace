@@ -12,9 +12,11 @@
  * Sin opciones: «Respuesta: Verdadero/Falso» → verdadero o falso; un número → aritmética (exacto si es entero,
  * 1 % si tiene decimales, o «Tolerancia: 2»); texto → respuesta corta
  * (varias aceptadas con |); sin respuesta → respuesta escrita. Con [[ ]] en el enunciado → para completar.
+ * El CSV de la biblioteca de preguntas de Brightspace (NewQuestion,…) se reconoce solo (12.27, d2l.js), y se pueden
+ * elegir varios archivos: cada uno (o cada grupo de IDs de Brightspace) queda como un grupo para sortear.
  */
 
-const IMPORT_MAX_QUESTIONS = 100;
+const IMPORT_MAX_QUESTIONS = 300;
 const importNorm = (s) =>
   String(s ?? '')
     .normalize('NFD')
@@ -289,6 +291,7 @@ function importFromBlocks(blocks) {
 }
 function importFromText(text) {
   const clean = String(text || '').replace(/\r\n?/g, '\n');
+  if (isD2LCsv(clean)) return parseD2LCsv(clean).slice(0, IMPORT_MAX_QUESTIONS);
   // Pegado desde Excel: columnas separadas por tabulador.
   const lines = clean.split('\n');
   if (lines.filter((l) => l.trim()).length && lines.filter((l) => l.includes('\t')).length >= Math.max(1, lines.filter((l) => l.trim()).length / 2)) {
@@ -302,7 +305,12 @@ async function importFromFile(file) {
   const name = file.name.toLowerCase();
   if (name.endsWith('.docx')) return importFromBlocks(importBlocks(await readDocxParagraphs(await file.arrayBuffer())));
   if (name.endsWith('.xlsx')) return importFromBlocks(importRowBlocks(await readXlsxRows(await file.arrayBuffer())));
-  if (name.endsWith('.csv')) return importFromBlocks(importRowBlocks(parseDelimited(await file.text())));
+  if (name.endsWith('.csv')) {
+    const text = await file.text();
+    // Biblioteca de preguntas de Brightspace (12.27).
+    if (isD2LCsv(text)) return parseD2LCsv(text).slice(0, IMPORT_MAX_QUESTIONS);
+    return importFromBlocks(importRowBlocks(parseDelimited(text)));
+  }
   if (name.endsWith('.txt') || file.type.startsWith('text/')) return importFromText(await file.text());
   if (name.endsWith('.doc') || name.endsWith('.xls')) throw new Error('Guarda el archivo en el formato nuevo (.docx o .xlsx) y vuelve a intentarlo.');
   throw new Error('Elige un archivo .docx, .xlsx, .csv o .txt.');
@@ -311,6 +319,24 @@ async function importFromFile(file) {
 // ---- Panel en el editor de la evaluación ----------------------------------------------------------------
 
 let importResult = [];
+let importFiles = []; // [{ file, items }]: lo leído, por archivo (para los grupos)
+let importGroupMode = 'auto';
+
+/** Aplica el modo de grupos a lo leído y deja la lista plana para la vista previa. */
+function applyImportGroups() {
+  assignImportGroups(importFiles, importGroupMode);
+  importResult = importFiles.flatMap(({ file, items }) => items.map((r) => ({ ...r, file })));
+}
+
+/** Lee uno o varios archivos (Word, Excel, CSV —también de Brightspace— o texto). */
+async function readImportFiles(files) {
+  const read = [];
+  for (const file of files) read.push({ file: file.name, items: await importFromFile(file) });
+  return read;
+}
+
+/** Aviso y error de un renglón de la vista previa (con el archivo si se eligieron varios). */
+const importWhere = (r) => `${importFiles.length > 1 && r.file ? `${r.file}, renglón` : 'Renglón'} ${r.line}`;
 
 const quizImportHtml = () => `<details class="quiz-import" id="quizImport"><summary>＋ Importar preguntas (Word, Excel o texto)</summary>
   <div class="quiz-import-body">
@@ -337,7 +363,8 @@ Respuesta: 3600
     </details>
     <textarea data-import-text rows="7" aria-label="Preguntas para importar" placeholder="1. ¿Cuál es la unidad de fuerza?&#10;a) Joule&#10;*b) Newton&#10;c) Watt"></textarea>
     <div class="quiz-import-actions"><button type="button" class="secondary" data-import-read>Revisar lo pegado</button>
-      <label class="secondary file-button">Elegir archivo<input type="file" accept=".docx,.xlsx,.csv,.txt" data-import-file hidden></label></div>
+      <label class="secondary file-button">Elegir archivos<input type="file" accept=".docx,.xlsx,.csv,.txt" data-import-file multiple hidden></label></div>
+    <p class="muted">¿Vienes de Brightspace? Exporta la biblioteca de preguntas como CSV y elígelo aquí (uno o varios archivos): se reconocen sus 8 tipos de pregunta y sus grupos.</p>
     <div data-import-preview></div>
   </div></details>`;
 
@@ -349,11 +376,29 @@ function renderImportPreview() {
     return;
   }
   const ok = importResult.filter((r) => r.question).length;
-  box.innerHTML = `<p class="real-status">${ok} de ${importResult.length} ${importResult.length === 1 ? 'pregunta se entendió' : 'preguntas se entendieron'}. Quita la marca de las que no quieras agregar.</p>
+  const groups = new Set(importResult.map((r) => r.question?.pool).filter(Boolean));
+  const canGroup = importFiles.length > 1 || importResult.some((r) => r.group);
+  box.innerHTML = `<p class="real-status">${ok} de ${importResult.length} ${importResult.length === 1 ? 'pregunta se entendió' : 'preguntas se entendieron'}${
+    groups.size ? `, en ${groups.size} ${groups.size === 1 ? 'grupo' : 'grupos'}` : ''
+  }. Quita la marca de las que no quieras agregar.</p>
+    ${
+      canGroup
+        ? `<label class="import-groups">Grupos para sortear<select data-import-groups>${[
+            ['auto', 'Automático'],
+            ['file', 'Uno por archivo'],
+            ['id', 'Por el ID de Brightspace (QUIM-P01-…)'],
+            ['none', 'Sin grupos (todas le tocan a todos)'],
+          ]
+            .map(([v, l]) => `<option value="${v}" ${importGroupMode === v ? 'selected' : ''}>${l}</option>`)
+            .join('')}</select></label>`
+        : ''
+    }
     <ul class="import-list">${importResult
       .map(
         (r, i) => `<li class="${r.error ? 'has-error' : ''}"><label class="check-label"><input type="checkbox" data-import-pick="${i}" ${r.question ? 'checked' : 'disabled'}>
-          <span>${r.question ? `<span class="quiz-type-tag">${QUESTION_TYPE_NAME[r.question.type]}</span>${pointsTag(r.question)} ` : ''}${esc(r.source)}${r.question ? `<br><span class="muted">${esc(importSummary(r.question))}</span>` : `<br><span class="error">Renglón ${r.line}: ${esc(r.error)}</span>`}</span></label></li>`,
+          <span>${r.question ? `<span class="quiz-type-tag">${QUESTION_TYPE_NAME[r.question.type]}</span>${pointsTag(r.question)}${poolTag(r.question)} ` : ''}${esc(r.source)}${
+            r.question ? `<br><span class="muted">${esc(importSummary(r.question))}</span>` : `<br><span class="error">${esc(importWhere(r))}: ${esc(r.error)}</span>`
+          }${r.question && r.warnings?.length ? `<br><span class="warning-text">${esc(importWhere(r))}: ${esc(r.warnings.join('; '))}.</span>` : ''}</span></label></li>`,
       )
       .join('')}</ul>
     <p class="bank-pick-actions"><button type="button" class="primary" data-import-add ${ok ? '' : 'disabled'}>Agregar ${ok} ${ok === 1 ? 'pregunta' : 'preguntas'}</button></p>`;
@@ -406,7 +451,8 @@ document.addEventListener('click', (e) => {
   if (!e.target.closest('#quizImport')) return;
   if (e.target.closest('[data-import-template]')) return importTemplate();
   if (e.target.closest('[data-import-read]')) {
-    importResult = importFromText(document.querySelector('#quizImport [data-import-text]').value);
+    importFiles = [{ file: '', items: importFromText(document.querySelector('#quizImport [data-import-text]').value) }];
+    applyImportGroups();
     return renderImportPreview();
   }
   const add = e.target.closest('[data-import-add]');
@@ -415,30 +461,46 @@ document.addEventListener('click', (e) => {
   if (!chosen.length) return toast('Elige al menos una pregunta.');
   quizDraft = readQuizQuestions();
   if (quizDraft.length === 1 && !quizDraft[0].text.trim()) quizDraft = [];
-  const room = 100 - quizDraft.length;
+  const room = QUIZ_MAX_QUESTIONS - quizDraft.length;
   quizDraft.push(...structuredClone(chosen.slice(0, room)));
   renderQuizQuestions();
   dirty = true;
   importResult = [];
+  importFiles = [];
   const panel = document.getElementById('quizImport');
   panel.open = false;
   panel.querySelector('[data-import-text]').value = '';
   panel.querySelector('[data-import-preview]').innerHTML = '';
-  toast(chosen.length > room ? `Se agregaron ${room}: una evaluación tiene como máximo 100 preguntas.` : `Se ${chosen.length === 1 ? 'agregó 1 pregunta' : `agregaron ${chosen.length} preguntas`}. Revísalas y guarda la evaluación.`);
+  const groups = new Set(chosen.slice(0, room).map((q) => q.pool).filter(Boolean)).size;
+  toast(
+    chosen.length > room
+      ? `Se agregaron ${room}: una evaluación tiene como máximo ${QUIZ_MAX_QUESTIONS} preguntas.`
+      : `Se ${chosen.length === 1 ? 'agregó 1 pregunta' : `agregaron ${chosen.length} preguntas`}${
+          groups ? ` en ${groups} ${groups === 1 ? 'grupo' : 'grupos'}: en «Preguntas al azar» elige cuántas recibe cada alumno de cada grupo y cuánto vale cada una` : ''
+        }. Revísalas y guarda la evaluación.`,
+  );
+  if (groups) document.getElementById('quizDrawBox')?.scrollIntoView?.({ block: 'center' });
 });
 
 document.addEventListener('change', async (e) => {
+  if (e.target.matches('#quizImport [data-import-groups]')) {
+    importGroupMode = e.target.value;
+    applyImportGroups();
+    return renderImportPreview();
+  }
   if (!e.target.matches('#quizImport [data-import-file]')) return;
-  const file = e.target.files?.[0];
+  const files = [...(e.target.files || [])];
   e.target.value = '';
-  if (!file) return;
+  if (!files.length) return;
   const box = document.querySelector('#quizImport [data-import-preview]');
-  box.innerHTML = '<p class="muted">Leyendo el archivo…</p>';
+  box.innerHTML = `<p class="muted">Leyendo ${files.length === 1 ? 'el archivo' : `${files.length} archivos`}…</p>`;
   try {
-    importResult = await importFromFile(file);
+    importFiles = await readImportFiles(files);
+    importGroupMode = 'auto';
+    applyImportGroups();
     // Examen nuevo sin título: se usa el nombre del archivo.
     const title = document.querySelector('#modal[open] input[name="title"]');
-    if (title && !title.value.trim()) title.value = file.name.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim().slice(0, 200);
+    if (title && !title.value.trim()) title.value = files[0].name.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim().slice(0, 200);
     renderImportPreview();
   } catch (error) {
     box.innerHTML = `<p class="form-error error">${esc(error.message || 'No se pudo leer el archivo.')}</p>`;
@@ -452,5 +514,5 @@ function importQuizModal() {
   if (!panel) return;
   panel.open = true;
   panel.scrollIntoView?.({ block: 'start' });
-  toast('Elige tu archivo (Word, Excel, CSV o texto) o pega las preguntas; después revisa y guarda.');
+  toast('Elige tus archivos (CSV de Brightspace, Word, Excel o texto) o pega las preguntas; después revisa y guarda.');
 }

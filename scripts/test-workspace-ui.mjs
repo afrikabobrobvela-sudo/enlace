@@ -38,7 +38,7 @@ const context = vm.createContext({
   clearTimeout,
   confirm: () => true
 });
-for (const file of ['fecha.js', 'richtext.js', 'trash.js', 'reactivos.js', 'evaluaciones.js', 'banco.js', 'oficina.js', 'resultados.js', 'importar.js', 'foros.js', 'condiciones.js', 'importaciones.js', 'secciones.js', 'especial.js', 'foto.js', 'pendientes.js', 'calendario.js', 'navegacion.js', 'movil.js', 'registro.js', 'workspace.js']) vm.runInContext(readFileSync('src/public/' + file, 'utf8'), context);
+for (const file of ['fecha.js', 'richtext.js', 'trash.js', 'reactivos.js', 'evaluaciones.js', 'banco.js', 'oficina.js', 'resultados.js', 'd2l.js', 'importar.js', 'foros.js', 'condiciones.js', 'importaciones.js', 'secciones.js', 'especial.js', 'foto.js', 'pendientes.js', 'calendario.js', 'navegacion.js', 'movil.js', 'registro.js', 'workspace.js']) vm.runInContext(readFileSync('src/public/' + file, 'utf8'), context);
 vm.runInContext(readFileSync('src/public/app.js', 'utf8').replace('\ninit();', '\n'), context);
 vm.runInContext(`me={id:'teacher',name:'Docente',email:'t@example.test',role:'teacher'};courses=[{id:'c',name:'Química <script>',group_name:'A',canTeach:true,canDelete:true}];current={course:courses[0],canTeach:true,canDelete:true,records:[{id:'g',kind:'group',revision:2,data:{title:'Equipo uno',category:'Equipos',members:['m']}}],members:[{id:'m',name:'Alumno',role:'student'}],files:[]};`, context);
 vm.runInContext('renderHome()', context);
