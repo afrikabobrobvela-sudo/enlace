@@ -5,6 +5,18 @@ No es el código de D2L Brightspace ni una plataforma oficial de la BUAP.
 
 Esta versión se despliega en **tu propia cuenta de Cloudflare** (Workers + D1 + R2, plan gratuito) y ya no depende de ChatGPT Sites.
 
+## Novedades de la versión 12.33 (importar preguntas con imágenes)
+
+**Importar con imágenes**: en «Importar examen» (Evaluaciones) y en «Importar al banco» ahora se puede elegir un **.zip** con las preguntas y sus imágenes, como el paquete de Brightspace:
+- el CSV de Brightspace con su renglón `Image` (o la imagen dentro del enunciado en HTML);
+- un Word, Excel o texto con «Imagen: figura1.png» (en Excel, la columna Imagen).
+
+En un **Word**, la imagen que pongas debajo de la pregunta se importa con ella; el logotipo del encabezado no cuenta. En la vista previa aparece la miniatura de cada imagen. Las imágenes se suben como material del curso al pulsar «Agregar» (o «Guardar en el banco»), y una imagen que usan varias preguntas se sube una sola vez.
+
+**Grupos desde el archivo**: en Word, Excel o texto, «Grupo: Vectores» (columna Grupo en Excel) pone la pregunta en ese grupo para sortear. Así se arma un banco con preguntas al azar sin capturar nada a mano.
+
+No requiere migración.
+
 ## Novedades de la versión 12.32 (pasar de pregunta sin «salidas», revisar en rojo, calificar en bloque y copiar la configuración)
 
 **Examen en el celular**: con «una pregunta a la vez» y «sin regresar», al pasar a la siguiente pregunta el navegador mostraba su propia ventana de confirmación. En el celular esa ventana le quita el foco a la página, y Enlace lo contaba como una salida; con tres salidas se bloqueaba el examen. Ahora la confirmación aparece dentro de la página y pasar de pregunta ya no cuenta como salida. Además, un parpadeo del foco de menos de 0.6 s (al tocar la pantalla o abrir el teclado) no se cuenta. Lo demás se cuenta igual:

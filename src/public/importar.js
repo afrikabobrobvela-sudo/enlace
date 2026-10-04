@@ -14,6 +14,11 @@
  * (varias aceptadas con |); sin respuesta → respuesta escrita. Con [[ ]] en el enunciado → para completar.
  * El CSV de la biblioteca de preguntas de Brightspace (NewQuestion,…) se reconoce solo (12.27, d2l.js), y se pueden
  * elegir varios archivos: cada uno (o cada grupo de IDs de Brightspace) queda como un grupo para sortear.
+ *
+ * Imágenes y grupos (12.33): las imágenes de un Word quedan en su pregunta; un .zip con las preguntas (el CSV de
+ * Brightspace, Word, Excel o texto) y sus imágenes se lee como el paquete de Brightspace: el renglón Image del CSV o
+ * «Imagen: figura1.png» (columna Imagen en Excel) nombra la imagen. «Grupo: Vectores» (columna Grupo) pone el grupo
+ * para sortear. Las imágenes se suben como material del curso al agregar las preguntas, no al leer el archivo.
  */
 
 const IMPORT_MAX_QUESTIONS = 300;
@@ -45,11 +50,11 @@ const importTypeOf = (value) => {
 // «1. …», «1) …», «Pregunta 1: …» o «P1. …».
 const Q_START = /^(?:(?:pregunta|p)\s*\d{1,3}\s*[.):\-–]|\d{1,3}\s*[.)])\s+(.+)$/i;
 const OPTION_LINE = /^(\*\s*)?([a-j])\s*[.)]\s+(.+)$/i;
-const META_LINE = /^(respuestas?|answer|clave|correcta|retroalimentaci[oó]n|explicaci[oó]n|feedback|puntos|valor|points|tipo|tolerancia|comentario)\s*[:=]\s*(.*)$/i;
+const META_LINE = /^(respuestas?|answer|clave|correcta|retroalimentaci[oó]n|explicaci[oó]n|feedback|puntos|valor|points|tipo|tolerancia|comentario|imagen|grupo|tema)\s*[:=]\s*(.*)$/i;
 const CORRECT_MARK = /\s*(\*|\(correcta\)|\(x\)|✓|✔)\s*$/i;
 
 function newBlock(stem, line) {
-  return { stem, options: [], answer: null, feedback: '', points: null, type: null, tolerance: null, line };
+  return { stem, options: [], answer: null, feedback: '', points: null, type: null, tolerance: null, pool: '', imagePath: '', images: [], line };
 }
 
 function applyMeta(b, key, value) {
@@ -60,6 +65,8 @@ function applyMeta(b, key, value) {
   else if (k === 'tipo') b.type = importTypeOf(value);
   else if (k === 'tolerancia') b.tolerance = Number(String(value).replace('%', '').replace(',', '.').trim());
   else if (k === 'comentario' && b.options.length) b.options.at(-1).feedback = value;
+  else if (k === 'imagen') b.imagePath = value;
+  else if (k === 'grupo' || k === 'tema') b.pool = value;
 }
 
 function pushOption(b, text, bold = false, marked = false) {
@@ -76,8 +83,9 @@ function pushOption(b, text, bold = false, marked = false) {
 }
 
 /**
- * Renglones → bloques de pregunta. Cada renglón: { text, level?, numId?, bold? } (level/numId/bold vienen de Word).
- * Si ningún renglón está numerado, cada pregunta va separada por un renglón en blanco.
+ * Renglones → bloques de pregunta. Cada renglón: { text, level?, numId?, bold?, images? } (lo demás viene de Word).
+ * Si ningún renglón está numerado, cada pregunta va separada por un renglón en blanco. Una imagen es de la pregunta
+ * que se está escribiendo (la del logotipo antes de la primera pregunta no cuenta).
  */
 function importBlocks(lines) {
   const blocks = [];
@@ -87,12 +95,14 @@ function importBlocks(lines) {
   lines.forEach((l, n) => {
     const t = l.text.trim();
     if (!t) {
-      gap = true;
+      if (l.images?.length) b?.images.push(...l.images);
+      else gap = true;
       return;
     }
     const meta = META_LINE.exec(t);
     if (meta && b) {
       applyMeta(b, meta[1], meta[2].trim());
+      if (l.images?.length) b.images.push(...l.images);
       gap = false;
       return;
     }
@@ -114,6 +124,7 @@ function importBlocks(lines) {
       blocks.push(b);
     } else if (b && !b.options.length && b.answer === null) b.stem += `\n${t}`;
     else if (b?.options.length) b.options.at(-1).text += ` ${t}`;
+    if (l.images?.length) b?.images.push(...l.images);
     gap = false;
   });
   return blocks;
@@ -131,6 +142,8 @@ function importRowBlocks(rows) {
     const cAnswer = col('respuesta', 'respuestas', 'correcta', 'clave');
     const cPoints = col('puntos', 'valor');
     const cFeedback = col('retroalimentacion', 'explicacion', 'feedback');
+    const cImage = col('imagen', 'image');
+    const cGroup = col('grupo', 'tema', 'group');
     const cOptions = head.map((h, i) => (/^(opcion\s*)?[a-j]$/.test(h) ? i : -1)).filter((i) => i >= 0);
     rows.slice(1).forEach((row, n) => {
       if (!String(row[cText] ?? '').trim()) return;
@@ -140,6 +153,8 @@ function importRowBlocks(rows) {
       if (cPoints >= 0 && String(row[cPoints] ?? '').trim()) b.points = Number(String(row[cPoints]).replace(',', '.'));
       if (cFeedback >= 0) b.feedback = String(row[cFeedback] ?? '').trim();
       if (cType >= 0) b.type = importTypeOf(row[cType]);
+      if (cImage >= 0) b.imagePath = String(row[cImage] ?? '').trim();
+      if (cGroup >= 0) b.pool = String(row[cGroup] ?? '').trim();
       blocks.push(b);
     });
     return blocks;
@@ -285,35 +300,154 @@ function parseDelimited(text) {
   return rows.filter((r) => r.some((x) => x.trim()));
 }
 
-/** Resultado para la vista previa: [{ question?, error?, line, source }]. */
-function importFromBlocks(blocks) {
-  return blocks.slice(0, IMPORT_MAX_QUESTIONS).map((b) => ({ ...importQuestion(b), line: b.line, source: b.stem.split('\n')[0].slice(0, 160) }));
+/**
+ * Resultado para la vista previa: [{ question?, error?, warnings?, line, source, explicitGroup?, imageFile? }].
+ * `findImage(ruta)` busca en el ZIP la imagen que nombra «Imagen: …»; las imágenes de Word ya vienen en el bloque.
+ */
+function importFromBlocks(blocks, findImage = null) {
+  return blocks.slice(0, IMPORT_MAX_QUESTIONS).map((b) => {
+    const r = { ...importQuestion(b), line: b.line, source: b.stem.split('\n')[0].slice(0, 160) };
+    if (!r.question) return r;
+    const warnings = [];
+    if (b.pool?.trim()) r.explicitGroup = b.pool.trim().slice(0, 80);
+    const images = [...(b.images || [])];
+    if (b.imagePath) {
+      const found = findImage?.(b.imagePath);
+      if (found) images.unshift(found);
+      else warnings.push(findImage ? `no se encontró la imagen «${b.imagePath}» en el ZIP` : `la imagen «${b.imagePath}» no se importa: elige un ZIP con las preguntas y sus imágenes`);
+    }
+    if (images.length) r.imageFile = images[0];
+    if (images.length > 1) warnings.push(`tenía ${images.length} imágenes: se usa la primera`);
+    if (warnings.length) r.warnings = warnings;
+    return r;
+  });
 }
-function importFromText(text) {
+function importFromText(text, findImage = null) {
   const clean = String(text || '').replace(/\r\n?/g, '\n');
-  if (isD2LCsv(clean)) return parseD2LCsv(clean).slice(0, IMPORT_MAX_QUESTIONS);
+  if (isD2LCsv(clean)) return parseD2LCsv(clean, findImage).slice(0, IMPORT_MAX_QUESTIONS);
   // Pegado desde Excel: columnas separadas por tabulador.
   const lines = clean.split('\n');
   if (lines.filter((l) => l.trim()).length && lines.filter((l) => l.includes('\t')).length >= Math.max(1, lines.filter((l) => l.trim()).length / 2)) {
-    return importFromBlocks(importRowBlocks(parseDelimited(clean)));
+    return importFromBlocks(importRowBlocks(parseDelimited(clean)), findImage);
   }
-  return importFromBlocks(importBlocks(lines.map((t) => ({ text: t }))));
+  return importFromBlocks(importBlocks(lines.map((t) => ({ text: t }))), findImage);
+}
+
+/** Preguntas de un archivo ya leído (suelto o dentro de un ZIP), según su extensión. */
+async function importFromBytes(name, bytes, findImage = null) {
+  const lower = name.toLowerCase();
+  const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+  if (lower.endsWith('.docx')) return importFromBlocks(importBlocks(await readDocxParagraphs(buffer)), findImage);
+  if (lower.endsWith('.xlsx')) return importFromBlocks(importRowBlocks(await readXlsxRows(buffer)), findImage);
+  const text = new TextDecoder().decode(bytes);
+  // Un CSV que no es de Brightspace: filas con columnas (el de Brightspace lo reconoce importFromText).
+  if (lower.endsWith('.csv') && !isD2LCsv(text)) return importFromBlocks(importRowBlocks(parseDelimited(text)), findImage);
+  return importFromText(text, findImage);
 }
 
 async function importFromFile(file) {
-  if (file.size > OFFICE_MAX_BYTES) throw new Error('El archivo pesa más de 15 MB.');
   const name = file.name.toLowerCase();
-  if (name.endsWith('.docx')) return importFromBlocks(importBlocks(await readDocxParagraphs(await file.arrayBuffer())));
-  if (name.endsWith('.xlsx')) return importFromBlocks(importRowBlocks(await readXlsxRows(await file.arrayBuffer())));
-  if (name.endsWith('.csv')) {
-    const text = await file.text();
-    // Biblioteca de preguntas de Brightspace (12.27).
-    if (isD2LCsv(text)) return parseD2LCsv(text).slice(0, IMPORT_MAX_QUESTIONS);
-    return importFromBlocks(importRowBlocks(parseDelimited(text)));
-  }
-  if (name.endsWith('.txt') || file.type.startsWith('text/')) return importFromText(await file.text());
   if (name.endsWith('.doc') || name.endsWith('.xls')) throw new Error('Guarda el archivo en el formato nuevo (.docx o .xlsx) y vuelve a intentarlo.');
-  throw new Error('Elige un archivo .docx, .xlsx, .csv o .txt.');
+  const known = /\.(docx|xlsx|csv|txt)$/.test(name);
+  if (!known && !file.type.startsWith('text/')) throw new Error('Elige un archivo .zip, .docx, .xlsx, .csv o .txt.');
+  if (file.size > OFFICE_MAX_BYTES) throw new Error('El archivo pesa más de 15 MB.');
+  return importFromBytes(known ? name : 'texto.txt', new Uint8Array(await file.arrayBuffer()));
+}
+
+// ---- ZIP con preguntas e imágenes (12.33) ---------------------------------------------------------------
+
+const IMPORT_ZIP_MAX_BYTES = 100 * 1024 * 1024;
+// Carpetas y archivos ocultos que agregan macOS y otros compresores.
+const hiddenZipEntry = (name) => name.endsWith('/') || /(^|\/)__MACOSX\//.test(name) || /(^|\/)\.[^/]*$/.test(name);
+
+/**
+ * Busca la imagen que nombra una pregunta: la misma ruta (sin distinguir mayúsculas), una ruta que termina igual
+ * (Brightspace puede anteponer /content/enforced/…) o, si ninguna otra se llama igual, solo por el nombre del archivo.
+ */
+function zipImageFinder(entries, scope) {
+  const norm = (path) => {
+    let value = String(path || '').replace(/\\/g, '/').trim();
+    try {
+      value = decodeURIComponent(value);
+    } catch {
+      // una ruta con % sueltos se compara tal cual
+    }
+    return value.replace(/^(\.\/)+/, '').replace(/^\/+/, '').toLowerCase();
+  };
+  const images = [...entries.keys()].filter((name) => !hiddenZipEntry(name) && importImageType(name)).map((name) => [norm(name), name]);
+  return (value) => {
+    const want = norm(value);
+    if (!want) return null;
+    const base = want.split('/').pop();
+    const sameName = images.filter(([n]) => n.split('/').pop() === base);
+    const hit =
+      images.find(([n]) => n === want) ||
+      images.find(([n]) => want.endsWith(`/${n}`) || n.endsWith(`/${want}`)) ||
+      (sameName.length === 1 ? sameName[0] : null);
+    return hit ? zipImage(entries, hit[1], scope) : null;
+  };
+}
+
+/**
+ * Un ZIP como el paquete de Brightspace: el CSV (o Word, Excel, texto) y sus imágenes. Cada archivo de preguntas
+ * cuenta como un archivo elegido (para los grupos «uno por archivo»).
+ */
+async function readImportZip(file) {
+  if (file.size > IMPORT_ZIP_MAX_BYTES) throw new Error(`«${file.name}» pesa más de 100 MB.`);
+  let entries;
+  try {
+    entries = unzipEntries(await file.arrayBuffer());
+  } catch {
+    throw new Error(`«${file.name}» no es un ZIP válido.`);
+  }
+  const findImage = zipImageFinder(entries, `zip${++zipImageScope}`);
+  const docs = [...entries.keys()].filter((name) => !hiddenZipEntry(name) && /\.(csv|docx|xlsx|txt)$/i.test(name)).sort((a, b) => a.localeCompare(b, 'es', { numeric: true }));
+  if (!docs.length) throw new Error(`«${file.name}» no trae preguntas: incluye el .csv de Brightspace, un .docx, un .xlsx o un .txt.`);
+  const read = [];
+  for (const name of docs) read.push({ file: name.split('/').pop(), items: await importFromBytes(name, await entries.get(name)(), findImage) });
+  return read;
+}
+
+/** Miniaturas de la vista previa (se liberan al leer otros archivos). */
+let importThumbs = [];
+async function importThumbnails(read) {
+  if (typeof URL?.createObjectURL !== 'function') return;
+  for (const url of importThumbs.splice(0)) URL.revokeObjectURL(url);
+  const byKey = new Map();
+  for (const { items } of read) {
+    for (const r of items) {
+      if (!r.imageFile) continue;
+      if (!byKey.has(r.imageFile.key)) {
+        const url = URL.createObjectURL(new Blob([await r.imageFile.read()], { type: r.imageFile.type }));
+        importThumbs.push(url);
+        byKey.set(r.imageFile.key, url);
+      }
+      r.thumb = byKey.get(r.imageFile.key);
+    }
+  }
+}
+
+/**
+ * Preguntas listas para guardar: cada imagen que venía en el ZIP o en el Word se sube como material del curso y su id
+ * queda en `image`. Una imagen que usan varias preguntas se sube una sola vez. `progress(n, total)` avisa cuál va.
+ */
+async function importQuestionsWithImages(items, progress = () => {}) {
+  const total = new Set(items.filter((r) => r.imageFile).map((r) => r.imageFile.key)).size;
+  const uploaded = new Map();
+  const questions = [];
+  for (const r of items) {
+    const question = structuredClone(r.question);
+    if (r.imageFile) {
+      const { key, name, type, read } = r.imageFile;
+      if (!uploaded.has(key)) {
+        progress(uploaded.size + 1, total);
+        uploaded.set(key, await uploadQuestionImage(new File([await read()], name, { type })));
+      }
+      question.image = uploaded.get(key);
+    }
+    questions.push(question);
+  }
+  return questions;
 }
 
 // ---- Panel en el editor de la evaluación ----------------------------------------------------------------
@@ -328,10 +462,14 @@ function applyImportGroups() {
   importResult = importFiles.flatMap(({ file, items }) => items.map((r) => ({ ...r, file })));
 }
 
-/** Lee uno o varios archivos (Word, Excel, CSV —también de Brightspace— o texto). */
+/** Lee uno o varios archivos (Word, Excel, CSV —también de Brightspace—, texto o un ZIP con preguntas e imágenes). */
 async function readImportFiles(files) {
   const read = [];
-  for (const file of files) read.push({ file: file.name, items: await importFromFile(file) });
+  for (const file of files) {
+    if (/\.zip$/i.test(file.name)) read.push(...(await readImportZip(file)));
+    else read.push({ file: file.name, items: await importFromFile(file) });
+  }
+  await importThumbnails(read);
   return read;
 }
 
@@ -340,7 +478,7 @@ const importWhere = (r) => `${importFiles.length > 1 && r.file ? `${r.file}, ren
 
 const quizImportHtml = () => `<details class="quiz-import" id="quizImport"><summary>＋ Importar preguntas (Word, Excel o texto)</summary>
   <div class="quiz-import-body">
-    <p class="muted">Pega tus preguntas o elige un archivo <b>.docx</b>, <b>.xlsx</b>, <b>.csv</b> o <b>.txt</b>. Antes de agregarlas verás cómo se entendió cada una.</p>
+    <p class="muted">Pega tus preguntas o elige un archivo <b>.docx</b>, <b>.xlsx</b>, <b>.csv</b>, <b>.txt</b> o un <b>.zip</b> con las preguntas y sus imágenes. Antes de agregarlas verás cómo se entendió cada una.</p>
     <details class="quiz-import-help"><summary>Cómo escribirlas</summary>
       <pre>1. ¿Cuál es la unidad de fuerza?
 a) Joule
@@ -358,13 +496,14 @@ Respuesta: 3600
 4. La unidad de carga es el [[coulomb|C]].
 
 5. Explica la primera ley de Newton.</pre>
-      <p class="muted">La correcta lleva <b>*</b> (en Word también sirve ponerla en negritas). Varias con * → selección múltiple. Sin opciones: «Verdadero/Falso», un número (aritmética: exacto si es entero, 1 % de tolerancia si tiene decimales, o «Tolerancia: 2»), un texto (respuesta corta; varias aceptadas con |) o nada (respuesta escrita). Otros tipos con «Tipo: Coincidencia» (opciones «Elemento -&gt; Pareja») o «Tipo: Ordenamiento» (opciones en el orden correcto). En Excel: columnas Tipo, Pregunta, A a F, Respuesta, Puntos y Retroalimentación.</p>
+      <p class="muted">La correcta lleva <b>*</b> (en Word también sirve ponerla en negritas). Varias con * → selección múltiple. Sin opciones: «Verdadero/Falso», un número (aritmética: exacto si es entero, 1 % de tolerancia si tiene decimales, o «Tolerancia: 2»), un texto (respuesta corta; varias aceptadas con |) o nada (respuesta escrita). Otros tipos con «Tipo: Coincidencia» (opciones «Elemento -&gt; Pareja») o «Tipo: Ordenamiento» (opciones en el orden correcto). En Excel: columnas Tipo, Pregunta, A a F, Respuesta, Puntos, Retroalimentación, Grupo e Imagen.</p>
+      <p class="muted"><b>Grupos e imágenes:</b> «Grupo: Vectores» pone la pregunta en ese grupo para sortear. En Word, la imagen que pongas debajo de la pregunta se importa con ella. Para texto, Excel o el CSV de Brightspace, junta el archivo y sus imágenes en un <b>.zip</b> y nombra cada una con «Imagen: figura1.png» (en Brightspace, el renglón Image).</p>
       <button type="button" class="text-btn" data-import-template>Descargar plantilla de Excel</button>
     </details>
     <textarea data-import-text rows="7" aria-label="Preguntas para importar" placeholder="1. ¿Cuál es la unidad de fuerza?&#10;a) Joule&#10;*b) Newton&#10;c) Watt"></textarea>
     <div class="quiz-import-actions"><button type="button" class="secondary" data-import-read>Revisar lo pegado</button>
-      <label class="secondary file-button">Elegir archivos<input type="file" accept=".docx,.xlsx,.csv,.txt" data-import-file multiple hidden></label></div>
-    <p class="muted">¿Vienes de Brightspace? Exporta la biblioteca de preguntas como CSV y elígelo aquí (uno o varios archivos): se reconocen sus 8 tipos de pregunta y sus grupos.</p>
+      <label class="secondary file-button">Elegir archivos<input type="file" accept=".zip,.docx,.xlsx,.csv,.txt" data-import-file multiple hidden></label></div>
+    <p class="muted">¿Vienes de Brightspace? Exporta la biblioteca de preguntas como CSV (o el ZIP con el CSV y sus imágenes) y elígelo aquí: se reconocen sus 8 tipos de pregunta, sus grupos y sus imágenes.</p>
     <div data-import-preview></div>
   </div></details>`;
 
@@ -377,10 +516,11 @@ function renderImportPreview() {
   }
   const ok = importResult.filter((r) => r.question).length;
   const groups = new Set(importResult.map((r) => r.question?.pool).filter(Boolean));
-  const canGroup = importFiles.length > 1 || importResult.some((r) => r.group);
+  const canGroup = importFiles.length > 1 || importResult.some((r) => r.group || r.explicitGroup);
+  const withImages = importResult.filter((r) => r.question && r.imageFile).length;
   box.innerHTML = `<p class="real-status">${ok} de ${importResult.length} ${importResult.length === 1 ? 'pregunta se entendió' : 'preguntas se entendieron'}${
     groups.size ? `, en ${groups.size} ${groups.size === 1 ? 'grupo' : 'grupos'}` : ''
-  }. Quita la marca de las que no quieras agregar.</p>
+  }${withImages ? ` (${withImages} con imagen)` : ''}. Quita la marca de las que no quieras agregar.</p>
     ${
       canGroup
         ? `<label class="import-groups">Grupos para sortear<select data-import-groups>${[
@@ -398,7 +538,9 @@ function renderImportPreview() {
         (r, i) => `<li class="${r.error ? 'has-error' : ''}"><label class="check-label"><input type="checkbox" data-import-pick="${i}" ${r.question ? 'checked' : 'disabled'}>
           <span>${r.question ? `<span class="quiz-type-tag">${QUESTION_TYPE_NAME[r.question.type]}</span>${pointsTag(r.question)}${poolTag(r.question)} ` : ''}${esc(r.source)}${
             r.question ? `<br><span class="muted">${esc(importSummary(r.question))}</span>` : `<br><span class="error">${esc(importWhere(r))}: ${esc(r.error)}</span>`
-          }${r.question && r.warnings?.length ? `<br><span class="warning-text">${esc(importWhere(r))}: ${esc(r.warnings.join('; '))}.</span>` : ''}</span></label></li>`,
+          }${r.question && r.warnings?.length ? `<br><span class="warning-text">${esc(importWhere(r))}: ${esc(r.warnings.join('; '))}.</span>` : ''}${
+            r.question && r.imageFile ? `<br>${r.thumb ? `<img class="import-thumb" src="${esc(r.thumb)}" alt="">` : ''}<span class="muted">Imagen: ${esc(r.imageFile.name)}</span>` : ''
+          }</span></label></li>`,
       )
       .join('')}</ul>
     <p class="bank-pick-actions"><button type="button" class="primary" data-import-add ${ok ? '' : 'disabled'}>Agregar ${ok} ${ok === 1 ? 'pregunta' : 'preguntas'}</button></p>`;
@@ -447,7 +589,7 @@ function importTemplate() {
   ]);
 }
 
-document.addEventListener('click', (e) => {
+document.addEventListener('click', async (e) => {
   if (!e.target.closest('#quizImport')) return;
   if (e.target.closest('[data-import-template]')) return importTemplate();
   if (e.target.closest('[data-import-read]')) {
@@ -456,13 +598,27 @@ document.addEventListener('click', (e) => {
     return renderImportPreview();
   }
   const add = e.target.closest('[data-import-add]');
-  if (!add) return;
-  const chosen = [...document.querySelectorAll('#quizImport [data-import-pick]:checked')].map((x) => importResult[Number(x.dataset.importPick)]?.question).filter(Boolean);
+  if (!add || add.disabled) return;
+  const chosen = [...document.querySelectorAll('#quizImport [data-import-pick]:checked')].map((x) => importResult[Number(x.dataset.importPick)]).filter((r) => r?.question);
   if (!chosen.length) return toast('Elige al menos una pregunta.');
+  const existing = readQuizQuestions();
+  const room = QUIZ_MAX_QUESTIONS - (existing.length === 1 && !existing[0].text.trim() ? 0 : existing.length);
+  // Las imágenes se suben primero (como material del curso); si una falla, no se agrega nada.
+  const label = add.textContent;
+  add.disabled = true;
+  let questions;
+  try {
+    questions = await importQuestionsWithImages(chosen.slice(0, room), (n, total) => {
+      add.textContent = `Subiendo imagen ${n} de ${total}…`;
+    });
+  } catch (error) {
+    add.disabled = false;
+    add.textContent = label;
+    return toast(error.message || 'No se pudo subir una imagen.');
+  }
   quizDraft = readQuizQuestions();
   if (quizDraft.length === 1 && !quizDraft[0].text.trim()) quizDraft = [];
-  const room = QUIZ_MAX_QUESTIONS - quizDraft.length;
-  quizDraft.push(...structuredClone(chosen.slice(0, room)));
+  quizDraft.push(...questions);
   renderQuizQuestions();
   dirty = true;
   importResult = [];
@@ -471,7 +627,7 @@ document.addEventListener('click', (e) => {
   panel.open = false;
   panel.querySelector('[data-import-text]').value = '';
   panel.querySelector('[data-import-preview]').innerHTML = '';
-  const groups = new Set(chosen.slice(0, room).map((q) => q.pool).filter(Boolean)).size;
+  const groups = new Set(questions.map((q) => q.pool).filter(Boolean)).size;
   toast(
     chosen.length > room
       ? `Se agregaron ${room}: una evaluación tiene como máximo ${QUIZ_MAX_QUESTIONS} preguntas.`
@@ -514,5 +670,5 @@ function importQuizModal() {
   if (!panel) return;
   panel.open = true;
   panel.scrollIntoView?.({ block: 'start' });
-  toast('Elige tus archivos (CSV de Brightspace, Word, Excel o texto) o pega las preguntas; después revisa y guarda.');
+  toast('Elige tus archivos (CSV o ZIP de Brightspace, Word, Excel o texto) o pega las preguntas; después revisa y guarda.');
 }

@@ -1370,3 +1370,6 @@ article.course .course-cover.has-cover .course-letter { opacity: 0; }
 .bulk-grade-pick { margin: 0; }
 .copy-scheme-list { margin: 4px 0 12px; padding-left: 20px; }
 .copy-scheme-targets { display: grid; gap: 6px; border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; max-height: 40vh; overflow: auto; }
+
+/* Importar con imágenes (12.33): miniatura de la imagen de cada pregunta en la vista previa. */
+.import-thumb { display: block; max-width: 160px; max-height: 90px; margin: 6px 0 2px; border: 1px solid var(--line); border-radius: 6px; background: #fff; object-fit: contain; }

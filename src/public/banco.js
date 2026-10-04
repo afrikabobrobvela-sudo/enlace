@@ -308,11 +308,12 @@ function renderBankImportPreview() {
   assignImportGroups(files, mode === 'single' ? 'none' : mode, true);
   const items = files.flatMap(({ file, items }) => items.map((r) => ({ ...r, file })));
   const ok = items.filter((r) => r.question);
+  const withImages = ok.filter((r) => r.imageFile).length;
   const topics = new Map();
   for (const r of ok) topics.set(r.question.pool || '', (topics.get(r.question.pool || '') || 0) + 1);
   const where = (r) => `${files.length > 1 ? `${r.file}, renglón` : 'Renglón'} ${r.line}`;
   const problems = items.filter((r) => r.error || r.warnings?.length);
-  box.innerHTML = `<p class="real-status">${ok.length} de ${items.length} ${items.length === 1 ? 'pregunta se entendió' : 'preguntas se entendieron'}.</p>
+  box.innerHTML = `<p class="real-status">${ok.length} de ${items.length} ${items.length === 1 ? 'pregunta se entendió' : 'preguntas se entendieron'}${withImages ? ` (${withImages} con imagen)` : ''}.</p>
     ${mode === 'single' ? '' : `<ul class="bank-import-topics">${[...topics].map(([t, n]) => `<li><b>${esc(bankTopicName(t))}</b>: ${n} ${n === 1 ? 'pregunta' : 'preguntas'}</li>`).join('')}</ul>`}
     ${problems.length ? `<ul class="import-list">${problems.map((r) => `<li class="${r.error ? 'has-error' : ''}">${esc(r.source)}<br><span class="${r.error ? 'error' : 'warning-text'}">${esc(where(r))}: ${esc(r.error || `${r.warnings.join('; ')}.`)}</span></li>`).join('')}</ul>` : ''}`;
 }
@@ -321,8 +322,8 @@ function bankImportModal() {
   bankImport = { files: [], mode: 'auto' };
   modal(
     'Importar preguntas al banco',
-    `<p class="muted">Elige uno o varios archivos: el <b>CSV de la biblioteca de preguntas de Brightspace</b> (se reconocen sus 8 tipos: MC, TF, MS, M, O, SA, FIB y WR) o preguntas en Word, Excel o texto. Las que ya estén en tu banco no se repiten.</p>
-      <label class="secondary file-button">Elegir archivos<input type="file" accept=".csv,.docx,.xlsx,.txt" multiple data-bank-import-file hidden></label>
+    `<p class="muted">Elige uno o varios archivos: el <b>CSV de la biblioteca de preguntas de Brightspace</b> (se reconocen sus 8 tipos: MC, TF, MS, M, O, SA, FIB y WR; con sus imágenes si viene en un <b>.zip</b>) o preguntas en Word, Excel o texto. Las que ya estén en tu banco no se repiten.</p>
+      <label class="secondary file-button">Elegir archivos<input type="file" accept=".zip,.csv,.docx,.xlsx,.txt" multiple data-bank-import-file hidden></label>
       <label>Tema de cada pregunta<select name="topicMode" data-bank-import-mode>
         <option value="auto">Automático (por archivo, o por el ID de Brightspace si un archivo trae varios grupos)</option>
         <option value="file">Uno por archivo (el nombre del archivo)</option>
@@ -336,8 +337,18 @@ function bankImportModal() {
       if (!ok.length) throw new Error('Elige al menos un archivo con preguntas.');
       const single = bankImport.mode === 'single';
       if (single && !String(f.get('topic') || '').trim()) throw new Error('Escribe el nombre del tema.');
+      // Las imágenes (del ZIP o del Word) se suben como material de este curso antes de guardar (12.33).
+      const button = $('#formSave');
+      let questions;
+      try {
+        questions = await importQuestionsWithImages(ok, (n, total) => {
+          button.textContent = `Subiendo imagen ${n} de ${total}…`;
+        });
+      } finally {
+        button.textContent = 'Guardar en el banco';
+      }
       const byTopic = new Map();
-      for (const { question } of ok) {
+      for (const question of questions) {
         const { pool, ...rest } = question;
         const topic = single ? String(f.get('topic')).trim() : pool || '';
         (byTopic.get(topic) || byTopic.set(topic, []).get(topic)).push(rest);

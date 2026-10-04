@@ -1,4 +1,4 @@
-/* Importar el CSV de la biblioteca de preguntas de Brightspace (D2L), 12.27.
+/* Importar el CSV de la biblioteca de preguntas de Brightspace (D2L), 12.27; con sus imágenes si viene en un ZIP (12.33).
  * Adaptado del lector del paquete de integración (evaluaciones/d2l-csv.ts): en vez de un formato propio, cada pregunta
  * sale ya con la forma de Enlace (la misma que valida questionFields() en el servidor), así sirve igual para el banco,
  * para una evaluación y para las preguntas al azar por grupo. Todo se lee en el navegador (el servidor no procesa archivos).
@@ -116,7 +116,6 @@ function d2lQuestion(block) {
   if (feedback) extra.explanation = feedback.slice(0, 3000);
   const hint = d2lText(get('Hint')?.[1]);
   if (hint) extra.hint = hint.slice(0, 1000);
-  if (get('Image')?.[1]) warnings.push('la imagen no se importa: agrégala en el editor');
   const scoringOf = (fallback) => D2L_SCORING[String(get('Scoring')?.[1] || '').toLowerCase().replace(/[^a-z]/g, '')] || fallback;
 
   switch (type) {
@@ -227,10 +226,22 @@ function d2lQuestion(block) {
 }
 
 /**
- * Lee un CSV de Brightspace: [{ question?, error?, warnings, line, source, id, group }]. `line` es el renglón donde
- * empieza la pregunta en el archivo; `group` es el grupo sugerido por su ID.
+ * Ruta de la imagen de una pregunta: el renglón «Image» o, si no hay, la primera <img> del enunciado en HTML (así
+ * exporta Brightspace las imágenes pegadas en la pregunta).
  */
-function parseD2LCsv(text) {
+function d2lImagePath(block) {
+  const row = block.find((r) => String(r[0] || '').trim().toLowerCase() === 'image');
+  if (row?.[1]) return String(row[1]).trim();
+  const html = String(block.find((r) => String(r[0] || '').trim().toLowerCase() === 'questiontext')?.[1] || '');
+  return /<img\b[^>]*?\bsrc\s*=\s*["']([^"']+)["']/i.exec(html)?.[1]?.trim() || '';
+}
+
+/**
+ * Lee un CSV de Brightspace: [{ question?, error?, warnings, line, source, id, group, imageFile? }]. `line` es el renglón
+ * donde empieza la pregunta en el archivo; `group` es el grupo sugerido por su ID. `findImage(ruta)` (12.33) busca la
+ * imagen de la pregunta en el ZIP que traía el CSV; sin ZIP, la imagen no se importa y se avisa.
+ */
+function parseD2LCsv(text, findImage = null) {
   const rows = d2lCsvRows(text);
   const blocks = [];
   rows.forEach((r, n) => {
@@ -244,7 +255,12 @@ function parseD2LCsv(text) {
     const source = (d2lText(block.find((r) => String(r[0]).toLowerCase() === 'questiontext')?.[1]) || title || id || 'Pregunta').split('\n')[0].slice(0, 160);
     try {
       const { question, warnings } = d2lQuestion(block);
-      return { question, warnings, line, source, id, group: d2lGroupOf(id) };
+      const imagePath = d2lImagePath(block);
+      const imageFile = imagePath && findImage ? findImage(imagePath) : null;
+      if (imagePath && !imageFile) {
+        warnings.push(findImage ? `no se encontró la imagen «${imagePath}» en el ZIP: agrégala en el editor` : 'la imagen no se importa: elige el ZIP con el CSV y sus imágenes, o agrégala en el editor');
+      }
+      return { question, warnings, line, source, id, group: d2lGroupOf(id), ...(imageFile ? { imageFile } : {}) };
     } catch (error) {
       return { error: error.message, warnings: [], line, source, id, group: d2lGroupOf(id) };
     }
@@ -255,7 +271,8 @@ function parseD2LCsv(text) {
  * Grupo (o tema del banco) de cada pregunta importada. `mode`: 'auto', 'file' (uno por archivo), 'id' (por el ID de
  * Brightspace, «QUIM-P01-07» → «QUIM-P01») o 'none'. En 'auto': por ID si el archivo trae varios grupos; si no, por
  * archivo cuando se importan varios (o siempre, con `perFile`, como en el banco, donde el tema hace falta).
- * `results` es [{ file, items }].
+ * El grupo escrito en la pregunta («Grupo: Vectores» en Word, Excel o texto; `explicitGroup`) manda, salvo con
+ * 'file' o 'none'. `results` es [{ file, items }].
  */
 function assignImportGroups(results, mode = 'auto', perFile = false) {
   for (const { file, items } of results) {
@@ -265,7 +282,7 @@ function assignImportGroups(results, mode = 'auto', perFile = false) {
     const byFile = mode === 'file' || (mode === 'auto' && (perFile || results.length > 1));
     for (const r of items) {
       if (!r.question) continue;
-      const group = mode === 'none' ? '' : byId ? r.group || name : byFile ? name : '';
+      const group = mode === 'none' ? '' : r.explicitGroup && mode !== 'file' ? r.explicitGroup : byId ? r.group || name : byFile ? name : '';
       if (group) r.question.pool = group.slice(0, 80);
       else delete r.question.pool;
     }

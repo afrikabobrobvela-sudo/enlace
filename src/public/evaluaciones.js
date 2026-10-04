@@ -581,6 +581,19 @@ document.addEventListener('click', (e) => {
   if (e.target.closest('[data-exam-place]')) captureExamPlace();
 });
 // Imagen de una pregunta: se reduce en el teléfono o la computadora (no en el servidor) y se sube como material.
+async function uploadQuestionImage(file) {
+  const blob = await compressImage(file);
+  const r = await fetch(`/api/upload?course=${encodeURIComponent(current.course.id)}&scope=material`, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'X-Aula-Request': '1', 'x-file-name': encodeURIComponent(file.name || 'imagen.jpg'), 'content-type': blob.type || file.type || 'image/jpeg' },
+    body: blob,
+  });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data.error || `No se pudo subir la imagen «${file.name || 'imagen'}».`);
+  return data.id;
+}
+
 document.addEventListener('change', async (e) => {
   if (!e.target.matches('#quizQuestions [data-quiz-image]')) return;
   const file = e.target.files?.[0];
@@ -589,17 +602,9 @@ document.addEventListener('change', async (e) => {
   const label = e.target.closest('label');
   label.firstChild.textContent = 'Subiendo imagen…';
   try {
-    const blob = await compressImage(file);
-    const r = await fetch(`/api/upload?course=${encodeURIComponent(current.course.id)}&scope=material`, {
-      method: 'POST',
-      credentials: 'same-origin',
-      headers: { 'X-Aula-Request': '1', 'x-file-name': encodeURIComponent(file.name || 'imagen.jpg'), 'content-type': blob.type || file.type || 'image/jpeg' },
-      body: blob,
-    });
-    const data = await r.json();
-    if (!r.ok) throw new Error(data.error || 'No se pudo subir la imagen.');
+    const id = await uploadQuestionImage(file);
     quizDraft = readQuizQuestions();
-    quizDraft[Number(box.dataset.question)].image = data.id;
+    quizDraft[Number(box.dataset.question)].image = id;
     renderQuizQuestions();
     dirty = true;
   } catch (error) {

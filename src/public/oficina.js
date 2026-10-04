@@ -5,6 +5,17 @@
 
 const OFFICE_MAX_BYTES = 15 * 1024 * 1024;
 
+/** Imágenes que se pueden importar con las preguntas (12.33): las que muestran todos los navegadores. */
+const IMPORT_IMAGE_TYPES = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp' };
+const importImageType = (path) => IMPORT_IMAGE_TYPES[String(path).toLowerCase().split('.').pop()] || null;
+
+/**
+ * Una imagen dentro de un ZIP o de un .docx: se descomprime solo cuando se va a mostrar o a subir. `key` distingue
+ * archivos con la misma ruta en dos documentos (dos Word traen su propio word/media/image1.png).
+ */
+let zipImageScope = 0;
+const zipImage = (entries, path, scope) => ({ key: `${scope}:${path}`, name: path.split('/').pop(), type: importImageType(path), read: entries.get(path) });
+
 /** Entradas de un ZIP: nombre → función que devuelve su contenido (se descomprime solo lo que se pide). */
 function unzipEntries(buffer) {
   const bytes = new Uint8Array(buffer);
@@ -100,7 +111,8 @@ async function readXlsxRows(buffer) {
 }
 
 /**
- * Párrafos de un .docx: texto, nivel y número de lista (0, 1… o null si no es lista) y si todo está en negritas.
+ * Párrafos de un .docx: texto, nivel y número de lista (0, 1… o null si no es lista), si todo está en negritas y sus
+ * imágenes (12.33, `images`; un párrafo con solo una imagen también cuenta).
  * Con listas automáticas de Word, los números y letras no forman parte del texto: el nivel dice qué es cada renglón.
  */
 async function readDocxParagraphs(buffer) {
@@ -122,6 +134,15 @@ async function readDocxParagraphs(buffer) {
     }
     return '';
   };
+  // Imágenes: la relación (rId) de cada una apunta a su archivo dentro del .docx (word/media/…).
+  const media = new Map();
+  const scope = `docx${++zipImageScope}`;
+  for (const m of ((await zipText(entries, 'word/_rels/document.xml.rels')) || '').matchAll(/<Relationship\b([^>]*?)\/?>/g)) {
+    const target = xmlAttr(m[1], 'Target');
+    if (!target || xmlAttr(m[1], 'TargetMode') === 'External') continue;
+    const path = target.startsWith('/') ? target.slice(1) : `word/${target.replace(/^\.\//, '')}`;
+    if (entries.has(path) && importImageType(path)) media.set(xmlAttr(m[1], 'Id'), path);
+  }
   const paragraphs = [];
   for (const p of xml.matchAll(/<w:p\b[^>]*>([\s\S]*?)<\/w:p>/g)) {
     const body = p[1];
@@ -147,9 +168,13 @@ async function readDocxParagraphs(buffer) {
     }
     // numId "0" quita la numeración heredada del estilo.
     const listed = level && numId !== '0';
-    paragraphs.push({ text: text.trim(), level: listed ? Number(level[1]) : null, numId: listed ? numId : null, bold: any && bold });
+    const images = [...body.matchAll(/<a:blip\b[^>]*?\br:embed="([^"]+)"|<v:imagedata\b[^>]*?\br:id="([^"]+)"/g)]
+      .map((m) => media.get(m[1] || m[2]))
+      .filter(Boolean)
+      .map((path) => zipImage(entries, path, scope));
+    paragraphs.push({ text: text.trim(), level: listed ? Number(level[1]) : null, numId: listed ? numId : null, bold: any && bold, ...(images.length ? { images } : {}) });
   }
-  return paragraphs.filter((p) => p.text);
+  return paragraphs.filter((p) => p.text || p.images);
 }
 
 // ---- Escribir un .xlsx ----------------------------------------------------------------------------------
