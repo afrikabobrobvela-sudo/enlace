@@ -1,4 +1,18 @@
 {
+  "extraKnownMarketplaces": {
+    "ecc": {
+      "source": {
+        "source": "github",
+        "repo": "affaan-m/ECC"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "ecc@ecc": true
+  },
+  "env": {
+    "ECC_HOOK_PROFILE": "minimal"
+  },
   "hooks": {
     "SessionStart": [
       {
