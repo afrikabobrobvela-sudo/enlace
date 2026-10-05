@@ -609,7 +609,7 @@ article.course.is-archived { opacity: 0.92; }
 .quiz-detail .ok { color: var(--success); }
 .quiz-detail .bad { color: #b42318; }
 .quiz-result.is-new { border-left: 4px solid var(--accent); }
-@media (max-width: 700px) { .quiz-var { grid-template-columns: 1fr 1fr; } .quiz-attempt-head { position: static; } }
+@media (max-width: 700px) { .quiz-var { grid-template-columns: 1fr 1fr; } }
 /* Las reglas antiguas dan width: 100% a todo input dentro de formularios: aquí se ajustan. */
 .quiz-option input[type='radio'] { flex: none; width: 18px !important; min-width: 18px; margin: 0; }
 .quiz-option input[data-o] { flex: 1 1 auto; width: auto !important; min-width: 0; }
@@ -1392,3 +1392,65 @@ article.course .course-cover.has-cover .course-letter { opacity: 0; }
 .workspace-eyebrow { color: #0a7383; }
 /* Pastillas y notas pequeñas sobre fondos grises: el texto en --ink-soft para pasar de 4.5:1. */
 .count-pill, .status-pill.draft, .course-guide summary small { color: var(--ink-soft); }
+
+/* Examen en el celular 12.36: el encabezado del intento (reloj, contestadas) siempre a la vista. */
+.quiz-answered { font-size: 0.9rem; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+.quiz-clock.is-warn { color: #8a5300; }
+.quiz-result.is-new { scroll-margin-top: 140px; }
+.quiz-result.is-new:focus { outline: 3px solid var(--brand); outline-offset: 3px; }
+@media (max-width: 720px) { .quiz-result.is-new { scroll-margin-top: 72px; } }
+/* Actividades del alumno 12.36: por entregar (acento) y vencidas (aviso, sin usar el rojo de error). */
+.status-pill.is-due { background: #e6f4f7; color: #075766; border-color: #b9dfe7; }
+.status-pill.is-late { background: #fff4e5; color: #7a4100; border-color: #f3d3a6; }
+
+/* Accesibilidad 12.36 ------------------------------------------------------------------------------------------- */
+/* Anillo de foco sólido (≥ 3:1 sobre blanco y sobre el fondo, WCAG 1.4.11); antes era turquesa translúcido (~1.5:1). */
+button:focus-visible, a:focus-visible, summary:focus-visible, .dt-display:focus-visible, .thread-row:focus-visible,
+input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 3px solid #0a7383; outline-offset: 2px; }
+/* Contador de avisos e iniciales del perfil: blanco sobre turquesa daba 3.2:1; con el tono oscuro del acento, ≥ 5:1. */
+.badge-count { background: #0a7383; color: #fff; }
+.profile-square { background: linear-gradient(135deg, var(--brand), #0a7383); color: #fff; }
+/* Grises de capas viejas que no llegaban a 4.5:1. */
+.pending-message, .course-content p, .empty, .course-picker-panel small { color: var(--ink-faint); }
+
+/* Libro de calificaciones 12.36: más alumnos a la vista (alto de la ventana, filas compactas, encabezado fijo). */
+.gradebook { max-height: max(320px, calc(100dvh - 190px)); }
+.gradebook thead th { position: sticky; top: 0; z-index: 2; background: #f6f9fc; }
+.gradebook thead .sticky-name { z-index: 3; }
+.gradebook td { min-width: 112px; padding-block: 8px; }
+.gradebook .sticky-name { min-width: 230px; }
+.gradebook th .muted { font-weight: 400; text-transform: none; letter-spacing: 0; }
+.gradebook thead th { padding-block: 10px; vertical-align: bottom; }
+
+/* Menos ruido para el docente 12.36: «Visible para alumnos» es lo normal y queda discreto; lo que destaca es la
+   excepción (oculto o programado). Las acciones que quitan algo se distinguen por color y separación. */
+.visibility-toggle:not(.is-hidden):not(.is-scheduled) { background: transparent; border-color: transparent; color: var(--ink-faint); font-weight: 500; box-shadow: none; }
+.visibility-toggle:not(.is-hidden):not(.is-scheduled)::before { opacity: 0.6; }
+.visibility-toggle:not(.is-hidden):not(.is-scheduled):hover { background: #f2f6f9; color: var(--ink-soft); }
+.text-btn.danger-text { color: #b42318; margin-left: 12px; }
+.text-btn.danger-text:hover { background: #fdecea; }
+/* «Más acciones» de la evaluación 12.36: lo poco frecuente sale de la fila principal de botones. */
+.more-actions { position: relative; }
+.more-actions > summary { list-style: none; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+.more-actions > summary::-webkit-details-marker { display: none; }
+.more-actions > summary::after { content: '⌄'; font-size: 0.9em; }
+.more-actions-panel { position: absolute; z-index: 20; top: calc(100% + 6px); left: 0; min-width: 220px; display: grid; padding: 6px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface); box-shadow: var(--shadow-md, 0 8px 24px rgb(16 37 54 / 0.12)); }
+.more-actions-panel button { text-align: left; padding: 10px 12px; border: 0; border-radius: 6px; background: transparent; color: var(--ink); font-weight: 500; box-shadow: none; }
+.more-actions-panel button:hover { background: #f2f6f9; }
+/* Reactivos de ciencias 12.36: los datos por alumno se leen como variables y la respuesta como fórmula. */
+var.qvar { font-family: 'KaTeX_Math', 'Times New Roman', serif; font-style: italic; font-size: 1.08em; padding: 0 4px; margin: 0 1px; border-radius: 4px; background: #e6f4f7; color: #075766; }
+code.formula { font-family: 'KaTeX_Main', 'Times New Roman', serif; font-size: 1.05em; background: #f6f9fc; border: 1px solid var(--line); border-radius: 6px; padding: 2px 8px; }
+.document-mark { display: inline-grid; place-items: center; }
+.document-mark.is-link { background: #e6f4f7; color: #075766; }
+.document-mark.is-file { background: #eef2fb; color: #2b4a8a; }
+.document-mark.is-text { background: #f2f4f6; color: var(--ink-soft); }
+/* Opciones de respuesta 12.36: texto de 16 px y toda la fila marcada al elegirla (más fácil en el celular). */
+.quiz-question label { font-size: 1rem; border-radius: 8px; padding-inline: 8px; }
+.quiz-question label:has(> input:checked) { background: #e6f4f7; box-shadow: inset 0 0 0 1px #b9dfe7; }
+.quiz-question input[type=radio], .quiz-question input[type=checkbox] { width: 20px; height: 20px; flex: none; }
+/* Detalles 12.36: el rol de la persona ya no compite con el nombre del curso. */
+#roleLabel { font-size: 11px; letter-spacing: 0.04em; font-weight: 600; text-transform: none; color: var(--ink-faint); }
+.course-picker > summary svg { display: block; }
+/* El enunciado (legend) ya no queda montado sobre el borde de la pregunta. */
+fieldset.quiz-question > legend { float: left; width: 100%; padding: 0; margin: 0 0 12px; }
+fieldset.quiz-question > legend + * { clear: both; }

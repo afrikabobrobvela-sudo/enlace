@@ -220,6 +220,21 @@ function readQuizQuestions() {
   });
 }
 
+/**
+ * Enunciado para el docente (12.36): los datos por alumno ({F}, {m}) se ven como variables, no como llaves sueltas;
+ * las fórmulas LaTeX ($…$) las sigue dibujando KaTeX como en la vista del alumno.
+ */
+function teacherQuestionText(x) {
+  const names = new Set((x.variables || []).map((v) => v.name));
+  return esc(x.text).replace(/\{([A-Za-z_][A-Za-z0-9_]*)\}/g, (all, name) => (names.has(name) ? `<var class="qvar" title="Dato distinto para cada alumno">${name}</var>` : all));
+}
+
+/** La respuesta numérica como fórmula, con los datos por alumno resaltados igual que en el enunciado. */
+function teacherFormula(x) {
+  const names = new Set((x.variables || []).map((v) => v.name));
+  return esc(x.answer).replace(/\b([A-Za-z_][A-Za-z0-9_]*)\b/g, (name) => (names.has(name) ? `<var class="qvar">${name}</var>` : name));
+}
+
 function renderQuizQuestions() {
   $('#quizQuestions').innerHTML = quizDraft.map(quizQuestionHtml).join('');
   renderQuizDraw();
@@ -638,12 +653,12 @@ function renderQuiz() {
     const questions = q.data.questions
       .map((x, i) =>
         isNewType(x.type)
-          ? `<section class="quiz-question"><h3>${i + 1}. ${esc(x.text)}${pointsTag(x)}${poolTag(x)} <span class="quiz-type-tag">${QUESTION_TYPE_NAME[x.type]}</span></h3>${quizImageHtml(x.image, i)}${newQuestionAnswerHtml(x)}${teacherFeedbackHtml(x)}</section>`
+          ? `<section class="quiz-question"><h3>${i + 1}. ${teacherQuestionText(x)}${pointsTag(x)}${poolTag(x)} <span class="quiz-type-tag">${QUESTION_TYPE_NAME[x.type]}</span></h3>${quizImageHtml(x.image, i)}${newQuestionAnswerHtml(x)}${teacherFeedbackHtml(x)}</section>`
           : x.type === 'numeric'
-          ? `<section class="quiz-question"><h3>${i + 1}. ${esc(x.text)}${pointsTag(x)}${poolTag(x)}</h3>${quizImageHtml(x.image, i)}<p>Respuesta: <code>${esc(x.answer)}</code> ${x.unit ? esc(x.unit) : ''} · tolerancia ${esc(x.tolerance)} %</p>${
-              x.variables?.length ? `<p class="muted">Datos por alumno: ${x.variables.map((v) => `${esc(v.name)} entre ${esc(v.min)} y ${esc(v.max)}`).join('; ')}</p>` : ''
+          ? `<section class="quiz-question"><h3>${i + 1}. ${teacherQuestionText(x)}${pointsTag(x)}${poolTag(x)}</h3>${quizImageHtml(x.image, i)}<p>Respuesta: <code class="formula">${teacherFormula(x)}</code> ${x.unit ? esc(x.unit) : ''} · tolerancia ${esc(x.tolerance)} %</p>${
+              x.variables?.length ? `<p class="muted">Datos por alumno: ${x.variables.map((v) => `<var class="qvar">${esc(v.name)}</var> entre ${esc(v.min)} y ${esc(v.max)}`).join('; ')}</p>` : ''
             }${teacherFeedbackHtml(x)}</section>`
-          : `<section class="quiz-question"><h3>${i + 1}. ${esc(x.text)}${pointsTag(x)}${poolTag(x)}</h3>${quizImageHtml(x.image, i)}<ol type="A">${x.options.map((o, j) => `<li>${esc(o)} ${j === x.correct ? '✓' : x.weights?.[j] ? `<span class="muted">(${x.weights[j]} %)</span>` : ''}</li>`).join('')}</ol>${teacherFeedbackHtml(x)}</section>`,
+          : `<section class="quiz-question"><h3>${i + 1}. ${teacherQuestionText(x)}${pointsTag(x)}${poolTag(x)}</h3>${quizImageHtml(x.image, i)}<ol type="A">${x.options.map((o, j) => `<li>${esc(o)} ${j === x.correct ? '✓' : x.weights?.[j] ? `<span class="muted">(${x.weights[j]} %)</span>` : ''}</li>`).join('')}</ol>${teacherFeedbackHtml(x)}</section>`,
       )
       .join('');
     // Resultados por alumno: mejor calificación y número de intentos.
@@ -674,9 +689,9 @@ function renderQuiz() {
     const sebInfo = settings.seb?.required
       ? `<p class="real-status">Exige <b>Safe Exam Browser</b>: tus alumnos ven el botón «Abrir en Safe Exam Browser». <a href="${esc(sebLink(q.id))}">Probarlo aquí</a> · <a href="/seb/${esc(q.id)}.seb" download>Descargar la configuración (.seb)</a></p>`
       : '';
-    $('#main').innerHTML = `${head}<p class="quiz-meta">${total.exact ? '' : 'Aprox. '}${total.total} ${total.total === 1 ? 'punto' : 'puntos'} por alumno.</p>${sebInfo}<div class="toolbar">${button('Editar evaluación', 'edit-quiz', q.id, 'secondary')}<button class="secondary" type="button" data-quiz-preview="${esc(q.id)}">Vista previa</button><button class="secondary" type="button" data-quiz-duplicate="${esc(q.id)}">Duplicar</button>${specialAccessButton('quiz', q.id)}${
+    $('#main').innerHTML = `${head}<p class="quiz-meta">${total.exact ? '' : 'Aprox. '}${total.total} ${total.total === 1 ? 'punto' : 'puntos'} por alumno.</p>${sebInfo}<div class="toolbar">${button('Editar evaluación', 'edit-quiz', q.id, 'secondary')}<button class="secondary" type="button" data-quiz-preview="${esc(q.id)}">Vista previa</button>${specialAccessButton('quiz', q.id)}${
       essays ? `<button class="${toReview ? 'primary' : 'secondary'}" type="button" data-essay-review="${esc(q.id)}">Revisar respuestas escritas${toReview ? ` (${toReview} por calificar)` : ''}</button>` : ''
-    }${attempts.length ? `<button class="secondary" type="button" data-quiz-stats="${esc(q.id)}">Estadísticas</button><button class="secondary" type="button" data-quiz-export="${esc(q.id)}">Exportar a Excel</button>` : ''}<button class="secondary" data-bank-save="${esc(q.id)}">Guardar en el banco</button>${sectionFilterHtml()}</div>${sectionDatesSummary(q.id)}${
+    }${attempts.length ? `<button class="secondary" type="button" data-quiz-stats="${esc(q.id)}">Estadísticas</button>` : ''}<details class="more-actions"><summary class="secondary">Más acciones</summary><div class="more-actions-panel"><button type="button" data-quiz-duplicate="${esc(q.id)}">Duplicar</button>${attempts.length ? `<button type="button" data-quiz-export="${esc(q.id)}">Exportar a Excel</button>` : ''}<button type="button" data-bank-save="${esc(q.id)}">Guardar en el banco</button></div></details>${sectionFilterHtml()}</div>${sectionDatesSummary(q.id)}${
       emptyAttempts.length
         ? `<div class="warning-note void-note"><p><b>${emptyAttempts.length} ${emptyAttempts.length === 1 ? 'intento se cerró' : 'intentos se cerraron'} sin ninguna respuesta</b> (de ${new Set(emptyAttempts.map((a) => a.author)).size} ${new Set(emptyAttempts.map((a) => a.author)).size === 1 ? 'alumno' : 'alumnos'}): se acabó el tiempo antes de que contestaran. Si fue por la configuración, devuélvelos para que puedan volver a presentar.</p><button type="button" class="secondary" data-void-empty="${esc(q.id)}">Devolver intentos sin respuestas</button></div>`
         : ''
@@ -719,10 +734,19 @@ function renderQuiz() {
         .join('')}</ul></div>`
     : '';
   const last = quizLastResult?.quiz === q.id ? quizLastResult.result : null;
+  if (last && quizLastResult.fresh) {
+    // Recién enviada (12.36): el resultado queda a la vista, no solo en el aviso que desaparece.
+    quizLastResult.fresh = false;
+    setTimeout(() => {
+      const box = document.querySelector('.quiz-result.is-new');
+      box?.scrollIntoView?.({ block: 'start' });
+      box?.focus?.({ preventScroll: true });
+    }, 0);
+  }
   const lastHtml = last?.data.hidden
     ? `<div class="quiz-result is-new"><p><b>Tu evaluación se envió.</b> ${pendingResultText(last.data)}</p></div>`
     : last
-    ? `<div class="quiz-result is-new"><p>Resultado del intento ${last.data.attempt}: <b>${last.data.score.toFixed(2)} / 10</b> (${last.data.correct} de ${last.data.total} correctas)${last.data.pending ? `. ${pendingReviewText(last.data.pending)}` : ''}</p>${attemptReviewHtml(last, q, quizLastResult.texts)}${last.data.details ? '' : feedbackListHtml(last, q)}</div>`
+    ? `<div class="quiz-result is-new" tabindex="-1" role="status"><p>Resultado del intento ${last.data.attempt}: <b>${last.data.score.toFixed(2)} / 10</b> (${last.data.correct} de ${last.data.total} correctas)${last.data.pending ? `. ${pendingReviewText(last.data.pending)}` : ''}</p>${attemptReviewHtml(last, q, quizLastResult.texts)}${last.data.details ? '' : feedbackListHtml(last, q)}</div>`
     : '';
   const exam = settings.exam?.enabled ? settings.exam : null;
   // Fechas de disponibilidad: antes de abrir o después de cerrar no hay botón para empezar.
@@ -870,7 +894,7 @@ async function startQuizAttempt(quizId, extra = {}) {
   document.querySelector('[data-quiz-code]')?.remove();
   document.querySelector('.exam-intro')?.remove();
   $('#quizAttemptBox').innerHTML = `<form id="quizAttempt" class="quiz-attempt ${exam ? 'is-exam' : ''}">
-      <div class="quiz-attempt-head"><strong>Intento ${data.attempt}</strong>${exam?.oneByOne ? '<span id="examProgress" class="muted"></span>' : paged ? '<span class="muted" data-page-label></span>' : ''}<span id="quizSaveStatus" class="quiz-save-status" role="status" aria-live="polite"></span>${data.deadline ? '<span class="quiz-clock" id="quizClock" role="timer"></span>' : ''}</div>
+      <div class="quiz-attempt-head"><strong>Intento ${data.attempt}</strong>${exam?.oneByOne ? '<span id="examProgress" class="muted"></span>' : paged ? '<span class="muted" data-page-label></span>' : ''}<span id="quizAnswered" class="quiz-answered"></span><span id="quizSaveStatus" class="quiz-save-status" role="status" aria-live="polite"></span>${data.deadline ? '<span class="quiz-clock" id="quizClock" role="timer"></span><span id="quizClockAlert" class="sr-only" role="alert"></span>' : ''}</div>
       ${exam?.flagged ? '<p class="warning-note">No se pudo confirmar que estés en el salón: tu docente lo verá junto a tu examen.</p>' : ''}
       ${questions}<p class="form-error error" hidden></p>
       ${exam?.oneByOne ? '<div class="exam-nav"><button type="button" class="secondary" data-exam-nav="prev">‹ Anterior</button><button type="button" class="primary" data-exam-nav="next">Siguiente ›</button></div>' : ''}
@@ -879,6 +903,36 @@ async function startQuizAttempt(quizId, extra = {}) {
   const form = $('#quizAttempt');
   const collect = () => collectAttemptAnswers($('#quizAttempt'), data.questions);
   if (paged) showAttemptPage(form, 0);
+  // Cuántas lleva contestadas (12.36): a la vista todo el tiempo, también en el celular (el encabezado es fijo).
+  const total = data.questions.length;
+  const answeredCount = () => Object.keys(collect()).length;
+  const showAnswered = () => {
+    const box = $('#quizAnswered');
+    if (box) box.textContent = `${answeredCount()} de ${total} contestadas`;
+  };
+  form.addEventListener('change', showAnswered);
+  form.addEventListener('input', showAnswered);
+  // Antes de enviar a mano: confirmación con las que faltan (no aplica al envío automático por tiempo).
+  form.addEventListener(
+    'submit',
+    async (e) => {
+      if (form.dataset.confirmed) {
+        delete form.dataset.confirmed;
+        return;
+      }
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      const missing = total - answeredCount();
+      const ok = await examConfirm(
+        missing ? `Te ${missing === 1 ? 'falta 1 pregunta' : `faltan ${missing} preguntas`} sin contestar; contarán como incorrectas. ¿Enviar de todos modos? Después ya no podrás cambiar tus respuestas.` : 'Contestaste todas las preguntas. ¿Enviar la evaluación? Después ya no podrás cambiar tus respuestas.',
+        'Enviar evaluación',
+      );
+      if (!ok) return;
+      form.dataset.confirmed = '1';
+      form.requestSubmit();
+    },
+    true,
+  );
   const submit = async () => {
     if (exam) await saveExamProgress(true).catch(() => {});
     const answers = collect();
@@ -901,7 +955,7 @@ async function startQuizAttempt(quizId, extra = {}) {
     attemptSave = null;
     stopExam();
     // Los enunciados tal como los vio (con sus datos), para mostrar sus ✓ y ✗ al volver a dibujar la pantalla.
-    quizLastResult = { quiz: quizId, result, texts: Object.fromEntries(data.questions.map((x) => [x.index, x.text])) };
+    quizLastResult = { quiz: quizId, result, fresh: true, texts: Object.fromEntries(data.questions.map((x) => [x.index, x.text])) };
     return result.data.score === null || result.data.score === undefined ? `Evaluación enviada. ${pendingResultText(result.data)}` : `Evaluación enviada: ${result.data.score.toFixed(2)} / 10.`;
   };
   if (exam) startExam(quizId, data, collect);
@@ -920,6 +974,8 @@ async function startQuizAttempt(quizId, extra = {}) {
     if (data.saved && Object.keys(data.saved).length) attemptSaveStatus('Se recuperaron tus respuestas guardadas', 'is-saved');
   }
   bindForm('#quizAttempt', submit);
+  showAnswered();
+  setTimeout(showAnswered, 600); // el examen restaura lo guardado de forma asíncrona
   if (data.deadline) {
     const tick = () => {
       const left = Date.parse(data.deadline) - (Date.now() + offset);
@@ -928,6 +984,15 @@ async function startQuizAttempt(quizId, extra = {}) {
       const s = Math.max(0, Math.round(left / 1000));
       clock.textContent = `Tiempo restante: ${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
       clock.classList.toggle('is-low', s < 60);
+      clock.classList.toggle('is-warn', s >= 60 && s < 300);
+      // Avisos que también leen los lectores de pantalla, una sola vez cada uno.
+      const alert = s <= 60 ? 'Queda 1 minuto.' : s <= 300 ? 'Quedan 5 minutos.' : '';
+      if (alert && clock.dataset.alerted !== alert && left > 0) {
+        clock.dataset.alerted = alert;
+        const live = $('#quizClockAlert');
+        if (live) live.textContent = alert;
+        toast(alert);
+      }
       if (left <= 0) {
         clearInterval(quizTimer);
         toast('Se acabó el tiempo: se envían tus respuestas.');
@@ -1184,7 +1249,7 @@ async function loadExamMonitor(quizId) {
       }</td><td>${r.correct} de ${r.total}</td><td>${r.attempts}</td><td>${esc(new Date(r.last).toLocaleTimeString('es-MX', { timeStyle: 'short' }))}</td></tr>`,
     )
     .join('');
-  box.innerHTML = `<div class="exam-monitor-head"><h2>${closedNow ? 'Resumen de la evaluación' : 'Seguimiento en vivo'}</h2><button type="button" class="secondary" data-exam-refresh>Actualizar</button></div>
+  box.innerHTML = `<div class="exam-monitor-head"><h2>${closedNow || !q?.data.settings?.exam?.enabled ? 'Resumen de la evaluación' : 'Seguimiento en vivo'}</h2><button type="button" class="secondary" data-exam-refresh>Actualizar</button></div>
     <div class="monitor-stats">
       <div><b>${finished.length}</b><span>terminaron</span></div>
       <div><b>${data.running.filter((r) => !r.locked).length}</b><span>contestando</span></div>
@@ -1722,5 +1787,12 @@ document.addEventListener('click', async (e) => {
     await startQuizAttempt(b.dataset.quizStart);
   } catch (error) {
     toast(error.message);
+  }
+});
+
+// «Más acciones» (12.36): se cierra al elegir una opción o al tocar fuera.
+document.addEventListener('click', (e) => {
+  for (const menu of document.querySelectorAll('details.more-actions[open]')) {
+    if (!menu.contains(e.target) || e.target.closest('.more-actions-panel button')) menu.open = false;
   }
 });

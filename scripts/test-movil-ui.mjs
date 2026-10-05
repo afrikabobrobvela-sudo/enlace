@@ -57,7 +57,8 @@ run(`
     members: [{ id: 'm-ana', user_id: 'u-ana', name: 'Ana', role: 'student' }, { id: 'm-luis', user_id: 'u-luis', name: 'Luis', role: 'student' }],
     files: [],
     records: [
-      { id: 't1', kind: 'task', data: { title: 'Práctica <1>', due: '2099-01-01T00:00:00Z', visible: true } },
+      { id: 't1', kind: 'task', data: { title: 'Práctica <1>', due: new Date(Date.now() + 3 * 86400000).toISOString(), visible: true } },
+      { id: 't5', kind: 'task', data: { title: 'Lejana', due: '2099-01-01T00:00:00Z', visible: true } }, // fuera de la ventana de 14 días del inicio
       { id: 't2', kind: 'task', data: { title: 'Reporte', due: '2020-01-01T00:00:00Z', visible: true } },
       { id: 't3', kind: 'task', data: { title: 'Cerrada', due: '2020-01-01T00:00:00Z', end: '2020-01-02T00:00:00Z', visible: true } },
       { id: 't4', kind: 'task', data: { title: 'Entregada', due: '2099-01-01T00:00:00Z', visible: true } },
@@ -84,7 +85,7 @@ same(run('routeNow()'), { c: 'c1', s: 'review', d: 't1', r: 'm-ana' }, 'Revisió
 // ---- Barra inferior y menú «Más» ----
 same(run('bottomNavSections()'), ['hub', 'content', 'tasks', 'grades'], 'Alumno: sus notas en la barra');
 check(run('moreSections()').includes('quizzes') && !run('moreSections()').includes('grades'), 'Alumno: evaluaciones en «Más»');
-check(run('tasksBadge()') === 1, 'Alumno: solo cuenta la actividad abierta sin entregar (t1)');
+check(run('tasksBadge()') === 1, 'Alumno: solo cuenta la que vence pronto sin entregar (t1), como «Por entregar» del inicio');
 run(`section = 'task'; renderBottomNav();`);
 let bar = element('#bottomnav').innerHTML;
 check((bar.match(/data-section=/g) || []).length === 4 && bar.includes('data-more-sheet'), 'Cuatro secciones y «Más»');
