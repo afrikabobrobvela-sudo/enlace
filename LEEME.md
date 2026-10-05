@@ -1,9 +1,13 @@
-# Enlace · versión 12.39
+# Enlace · versión 12.40
 
 Plataforma académica independiente para docentes y alumnos de cualquier academia (nació en la Academia de Física de la BUAP), con interfaz inspirada en Brightspace.
 No es el código de D2L Brightspace ni una plataforma oficial de la BUAP.
 
 Esta versión se despliega en **tu propia cuenta de Cloudflare** (Workers + D1 + R2, plan gratuito) y ya no depende de ChatGPT Sites.
+
+## Novedades de la versión 12.40
+
+- La raya gruesa del libro ahora va a la derecha de «Calificación final»: la separa de los rubros que siguen (Parcial 1 · Exámenes…), no de Parcial 2.
 
 ## Novedades de la versión 12.39 (calificación final después de los parciales)
 
