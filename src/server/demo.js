@@ -192,8 +192,8 @@ Resolver problemas de movimiento con el teorema trabajo-energía y la conservaci
   post(presentaciones, 0, 'Hola a todos', 'Soy Ana Sofía, vengo de Ingeniería Mecatrónica. Espero entender por fin el tiro parabólico.', -43);
   post(presentaciones, 3, 'Saludos', 'Soy Diego, de Física. Me gusta programar simulaciones.', -43);
   post(presentaciones, 8, 'Hola', 'Isabel, de Actuaría. ¡Nos vemos en clase!', -42);
-  post(dudas, 1, '¿El signo de g?', 'En caída libre, ¿g se toma negativa o positiva?', -30);
-  record('post', { forum: dudas, title: 'Re: ¿El signo de g?', body: 'Depende del sistema de referencia: si el eje *y* apunta hacia arriba, $a = -g$. Lo importante es ser consistentes.', name: 'Docente del curso' }, -30);
+  const signo = post(dudas, 1, '¿El signo de g?', 'En caída libre, ¿g se toma negativa o positiva?', -30);
+  record('post', { forum: dudas, parent: signo, title: 'Re: ¿El signo de g?', body: 'Depende del sistema de referencia: si el eje *y* apunta hacia arriba, $a = -g$. Lo importante es ser consistentes.', name: 'Docente del curso' }, -30);
   post(dudas, 6, 'Alcance máximo', 'Comprobé con el simulador que el alcance máximo es con 45° cuando no hay fricción del aire.', -26);
   post(dudas, 12, 'Unidades en la Tarea 2', '¿La rapidez inicial se da en m/s o km/h? En mi hoja dice km/h.', -22);
 

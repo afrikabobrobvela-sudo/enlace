@@ -1448,3 +1448,9 @@ code.formula { font-family: 'KaTeX_Main', 'Times New Roman', serif; font-size: 1
 .quiz-question label { font-size: 1rem; border-radius: 8px; padding-inline: 8px; }
 .quiz-question label:has(> input:checked) { background: #e6f4f7; box-shadow: inset 0 0 0 1px #b9dfe7; }
 .quiz-question input[type=radio], .quiz-question input[type=checkbox] { width: 20px; height: 20px; flex: none; }
+/* Detalles 12.36: el rol de la persona ya no compite con el nombre del curso. */
+#roleLabel { font-size: 11px; letter-spacing: 0.04em; font-weight: 600; text-transform: none; color: var(--ink-faint); }
+.course-picker > summary svg { display: block; }
+/* El enunciado (legend) ya no queda montado sobre el borde de la pregunta. */
+fieldset.quiz-question > legend { float: left; width: 100%; padding: 0; margin: 0 0 12px; }
+fieldset.quiz-question > legend + * { clear: both; }
