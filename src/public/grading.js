@@ -138,14 +138,16 @@ function categoryLabel(category, settings = gradingSettings()) {
 /**
  * Redondeo institucional de la calificación final:
  * - si está por debajo de la mínima aprobatoria, siempre baja al entero;
- * - si ya es aprobatoria, sube solo desde .60; de .00 a .59 baja.
+ * - si ya es aprobatoria, sube cuando la parte decimal es mayor que .55 (6.56 → 7); de .00 a .55 baja (6.55 → 6).
  */
+const ROUND_UP_AFTER = 0.55;
+
 function roundFinalGrade(value, passing) {
   const whole = Math.floor(value);
   if (value < passing) return whole;
   const fraction = value - whole;
-  // La tolerancia evita que 6.6 se interprete como 6.599999… por la coma flotante.
-  return fraction >= 0.6 - 1e-9 ? Math.min(10, whole + 1) : whole;
+  // La tolerancia evita que 6.55 cuente como 6.5500000001 por la coma flotante (y suba sin deber).
+  return fraction > ROUND_UP_AFTER + 1e-9 ? Math.min(10, whole + 1) : whole;
 }
 
 function finalGrade(value, rules) {
@@ -366,7 +368,7 @@ function gradingManageHtml(weightsHtml = '') {
     <h2 class="grading-subtitle">Calificación final y resultado de cada parcial</h2>
     <form id="finalRules" class="real-form grading-rules">
       ${field('Mínima aprobatoria', 'passing', rules.passing, 'number', 'min="0" max="10" step="0.1" required')}
-      <p class="muted">La calificación final de la materia y la final de cada parcial siempre se asientan como entero. Las reprobatorias bajan (5.9 → 5); las aprobatorias suben desde .60 (6.6 → 7) y de .00 a .59 bajan (6.59 → 6).</p>
+      <p class="muted">La calificación final de la materia y la final de cada parcial siempre se asientan como entero. Las reprobatorias bajan (5.9 → 5); las aprobatorias suben cuando pasan de .55 (6.56 → 7) y de .00 a .55 bajan (6.55 → 6).</p>
       <label class="check-row"><input type="checkbox" name="missingAsZero" ${rules.missingAsZero ? 'checked' : ''}> Las actividades vencidas sin calificar cuentan como 0 en la calificación final</label>
       <p class="muted">El promedio parcial nunca cuenta lo que falta por calificar; esta opción solo afecta la calificación final.</p>
       <p class="form-error error" hidden></p><div class="form-actions"><button class="primary">Guardar reglas</button></div>
@@ -743,12 +745,23 @@ function categoryGradeOf(member, category) {
 }
 
 /** Casilla siempre visible. Vacía = volver al cálculo automático del rubro. */
+/**
+ * Color de la casilla del libro según la calificación (como en Brightspace): rojo debajo de la mínima aprobatoria,
+ * verde desde ella. Vacía o sin número, sin color.
+ */
+function gradeToneClass(value) {
+  if (value === null || value === undefined || value === '') return '';
+  const grade = Number(value);
+  if (!Number.isFinite(grade)) return '';
+  return grade >= gradingSettings().final.passing ? 'gb-pass' : 'gb-fail';
+}
+
 function categoryGradeCellHtml(category, member, value) {
-  if (category.source !== 'tasks' || !teaches()) return `<td class="category-col">${formatGrade(value)}</td>`;
+  if (category.source !== 'tasks' || !teaches()) return `<td class="category-col ${gradeToneClass(value)}">${formatGrade(value)}</td>`;
   const manual = categoryGradeOf(member.id, category.id);
   const automatic = category.automaticValue ?? (manual ? null : value);
   const automaticText = formatGrade(automatic);
-  return `<td class="category-col category-grade-cell ${manual ? 'is-manual' : ''}">
+  return `<td class="category-col category-grade-cell ${manual ? 'is-manual' : ''} ${gradeToneClass(value)}">
     <input class="category-grade-input" type="number" min="0" max="10" step="0.01" inputmode="decimal"
       value="${esc(manual?.data.grade ?? '')}" placeholder="${esc(automaticText)}" data-category-grade
       data-cg-category="${esc(category.id)}" data-cg-member="${esc(member.id)}"

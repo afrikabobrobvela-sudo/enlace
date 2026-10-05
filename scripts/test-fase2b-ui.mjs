@@ -68,8 +68,10 @@ check(run('computeGrade({ tasks: plain, grades: new Map(), settings: tasksMode }
 const rules = { decimals: 0, rounding: 'down', passing: 6, failingAs: null };
 check(JSON.stringify(run(`finalGrade(5.9, ${JSON.stringify(rules)})`)) === '{"value":5,"passed":false}', 'Reprobatoria: 5.9 → 5');
 check(JSON.stringify(run(`finalGrade(4.9, ${JSON.stringify(rules)})`)) === '{"value":4,"passed":false}', 'Reprobatoria: 4.9 → 4');
-check(JSON.stringify(run(`finalGrade(6.6, ${JSON.stringify(rules)})`)) === '{"value":7,"passed":true}', 'Aprobatoria desde .60: 6.6 → 7');
-check(JSON.stringify(run(`finalGrade(6.59, ${JSON.stringify(rules)})`)) === '{"value":6,"passed":true}', 'Aprobatoria hasta .59: 6.59 → 6');
+check(JSON.stringify(run(`finalGrade(6.56, ${JSON.stringify(rules)})`)) === '{"value":7,"passed":true}', 'Aprobatoria arriba de .55: 6.56 → 7');
+check(JSON.stringify(run(`finalGrade(6.55, ${JSON.stringify(rules)})`)) === '{"value":6,"passed":true}', 'Aprobatoria hasta .55: 6.55 → 6');
+check(JSON.stringify(run(`finalGrade(6.6, ${JSON.stringify(rules)})`)) === '{"value":7,"passed":true}', 'Aprobatoria 6.6 → 7');
+check(JSON.stringify(run(`finalGrade(9.8, ${JSON.stringify(rules)})`)) === '{"value":10,"passed":true}', 'Aprobatoria 9.8 → 10');
 check(JSON.stringify(run(`finalGrade(9.6, ${JSON.stringify(rules)})`)) === '{"value":10,"passed":true}' && JSON.stringify(run(`finalGrade(10, ${JSON.stringify(rules)})`)) === '{"value":10,"passed":true}', 'La final nunca supera 10');
 check(run(`finalGrade(null, ${JSON.stringify(rules)})`) === null);
 
