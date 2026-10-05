@@ -357,7 +357,8 @@ function quizGradeHtml(grade) {
 }
 
 function quizModal(old) {
-  const settings = quizSettings(old);
+  // Las evaluaciones nuevas nacen con preguntas y opciones mezcladas; el docente puede desmarcarlo si necesita orden fijo.
+  const settings = old ? quizSettings(old) : { ...quizSettings(old), shuffle: true, shuffleOptions: true };
   quizEditorMode = 'quiz';
   quizDrawCounts = new Map((settings.draw || []).map((d) => [d.pool, d.count]));
   quizDraft = old ? structuredClone(old.data.questions).map((q) => (q.type ? q : { ...q, type: 'choice' })) : [blankQuestion()];
@@ -492,6 +493,7 @@ function sebSettingsHtml(seb) {
     <label class="check-label"><input type="checkbox" name="seb" ${seb?.required ? 'checked' : ''}> Exigir Safe Exam Browser: solo se puede empezar, guardar y enviar desde él</label>
     <div class="seb-options" ${seb?.required ? '' : 'hidden'}>
       <p class="muted">No necesitas preparar nada: Enlace arma la configuración. Tus alumnos (con Safe Exam Browser instalado) tocan <b>«Abrir en Safe Exam Browser»</b> en la evaluación y se abre ahí directamente; desde otro navegador no pueden empezar.</p>
+      <p class="warning-note"><b>Google Assistant, Gemini y dictado:</b> una página abierta en Chrome, Safari o Android no puede detectar de forma fiable estas herramientas del sistema. Para una evaluación controlada exige Safe Exam Browser y supervisión; tampoco es posible detectar otro teléfono.</p>
       <details${seb?.keys?.length ? ' open' : ''}><summary>Avanzado: aceptar también mi propio archivo .seb</summary>
         <label>Config Key de tu archivo .seb (64 caracteres, una por renglón; opcional)<textarea name="sebKeys" rows="2" spellcheck="false" autocomplete="off">${esc((seb?.keys || []).join('\n'))}</textarea></label>
       </details>
@@ -522,7 +524,27 @@ function examSettingsHtml(exam) {
         <span class="muted" id="examPlaceStatus">${place ? 'Ubicación del salón guardada.' : 'Sin ubicación del salón.'}</span></p>
       <input type="hidden" name="examPlace" value="${esc(place ? JSON.stringify({ lat: place.lat, lng: place.lng, accuracy: place.accuracy }) : '')}">
       <p class="muted">Para revisar la ubicación, pulsa el botón estando en el salón (por ejemplo, al empezar la clase) y guarda. Nunca impide el examen: quien esté lejos o no dé permiso aparece marcado en los resultados. Ninguna página web puede bloquear otras aplicaciones; el modo examen deja constancia y disuade.</p>
+      <div class="warning-note"><b>Protección contra asistentes e IA.</b> Para reducir Google/Gemini, usa una pregunta aleatoria a la vez, sin regresar, y exige Safe Exam Browser. La siguiente pregunta aparece en esta misma pantalla, sin abrir otra página.
+        <p><button type="button" class="secondary" data-exam-harden>Aplicar configuración reforzada</button></p>
+        <small>Actívala antes de que alguien comience: después de recibir intentos ya no se puede cambiar el sorteo de preguntas.</small></div>
     </div></fieldset>`;
+}
+
+/** Activa en el editor las defensas compatibles entre sí; el docente todavía decide si guarda. */
+function hardenExamSettings() {
+  for (const name of ['exam', 'oneByOne', 'noBack', 'lockPlatform', 'lockOnLeave', 'shuffle', 'shuffleOptions', 'seb']) {
+    const input = document.querySelector(`input[name="${name}"]`);
+    if (input) input.checked = true;
+  }
+  const grace = document.querySelector('select[name="lockGrace"]');
+  if (grace) grace.value = '5';
+  document.querySelector('.exam-options')?.removeAttribute?.('hidden');
+  const examOptions = document.querySelector('.exam-options');
+  if (examOptions) examOptions.hidden = false;
+  const sebOptions = document.querySelector('.seb-options');
+  if (sebOptions) sebOptions.hidden = false;
+  dirty = true;
+  toast('Configuración reforzada aplicada. Revisa las fechas y guarda la evaluación.');
 }
 
 function readExamSettings(f) {
@@ -594,6 +616,7 @@ document.addEventListener('click', (e) => {
   const b = e.target.closest('[data-quiz]');
   if (b && $('#quizQuestions')) quizEditorAction(b.dataset.quiz, b);
   if (e.target.closest('[data-exam-place]')) captureExamPlace();
+  if (e.target.closest('[data-exam-harden]')) hardenExamSettings();
 });
 // Imagen de una pregunta: se reduce en el teléfono o la computadora (no en el servidor) y se sube como material.
 async function uploadQuestionImage(file) {
@@ -710,9 +733,11 @@ function renderQuiz() {
       // 12.31: el seguimiento (quién contesta, quién terminó y con qué calificación) va en toda evaluación.
       loadExamMonitor(q.id);
       // El monitor se actualiza solo cada 10 s mientras está en pantalla (así aparecen los bloqueados y su código).
+      // Con la pestaña oculta no se pide (12.30: cada vuelta cuesta lecturas de D1); al volver se actualiza en seguida.
       clearInterval(examMonitorTimer);
       examMonitorTimer = setInterval(() => {
         if (section !== 'quiz' || detail !== q.id || !document.getElementById('examMonitor')) return clearInterval(examMonitorTimer);
+        if (document.visibilityState === 'hidden') return;
         loadExamMonitor(q.id);
       }, 10_000);
     }
@@ -885,6 +910,12 @@ async function startQuizAttempt(quizId, extra = {}) {
   }
   const offset = data.serverNow - Date.now();
   const exam = data.exam;
+  // Examen que bloquea la plataforma: se anota ya (12.30). Así la campana no se pide y una respuesta 423 de otra
+  // solicitud no vuelve a abrir el curso encima del intento.
+  if (exam?.lockPlatform && me) {
+    me.activeExam = { quiz: quizId, course: current.course.id };
+    document.body.classList.add('exam-platform-lock');
+  }
   // Preguntas por página (12.27); en el examen «una pregunta a la vez» manda.
   const perPage = exam?.oneByOne ? 0 : Number(data.perPage) || 0;
   const paged = perPage > 0 && data.questions.length > perPage;
@@ -897,7 +928,7 @@ async function startQuizAttempt(quizId, extra = {}) {
       <div class="quiz-attempt-head"><strong>Intento ${data.attempt}</strong>${exam?.oneByOne ? '<span id="examProgress" class="muted"></span>' : paged ? '<span class="muted" data-page-label></span>' : ''}<span id="quizAnswered" class="quiz-answered"></span><span id="quizSaveStatus" class="quiz-save-status" role="status" aria-live="polite"></span>${data.deadline ? '<span class="quiz-clock" id="quizClock" role="timer"></span><span id="quizClockAlert" class="sr-only" role="alert"></span>' : ''}</div>
       ${exam?.flagged ? '<p class="warning-note">No se pudo confirmar que estés en el salón: tu docente lo verá junto a tu examen.</p>' : ''}
       ${questions}<p class="form-error error" hidden></p>
-      ${exam?.oneByOne ? '<div class="exam-nav"><button type="button" class="secondary" data-exam-nav="prev">‹ Anterior</button><button type="button" class="primary" data-exam-nav="next">Siguiente ›</button></div>' : ''}
+      ${exam?.oneByOne ? `<p class="exam-nav-note">${exam.noBack ? 'Al avanzar se guarda la respuesta y ya no podrás regresar. Si la dejas vacía, se guardará sin respuesta.' : 'Cada cambio de pregunta se guarda automáticamente.'}${exam.randomOrder ? ' El orden es aleatorio para este intento.' : ''} No se abre otra página.</p><div class="exam-nav"><button type="button" class="secondary" data-exam-nav="prev">‹ Anterior</button><button type="button" class="primary" data-exam-nav="next">${exam.randomOrder ? 'Guardar y siguiente aleatoria ›' : 'Guardar y siguiente ›'}</button></div>` : ''}
       ${paged ? '<div class="exam-nav"><button type="button" class="secondary" data-page-nav="prev">‹ Página anterior</button><button type="button" class="primary" data-page-nav="next">Página siguiente ›</button></div>' : ''}
       <button class="primary" id="quizSubmit">Enviar evaluación</button></form>`;
   const form = $('#quizAttempt');
@@ -1293,11 +1324,24 @@ document.addEventListener('click', async (e) => {
 
 // ---- Modo examen (alumno) --------------------------------------------------------------------------
 
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && section === 'quiz' && detail && document.getElementById('examMonitor')) loadExamMonitor(detail);
+});
+
+let activeExamOpening = null; // varias respuestas 423 a la vez (campana, cursos…) abren el curso una sola vez
+
 /** Lleva al examen abierto y oculta todo lo demás (el servidor tampoco responde otra cosa hasta enviarlo). */
 async function goToActiveExam(active) {
   if (!active) return;
   document.body.classList.add('exam-platform-lock');
-  if (current?.course.id !== active.course || !current.examOnly) await openCourse(active.course);
+  if (me) me.activeExam = active;
+  // Ya lo está contestando en esta página: no se toca nada. Antes se volvía a abrir el curso (12.30: lo provocaba la
+  // campana a los pocos minutos de empezar) y se borraba la pantalla del intento a media respuesta.
+  if (section === 'quiz' && detail === active.quiz && document.getElementById('quizAttempt')) return;
+  if (current?.course.id !== active.course || !current.examOnly) {
+    activeExamOpening ??= openCourse(active.course).finally(() => (activeExamOpening = null));
+    await activeExamOpening;
+  }
   if (section === 'quiz' && detail === active.quiz && document.getElementById('quizAttempt')) return;
   section = 'quiz';
   detail = active.quiz;
@@ -1476,7 +1520,8 @@ function examAwayCheck() {
   if (isSafeExamBrowser()) return;
   if (!examState) return;
   const hidden = document.visibilityState === 'hidden';
-  const away = hidden || !document.hasFocus();
+  // Un selector nativo abierto (relacionar, ordenar) le quita el foco a la ventana sin salir de la página (12.30).
+  const away = hidden || (!document.hasFocus() && !examSelectOpen());
   clearTimeout(examState.blurTimer);
   if (away && !examState.awaySince) {
     // Ocultar la página (otra aplicación, otra pestaña, bloquear el teléfono) cuenta en ese instante. Perder solo el
@@ -1487,7 +1532,7 @@ function examAwayCheck() {
       const since = Date.now();
       const state = examState;
       state.blurTimer = setTimeout(() => {
-        if (examState === state && !state.awaySince && (document.visibilityState === 'hidden' || !document.hasFocus())) markExamAway(since);
+        if (examState === state && !state.awaySince && (document.visibilityState === 'hidden' || (!document.hasFocus() && !examSelectOpen()))) markExamAway(since);
       }, BLUR_CONFIRM_MS);
     }
   }
@@ -1495,6 +1540,9 @@ function examAwayCheck() {
 }
 
 const BLUR_CONFIRM_MS = 600;
+
+/** Con un selector de la evaluación enfocado, la pérdida de foco (o de pantalla completa) es del propio selector. */
+const examSelectOpen = () => Boolean(document.activeElement?.matches?.('#quizAttempt select'));
 
 function markExamAway(since) {
   if (!examState || examState.awaySince) return;
@@ -1634,6 +1682,7 @@ function examFullscreenCheck() {
   if (!examState) return;
   const bar = document.getElementById('examFullscreenBar');
   if (isFullscreen()) return bar?.remove();
+  if (document.visibilityState !== 'hidden' && examSelectOpen()) return;
   examState.events.push({ kind: 'fullscreen' });
   saveExamProgress(true).catch(() => {});
   if (!bar) {
@@ -1681,7 +1730,11 @@ function showExamQuestion() {
   const last = position >= boxes.length - 1;
   const prev = document.querySelector('[data-exam-nav="prev"]');
   prev.hidden = exam.noBack || position === 0;
-  document.querySelector('[data-exam-nav="next"]').hidden = last;
+  prev.disabled = examState.navigating;
+  const next = document.querySelector('[data-exam-nav="next"]');
+  next.hidden = last;
+  next.disabled = examState.navigating;
+  next.textContent = exam.randomOrder ? 'Guardar y siguiente aleatoria ›' : 'Guardar y siguiente ›';
   $('#quizSubmit').hidden = !last;
   $('#examProgress').textContent = `Pregunta ${Math.min(position + 1, boxes.length)} de ${boxes.length}`;
   boxes[position]?.querySelector('input')?.focus({ preventScroll: true });
@@ -1689,27 +1742,34 @@ function showExamQuestion() {
 
 async function examNavigate(direction) {
   const state = examState;
-  if (!state) return;
+  if (!state || state.navigating) return;
   const boxes = document.querySelectorAll('#quizAttempt fieldset[data-position]');
+  const previousPosition = state.position;
+  const destination = direction === 'next' ? Math.min(previousPosition + 1, boxes.length - 1) : state.exam.noBack ? previousPosition : Math.max(previousPosition - 1, 0);
+  if (destination === previousPosition) return;
   if (direction === 'next') {
-    const current = boxes[state.position];
-    const answered = [...current.querySelectorAll('input, select, textarea')].some((i) => (i.type === 'radio' || i.type === 'checkbox' ? i.checked : i.value.trim()));
     if (state.exam.noBack) {
+      const answered = [...boxes[previousPosition].querySelectorAll('input, select, textarea')].some((i) => (i.type === 'radio' || i.type === 'checkbox' ? i.checked : i.value.trim()));
       // Confirmación dentro de la página: la ventana nativa (confirm) le quita el foco a la página y en el celular el
       // aviso de «salió» llegaba después de cerrarla, así que pasar de pregunta contaba como una salida (12.32).
+      state.navigating = true;
       const ok = await examConfirm(answered ? '¿Pasar a la siguiente pregunta? Ya no podrás regresar a esta.' : 'No contestaste esta pregunta. ¿Pasar a la siguiente? Ya no podrás regresar.', 'Pasar a la siguiente');
+      state.navigating = false;
       if (!ok || examState !== state) return;
     }
-    state.position = Math.min(state.position + 1, boxes.length - 1);
-  } else if (!state.exam.noBack) state.position = Math.max(state.position - 1, 0);
+  }
+  state.position = destination;
+  state.navigating = true;
+  for (const button of document.querySelectorAll('[data-exam-nav]')) button.disabled = true;
   // Primero se guarda (con la respuesta de la pregunta que se deja), luego se bloquea.
   try {
     await saveExamProgress();
   } catch (error) {
-    if (state.exam.noBack) {
-      state.position--;
-      return toast('No se pudo guardar tu respuesta. Revisa tu conexión y vuelve a intentarlo.');
-    }
+    state.position = previousPosition;
+    return toast('No se pudo guardar tu respuesta. Revisa tu conexión y vuelve a intentarlo.');
+  } finally {
+    state.navigating = false;
+    for (const button of document.querySelectorAll('[data-exam-nav]')) button.disabled = false;
   }
   showExamQuestion();
   window.scrollTo?.(0, 0);

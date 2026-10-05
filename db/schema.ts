@@ -164,6 +164,8 @@ export const courses = sqliteTable(
     // Migración 0010: periodo (por ejemplo "Otoño 2026") y archivo (solo lectura).
     period: text('period').notNull().default(''),
     archivedAt: text('archived_at'),
+    // Migración 0033: un curso oculto conserva todo, pero no aparece ni se abre para sus alumnos.
+    studentVisible: integer('student_visible').notNull().default(1),
     // Migración 0030: portada propia (llave de R2 `portadas/<curso>/<uuid>.<ext>`, su fecha de cambio) y color (1 a 6; 0 = automático).
     cover: text('cover'),
     coverUpdated: text('cover_updated'),
@@ -363,6 +365,8 @@ export const gradeSettings = sqliteTable(
     missingAsZero: integer('missing_as_zero').notNull().default(0),
     // Migración 0031: parciales (JSON [{ id, name, weight }]; '' = sin parciales). Su peso es sobre la calificación final.
     terms: text('terms').notNull().default(''),
+    // Migración 0035: orden de las columnas del libro (JSON con ids de actividades; '' = por fecha de creación).
+    columnOrder: text('column_order').notNull().default(''),
   },
   () => [
     check('aula_grade_settings_scheme_check', sql`scheme IN ('tasks', 'categories')`),
@@ -834,4 +838,19 @@ export const forumState = sqliteTable(
     readAt: text('read_at').notNull().default(''),
   },
   (t) => [primaryKey({ columns: [t.userId, t.item] }), index('aula_forum_state_course').on(t.course, t.userId)],
+);
+
+/**
+ * Migración 0036 (12.30): total de bytes de la plataforma, una sola fila (ver storageTotal() en src/server/api.js).
+ * La misma migración, escrita a mano como la 0034, agrega índices para leer menos filas de D1: entregas por calificar y
+ * recientes por curso (parciales), inscripción por (user_id, course) y archivos por (course, owner).
+ */
+export const storage = sqliteTable(
+  'aula_storage',
+  {
+    id: integer('id').primaryKey(),
+    bytes: integer('bytes').notNull(),
+    countedAt: text('counted_at').notNull(),
+  },
+  () => [check('aula_storage_id_check', sql`id = 1`)],
 );

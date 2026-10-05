@@ -279,6 +279,21 @@ try {
   assert(roster.find((m) => m.email === 'late@example.test').user_id, 'Se vincula a una cuenta existente');
   assert.equal((await call('late', '/api/courses')).length, 1);
 
+  // ---- Reutilizar grupos y ocultar cursos completos a los alumnos ----
+  const tutor = (await call('owner', '/api/courses', { name: 'Tutoría', group: '5CV', studentVisible: false }, 201)).id;
+  const sources = await call('owner', '/api/members/sources?course=' + tutor);
+  assert(sources.some((x) => x.id === c && x.students === roster.filter((m) => m.role === 'student').length), 'Ofrece los otros cursos con su cantidad de alumnos');
+  await call('student', '/api/members/copy', { course: tutor, source: c }, 403);
+  const copied = await call('owner', '/api/members/copy', { course: tutor, source: c });
+  assert.deepEqual(copied, { total: sources.find((x) => x.id === c).students, created: copied.total, updated: 0 });
+  assert.equal((await call('owner', '/api/course?id=' + tutor)).members.filter((m) => m.role === 'student').length, copied.total);
+  assert(!(await call('student', '/api/courses')).some((x) => x.id === tutor), 'Un curso oculto no aparece al alumno inscrito');
+  await call('student', '/api/course?id=' + tutor, undefined, 403);
+  await call('owner', '/api/course/visibility', { course: tutor, visible: true });
+  assert((await call('student', '/api/courses')).some((x) => x.id === tutor), 'Al mostrarlo vuelve a aparecer para el alumno');
+  await call('owner', '/api/course?id=' + tutor);
+  await call('owner', '/api/course', { course: tutor, confirm: 'Tutoría' }, 200, 'DELETE');
+
   // ---- Límite de consultas de D1 (plan gratuito: 50 por solicitud) ----
   for (let i = 0; i < 30; i++) await call('owner', '/api/courses', { name: 'Curso ' + i, group: 'G' }, 201);
   store.counter.queries = 0;
@@ -289,7 +304,8 @@ assert(store.counter.queries <= 3, `GET /api/courses usó ${store.counter.querie
 // 11 desde la 12.14 (seguimiento del contenido); el límite del plan gratuito es 50 por solicitud.
 // 12: una más desde la 12.18 (secciones y sus fechas, juntas en una consulta).
 // 13: una más desde la 12.20 (registro del ingreso al curso, para los accesos).
-assert(store.counter.queries <= 13, `GET /api/course usó ${store.counter.queries} consultas`);
+// 14: una más para las calificaciones capturadas directamente por rubro.
+assert(store.counter.queries <= 14, `GET /api/course usó ${store.counter.queries} consultas`);
 
   // ---- Persistencia real al reabrir la base ----
   store.reopen();

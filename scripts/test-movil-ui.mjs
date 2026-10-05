@@ -113,6 +113,184 @@ run(`previewAsStudent = false; me = { id: 'u-ana', name: 'Ana', role: 'student' 
 check(run(`quizStudentStatus(find('q1'))`) === '7.00 / 10 · queda 1 intento', 'Evaluación con intentos restantes');
 check(run(`quizStudentStatus(find('q2'))`) === 'Pendiente · modo examen', 'Examen pendiente');
 
+// ---- Modo examen: los controles nativos no cuentan como salir de la página ----
+const examFocusResult = await run(`(async () => {
+  var examCalls = [];
+  var examToasts = [];
+  var examSelect = {
+    matches: (selector) => selector === 'select' || selector === '#quizAttempt select',
+    closest: (selector) => selector === '#quizAttempt' ? examSelect : null,
+  };
+  var examRadio = {
+    matches: () => false,
+    closest: (selector) => selector === '#quizAttempt' ? examRadio : null,
+  };
+  globalThis.fetch = async (url) => {
+    examCalls.push(url);
+    return { ok: true, json: async () => url.endsWith('/back') ? { locked: false } : { ok: true } };
+  };
+  globalThis.navigator ??= { userAgent: 'Mozilla/5.0' };
+  toast = (message) => examToasts.push(message);
+  saveExamProgress = async () => {};
+  var focused = false;
+  document.hasFocus = () => focused;
+  document.visibilityState = 'visible';
+  var wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  var newExamState = () => ({ quizId: 'q2', attempt: 1, exam: { lockOnLeave: true }, collect: () => ({}), position: 0, events: [], awaySince: null, blurTimer: null, lastCopy: 0, saveTimer: null, locked: false });
+  var snapshot = () => ({ calls: [...examCalls], events: [...examState.events], toasts: [...examToasts] });
+  var reset = () => { examCalls.length = 0; examToasts.length = 0; examState = newExamState(); };
+
+  // Un selector nativo abierto le quita el foco a la ventana aunque la página nunca se oculte (12.30).
+  reset();
+  document.activeElement = examSelect;
+  examAwayCheck();
+  await wait(BLUR_CONFIRM_MS + 100);
+  focused = true; examAwayCheck(); focused = false;
+  var selectResult = snapshot();
+
+  // Un parpadeo del foco al tocar una respuesta en el teléfono no es salida (12.32).
+  reset();
+  document.activeElement = examRadio;
+  examAwayCheck();
+  await wait(50);
+  focused = true; examAwayCheck(); focused = false;
+  await wait(BLUR_CONFIRM_MS + 50);
+  var touchResult = snapshot();
+
+  // Perder el foco más de BLUR_CONFIRM_MS (otra ventana con la página a la vista) sí es salida.
+  reset();
+  document.activeElement = null;
+  examAwayCheck();
+  await wait(BLUR_CONFIRM_MS + 100);
+  focused = true; examAwayCheck(); focused = false;
+  await wait(0); await wait(0);
+  var desktopAwayResult = snapshot();
+
+  // Ocultar de verdad la pestaña o la aplicación cuenta en ese instante.
+  reset();
+  document.visibilityState = 'hidden';
+  examAwayCheck();
+  document.visibilityState = 'visible';
+  focused = true; examAwayCheck(); focused = false;
+  await wait(0); await wait(0);
+  var hiddenResult = snapshot();
+
+  // Salir de pantalla completa por un selector abierto no se registra; una salida real sí.
+  examState = newExamState();
+  document.fullscreenElement = null;
+  document.activeElement = examSelect;
+  examFullscreenCheck();
+  var internalFullscreenEvents = [...examState.events];
+  document.activeElement = null;
+  examFullscreenCheck();
+  var realFullscreenEvents = [...examState.events];
+  document.getElementById('examFullscreenBar')?.remove?.();
+  examState = null;
+  return { selectResult, touchResult, desktopControlResult: touchResult, desktopAwayResult, hiddenResult, internalFullscreenEvents, realFullscreenEvents };
+})()`);
+check(examFocusResult.selectResult.calls.length === 0 && examFocusResult.selectResult.events.length === 0 && examFocusResult.selectResult.toasts.length === 0, 'Abrir y elegir en un selector del examen no se registra como salida');
+check(examFocusResult.touchResult.calls.length === 0 && examFocusResult.touchResult.events.length === 0 && examFocusResult.touchResult.toasts.length === 0, 'Tocar una respuesta en el teléfono no bloquea ni muestra el aviso de salida');
+check(examFocusResult.desktopControlResult.calls.length === 0 && examFocusResult.desktopControlResult.events.length === 0, 'Seleccionar una respuesta en computadora tampoco se confunde con cambiar de ventana');
+check(examFocusResult.desktopAwayResult.calls.some((url) => url.endsWith('/away')) && examFocusResult.desktopAwayResult.calls.some((url) => url.endsWith('/back')), 'Cambiar realmente de ventana en computadora continúa registrándose');
+check(examFocusResult.hiddenResult.calls.some((url) => url.endsWith('/away')) && examFocusResult.hiddenResult.calls.some((url) => url.endsWith('/back')), 'Cambiar realmente de pestaña o aplicación sí se registra');
+check(examFocusResult.hiddenResult.events.some((event) => event.kind === 'left') && examFocusResult.hiddenResult.toasts.some((message) => message.includes('Saliste del examen')), 'Una salida real conserva el evento y el aviso');
+check(examFocusResult.internalFullscreenEvents.length === 0 && examFocusResult.realFullscreenEvents.some((event) => event.kind === 'fullscreen'), 'Solo una salida real de pantalla completa queda registrada');
+
+const examNavigationResult = await run(`(async () => {
+  var navOriginalQuerySelector = document.querySelector;
+  var navOriginalQuerySelectorAll = document.querySelectorAll;
+  var navOriginalSave = saveExamProgress;
+  var navOriginalConfirm = confirm;
+  var navFields = Array.from({ length: 3 }, () => ({
+    hidden: false, disabled: false,
+    querySelectorAll: () => [],
+    querySelector: () => ({ focus() {} }),
+  }));
+  var navPrev = { hidden: false, disabled: false, textContent: '' };
+  var navNext = { hidden: false, disabled: false, textContent: '' };
+  document.querySelectorAll = (selector) => selector === '#quizAttempt fieldset[data-position]' ? navFields
+    : selector === '[data-exam-nav]' ? [navPrev, navNext]
+    : navOriginalQuerySelectorAll(selector);
+  document.querySelector = (selector) => selector === '[data-exam-nav="prev"]' ? navPrev
+    : selector === '[data-exam-nav="next"]' ? navNext
+    : navOriginalQuerySelector(selector);
+  confirm = () => { throw new Error('No debe abrir confirm'); };
+  // Sin regresar, avanzar pide confirmación dentro de la página (12.32), nunca con confirm().
+  var navOriginalExamConfirm = examConfirm;
+  var confirmCalls = 0;
+  examConfirm = async () => { confirmCalls++; return true; };
+  var saveCalls = 0;
+  var releaseSave;
+  saveExamProgress = async () => {
+    saveCalls++;
+    await new Promise((resolve) => { releaseSave = resolve; });
+  };
+  examState = {
+    exam: { oneByOne: true, noBack: true, randomOrder: true }, position: 0, navigating: false,
+    events: [], saveTimer: null, blurTimer: null, ignoreBlur: false,
+  };
+  var first = examNavigate('next');
+  var second = examNavigate('next');
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  var duringSave = { position: examState.position, navigating: examState.navigating, saveCalls, buttonsDisabled: navPrev.disabled && navNext.disabled };
+  releaseSave();
+  await Promise.all([first, second]);
+  var afterSave = {
+    position: examState.position, navigating: examState.navigating, saveCalls,
+    hidden: navFields.map((field) => field.hidden), disabled: navFields.map((field) => field.disabled),
+    prevHidden: navPrev.hidden, nextText: navNext.textContent,
+  };
+  await examNavigate('prev');
+  var afterForbiddenBack = { position: examState.position, saveCalls };
+
+  examState.position = 0;
+  saveExamProgress = async () => { saveCalls++; throw new Error('sin red'); };
+  await examNavigate('next');
+  var afterFailure = { position: examState.position, navigating: examState.navigating };
+  examState = null;
+  document.querySelector = navOriginalQuerySelector;
+  document.querySelectorAll = navOriginalQuerySelectorAll;
+  saveExamProgress = navOriginalSave;
+  confirm = navOriginalConfirm;
+  examConfirm = navOriginalExamConfirm;
+  return { confirmCalls, duringSave, afterSave, afterForbiddenBack, afterFailure };
+})()`);
+check(examNavigationResult.duringSave.position === 1 && examNavigationResult.duringSave.navigating && examNavigationResult.duringSave.saveCalls === 1 && examNavigationResult.duringSave.buttonsDisabled, 'Guardar y siguiente bloquea ambos botones mientras guarda');
+check(examNavigationResult.afterSave.position === 1 && examNavigationResult.afterSave.saveCalls === 1, 'Un doble clic no salta dos preguntas');
+check(examNavigationResult.confirmCalls >= 1, 'Sin regresar, avanzar se confirma dentro de la página');
+check(JSON.stringify(examNavigationResult.afterSave.hidden) === '[true,false,true]' && JSON.stringify(examNavigationResult.afterSave.disabled) === '[true,false,false]', 'La pregunta cambia dentro de la misma vista y la anterior queda cerrada');
+check(examNavigationResult.afterSave.prevHidden && examNavigationResult.afterSave.nextText.includes('aleatoria'), 'Sin regresar oculta Anterior y anuncia la siguiente pregunta aleatoria');
+check(examNavigationResult.afterForbiddenBack.position === 1 && examNavigationResult.afterForbiddenBack.saveCalls === 1, 'Sin regresar impide volver incluso por llamada directa');
+check(examNavigationResult.afterFailure.position === 0 && !examNavigationResult.afterFailure.navigating, 'Si no se puede guardar, permanece en la pregunta actual');
+
+const hardenedExam = run(`(() => {
+  var hardOriginalQuerySelector = document.querySelector;
+  var hardOriginalToast = toast;
+  var hardNames = ['exam', 'oneByOne', 'noBack', 'lockPlatform', 'lockOnLeave', 'shuffle', 'shuffleOptions', 'seb'];
+  var hardInputs = Object.fromEntries(hardNames.map((name) => [name, { checked: false }]));
+  var hardGrace = { value: '0' };
+  var hardExamOptions = { hidden: true, removeAttribute() {} };
+  var hardSebOptions = { hidden: true };
+  var hardToast = '';
+  document.querySelector = (selector) => {
+    var match = /^input\\[name="([^"]+)"\\]$/.exec(selector);
+    if (match) return hardInputs[match[1]] || null;
+    if (selector === 'select[name="lockGrace"]') return hardGrace;
+    if (selector === '.exam-options') return hardExamOptions;
+    if (selector === '.seb-options') return hardSebOptions;
+    return hardOriginalQuerySelector(selector);
+  };
+  toast = (message) => { hardToast = message; };
+  dirty = false;
+  hardenExamSettings();
+  var result = { checked: hardNames.map((name) => hardInputs[name].checked), grace: hardGrace.value, examHidden: hardExamOptions.hidden, sebHidden: hardSebOptions.hidden, dirty, toast: hardToast };
+  document.querySelector = hardOriginalQuerySelector;
+  toast = hardOriginalToast;
+  return result;
+})()`);
+check(hardenedExam.checked.every(Boolean) && hardenedExam.grace === '5', 'La configuración reforzada activa pregunta por pregunta, azar, bloqueos y Safe Exam Browser');
+check(!hardenedExam.examHidden && !hardenedExam.sebHidden && hardenedExam.dirty && hardenedExam.toast.includes('reforzada'), 'El docente ve y revisa la configuración reforzada antes de guardarla');
+
 // ---- Asistencia: forma corta de «Justificada» ----
 check(run('attStateLabel(ATT_STATUS.excused)').includes('att-compact" aria-hidden="true">Justif.'), 'Justificada tiene forma corta');
 check(run('attStateLabel(ATT_STATUS.present)') === 'Presente', 'Los demás estados no cambian');

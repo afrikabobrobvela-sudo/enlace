@@ -59,10 +59,19 @@ const NOTICE_LABELS = {
 };
 const NOTICE_TARGET = { notice: 'notices', material: 'content', quiz: 'quiz', task: 'task', grade: 'task', submission: 'task', post: 'thread' };
 let noticesCache = null;
+let noticesLoadedAt = 0;
+const NOTICES_EVERY = 5 * 60_000;
 
-async function loadNotices() {
+/**
+ * Campana (12.30, límite gratuito de D1): cada 5 minutos solo si la pestaña está a la vista; al volver a ella, si ya
+ * pasaron 5 minutos. Con un examen abierto no se pide (el servidor solo atiende el examen). Antes cada pestaña abierta
+ * la pedía cada 5 minutos todo el día, aunque estuviera oculta.
+ */
+async function loadNotices({ force = true } = {}) {
   const bell = $('#bell');
-  if (!bell || !me) return;
+  if (!bell || !me || me.activeExam) return;
+  if (!force && (document.visibilityState === 'hidden' || Date.now() - noticesLoadedAt < NOTICES_EVERY - 5000)) return;
+  noticesLoadedAt = Date.now();
   try {
     noticesCache = await request('/api/notifications');
   } catch {
@@ -75,8 +84,11 @@ async function loadNotices() {
 function startNotices() {
   loadNotices();
   clearInterval(noticesTimer);
-  noticesTimer = setInterval(loadNotices, 5 * 60_000);
+  noticesTimer = setInterval(() => loadNotices({ force: false }), NOTICES_EVERY);
 }
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && noticesTimer) loadNotices({ force: false });
+});
 
 // Filtros de los avisos (panel e historial): curso y "solo sin leer".
 let noticeFilter = { course: '', unread: false };

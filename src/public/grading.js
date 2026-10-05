@@ -4,7 +4,7 @@
 const DEFAULT_GRADING = {
   scheme: 'tasks',
   categories: [],
-  final: { decimals: 1, rounding: 'half_up', passing: 6, failingAs: null, missingAsZero: false },
+  final: { decimals: 0, rounding: 'down', passing: 6, failingAs: null, missingAsZero: false },
 };
 let categoryDraft = null; // edición en curso de las categorías { course, categories, tasks }
 let categoryEditing = false; // se pidió cambiar a categorías aunque el curso aún use pesos por actividad
@@ -14,11 +14,22 @@ function gradingSettings() {
   return records('grading')[0]?.data || DEFAULT_GRADING;
 }
 
+/** Actividades en el orden de las columnas del libro (12.30); las que no tienen lugar guardado van al final, por fecha. */
+function orderedTasks(tasks = records('task')) {
+  const order = gradingSettings().columnOrder || [];
+  if (!order.length) return tasks;
+  const position = new Map(order.map((id, i) => [id, i]));
+  return tasks
+    .map((t, i) => [t, position.has(t.id) ? position.get(t.id) : order.length + i])
+    .sort((a, b) => a[1] - b[1])
+    .map(([t]) => t);
+}
+
 /**
  * Calificación de un alumno. Con final = true y la regla activa, las actividades vencidas sin calificar valen 0;
  * si no, se excluye lo no calificado y se normalizan los pesos restantes (como siempre en Enlace).
  */
-function computeGrade({ tasks, grades, settings, weights, attendancePercent = null, now = Date.now(), final = false, dueOf = (task) => task.data.due, quizzes = [], quizGrades = new Map() }) {
+function computeGrade({ tasks, grades, settings, weights, attendancePercent = null, now = Date.now(), final = false, dueOf = (task) => task.data.due, quizzes = [], quizGrades = new Map(), categoryGrades = new Map() }) {
   // Evaluaciones que cuentan (12.14): solo con categorías; entran a su categoría con sus puntos y la calificación
   // del intento que marque su regla. Sin intento no cuentan (no tienen fecha de entrega que las haga vencer).
   const zeroMissing = final && settings.final.missingAsZero;
@@ -33,8 +44,8 @@ function computeGrade({ tasks, grades, settings, weights, attendancePercent = nu
   let total = 0;
   if (settings.scheme === 'categories' && settings.categories.length) {
     const categories = settings.categories.map((category) => {
-      let value = null;
-      if (category.source === 'attendance') value = attendancePercent === null ? null : attendancePercent / 10;
+      let automaticValue = null;
+      if (category.source === 'attendance') automaticValue = attendancePercent === null ? null : attendancePercent / 10;
       else {
         let items = [];
         for (const task of tasks.filter((t) => t.data.category === category.id)) {
@@ -48,31 +59,33 @@ function computeGrade({ tasks, grades, settings, weights, attendancePercent = nu
         items = dropExtremes(items, category.dropLow || 0, category.dropHigh || 0);
         const weightOf = (item) => (category.distribution === 'equal' ? 1 : item.points);
         const points = items.reduce((n, item) => n + weightOf(item), 0);
-        value = points ? items.reduce((n, item) => n + item.grade * weightOf(item), 0) / points : null;
+        automaticValue = points ? items.reduce((n, item) => n + item.grade * weightOf(item), 0) / points : null;
       }
-      return { id: category.id, name: category.name, weight: category.weight, term: category.term || '', value };
+      // Una captura directa del docente sustituye todo el cálculo automático de este rubro para el alumno.
+      const value = categoryGrades.has(category.id) ? Number(categoryGrades.get(category.id)) : automaticValue;
+      return { id: category.id, name: category.name, weight: category.weight, source: category.source, term: category.term || '', value, automaticValue };
     });
-    // Parciales (12.26): cada uno promedia sus categorías con sus pesos; la final junta parciales y categorías
-    // de toda la materia. En ambos niveles, lo que aún no tiene calificación no cuenta y se normaliza el resto.
-    const weighted = (list) => {
+    // Dentro de un parcial, un rubro vacío conserva su peso y aporta 0: no se redistribuye su porcentaje.
+    // En el nivel superior, el promedio parcial excluye los parciales completamente vacíos; la calificación
+    // final sí conserva sus pesos (por ejemplo, dos parciales de 50 % equivalen a su promedio).
+    const weighted = (list, countMissing = false) => {
       let sum = 0;
       let total = 0;
       for (const item of list) {
-        if (item.value === null) continue;
-        sum += item.value * item.weight;
-        total += item.weight;
+        if (item.value !== null) sum += item.value * item.weight;
+        if (countMissing || item.value !== null) total += item.weight;
       }
-      return total ? sum / total : null;
+      return list.some((item) => item.value !== null) && total ? sum / total : null;
     };
     const termList = (settings.terms || []).map((term) => ({
       id: term.id,
       name: term.name,
       weight: term.weight,
-      value: weighted(categories.filter((c) => c.term === term.id)),
+      value: weighted(categories.filter((c) => c.term === term.id), true),
     }));
     const known = new Set(termList.map((t) => t.id));
     const top = [...termList, ...categories.filter((c) => !c.term || !known.has(c.term))];
-    return { value: weighted(top), categories, terms: termList };
+    return { value: weighted(top, final || !termList.length), categories, terms: termList };
   }
   const valid = weights && tasks.every((t) => Number.isFinite(weights[t.id]));
   for (const task of tasks) {
@@ -122,18 +135,42 @@ function categoryLabel(category, settings = gradingSettings()) {
   return term ? `${term.name} · ${category.name}` : category.name;
 }
 
-function roundGrade(value, decimals, rounding) {
-  const factor = 10 ** decimals;
-  const scaled = value * factor;
-  // El 1e-9 corrige la coma flotante: 1.005 × 100 da 100.4999…, que sin él quedaría en 1.00 en vez de 1.01.
-  return (rounding === 'down' ? Math.floor(scaled + 1e-9) : Math.floor(scaled + 0.5 + 1e-9)) / factor;
+/**
+ * Redondeo institucional de la calificación final:
+ * - si está por debajo de la mínima aprobatoria, siempre baja al entero;
+ * - si ya es aprobatoria, sube solo desde .60; de .00 a .59 baja.
+ */
+function roundFinalGrade(value, passing) {
+  const whole = Math.floor(value);
+  if (value < passing) return whole;
+  const fraction = value - whole;
+  // La tolerancia evita que 6.6 se interprete como 6.599999… por la coma flotante.
+  return fraction >= 0.6 - 1e-9 ? Math.min(10, whole + 1) : whole;
 }
 
 function finalGrade(value, rules) {
   if (value === null) return null;
-  const rounded = roundGrade(value, rules.decimals, rules.rounding);
+  const rounded = roundFinalGrade(Number(value), rules.passing);
   const passed = rounded >= rules.passing;
-  return { value: !passed && rules.failingAs !== null ? rules.failingAs : rounded, passed };
+  return { value: rounded, passed };
+}
+
+/**
+ * Calificación final de la materia. Cuando todo está organizado en parciales, promedia las
+ * calificaciones ya asentadas de esos parciales; uno vacío aporta 0. Si existen rubros de toda
+ * la materia, conserva el cálculo general porque también deben participar en la ponderación.
+ */
+function courseFinalGrade(result, rules) {
+  if (!result) return null;
+  const terms = result.terms || [];
+  const termIds = new Set(terms.map((term) => term.id));
+  const generalCategories = (result.categories || []).filter((category) => !category.term || !termIds.has(category.term));
+  if (!terms.length || generalCategories.length) return finalGrade(result.value, rules);
+  if (!terms.some((term) => term.value !== null)) return null;
+  const totalWeight = terms.reduce((sum, term) => sum + Number(term.weight || 0), 0);
+  if (!totalWeight) return null;
+  const average = terms.reduce((sum, term) => sum + (finalGrade(term.value, rules)?.value ?? 0) * term.weight, 0) / totalWeight;
+  return finalGrade(average, rules);
 }
 
 /** Asistencia del alumno en «Mis calificaciones» (12.24). */
@@ -212,6 +249,7 @@ function studentGrade(memberId, { final = false } = {}) {
     settings: gradingSettings(),
     weights: records('weights')[0]?.data.weights,
     attendancePercent: attendancePercentFor(memberId),
+    categoryGrades: new Map(records('category-grade').filter((r) => r.data.member === memberId).map((r) => [r.data.category, r.data.grade])),
     final,
     dueOf: (task) => dueFor(task, memberId),
   });
@@ -233,7 +271,7 @@ function myGradesHtml() {
   const grading = gradingSettings();
   const cats = grading.scheme === 'categories' ? grading.categories : [];
   const weights = records('weights')[0]?.data.weights;
-  const tasks = records('task');
+  const tasks = orderedTasks();
   const weighted = !cats.length && weights && tasks.every((t) => Number.isFinite(weights[t.id]));
   const result = studentGrade(member.id);
   const avg = result.value;
@@ -293,7 +331,10 @@ function myGradesHtml() {
         ? `${
             result.terms?.length
               ? `<section class="panel"><h2>Por parcial</h2><ul class="my-grade-list">${result.terms
-                  .map((t) => `<li class="my-grade-item"><div class="my-grade-row is-static"><span class="my-grade-title">${esc(t.name)}<small>${t.weight} % de la calificación final</small></span><span class="my-grade-value ${t.value === null ? 'is-pending' : tone(t.value)}">${t.value === null ? 'Sin calificar' : formatGrade(t.value)}</span></div></li>`)
+                  .map((t) => {
+                    const grade = finalGrade(t.value, grading.final);
+                    return `<li class="my-grade-item"><div class="my-grade-row is-static"><span class="my-grade-title">${esc(t.name)}<small>${t.weight} % de la calificación final</small></span><span class="my-grade-value ${grade === null ? 'is-pending' : tone(grade.value)}">${grade === null ? 'Sin calificar' : formatGrade(grade.value, 0)}</span></div></li>`;
+                  })
                   .join('')}</ul></section>`
               : ''
           }<section class="panel"><h2>Por categoría</h2><ul class="my-grade-list">${result.categories
@@ -322,15 +363,10 @@ function gradingManageHtml(weightsHtml = '') {
        <button type="button" class="secondary" data-grading="use-categories">Usar categorías con pesos</button>${weightsHtml}`;
   const others = copySchemeTargets();
   return `<div class="heading"><h1>Cómo se calcula la calificación</h1>${others.length ? '<button type="button" class="secondary" data-copy-scheme>Aplicar a otros grupos</button>' : ''}</div>${schemeSection}
-    <h2 class="grading-subtitle">Calificación final</h2>
+    <h2 class="grading-subtitle">Calificación final y resultado de cada parcial</h2>
     <form id="finalRules" class="real-form grading-rules">
-      <label>Decimales<select name="decimals">${[[0, 'Entero (8)'], [1, 'Un decimal (8.5)'], [2, 'Dos decimales (8.47)']]
-        .map(([v, l]) => `<option value="${v}" ${rules.decimals === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
-      <label>Redondeo<select name="rounding"><option value="half_up" ${rules.rounding === 'half_up' ? 'selected' : ''}>Desde .5 hacia arriba (5.5 → 6)</option>
-        <option value="down" ${rules.rounding === 'down' ? 'selected' : ''}>Truncar (5.9 → 5)</option></select></label>
       ${field('Mínima aprobatoria', 'passing', rules.passing, 'number', 'min="0" max="10" step="0.1" required')}
-      <label>Si no aprueba<select name="failingAs"><option value="">Asentar la calificación calculada</option>
-        ${[5, 0].map((v) => `<option value="${v}" ${rules.failingAs === v ? 'selected' : ''}>Asentar ${v}</option>`).join('')}</select></label>
+      <p class="muted">La calificación final de la materia y la final de cada parcial siempre se asientan como entero. Las reprobatorias bajan (5.9 → 5); las aprobatorias suben desde .60 (6.6 → 7) y de .00 a .59 bajan (6.59 → 6).</p>
       <label class="check-row"><input type="checkbox" name="missingAsZero" ${rules.missingAsZero ? 'checked' : ''}> Las actividades vencidas sin calificar cuentan como 0 en la calificación final</label>
       <p class="muted">El promedio parcial nunca cuenta lo que falta por calificar; esta opción solo afecta la calificación final.</p>
       <p class="form-error error" hidden></p><div class="form-actions"><button class="primary">Guardar reglas</button></div>
@@ -631,10 +667,7 @@ function bindGradingManage() {
     await request('/api/grades/final-rules', {
       course: current.course.id,
       revision: records('grading')[0]?.revision ?? 0,
-      decimals: Number(f.get('decimals')),
-      rounding: f.get('rounding'),
       passing: Number(f.get('passing')),
-      failingAs: f.get('failingAs') === '' ? null : Number(f.get('failingAs')),
       missingAsZero: f.get('missingAsZero') === 'on',
     });
     return 'Reglas de la calificación final guardadas.';
@@ -704,6 +737,74 @@ document.addEventListener('click', async (event) => {
 
 const DOC_ICON = '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" d="M6 3h8l4 4v14H6zM14 3v4h4M9 12h6M9 16h6"/></svg>';
 
+/** Captura manual que sustituye el cálculo de un rubro para un alumno. */
+function categoryGradeOf(member, category) {
+  return records('category-grade').find((r) => r.data.member === member && r.data.category === category);
+}
+
+/** Casilla siempre visible. Vacía = volver al cálculo automático del rubro. */
+function categoryGradeCellHtml(category, member, value) {
+  if (category.source !== 'tasks' || !teaches()) return `<td class="category-col">${formatGrade(value)}</td>`;
+  const manual = categoryGradeOf(member.id, category.id);
+  const automatic = category.automaticValue ?? (manual ? null : value);
+  const automaticText = formatGrade(automatic);
+  return `<td class="category-col category-grade-cell ${manual ? 'is-manual' : ''}">
+    <input class="category-grade-input" type="number" min="0" max="10" step="0.01" inputmode="decimal"
+      value="${esc(manual?.data.grade ?? '')}" placeholder="${esc(automaticText)}" data-category-grade
+      data-cg-category="${esc(category.id)}" data-cg-member="${esc(member.id)}"
+      aria-label="Calificación manual de ${esc(categoryLabel(category))} para ${esc(member.name)}" title="Escribe una calificación manual; deja vacío para usar el cálculo automático">
+    <small class="${manual ? 'manual-grade-tag' : 'category-grade-hint'}">${manual ? `Manual${automatic === null ? '' : ` · automático: ${automaticText}`}` : `Automático: ${automaticText}`}</small></td>`;
+}
+
+/** Guarda una captura manual de rubro. Eliminar su contenido reactiva el valor automático. */
+async function saveCategoryGradeInput(input) {
+  const { cgCategory: category, cgMember: member } = input.dataset;
+  const raw = input.value.trim().replace(',', '.');
+  const grade = raw === '' ? null : Number(raw);
+  input.classList.remove('is-error');
+  if (grade !== null && (!Number.isFinite(grade) || grade < 0 || grade > 10)) {
+    input.classList.add('is-error');
+    toast('La calificación va de 0 a 10.');
+    input.focus();
+    return false;
+  }
+  const saved = categoryGradeOf(member, category);
+  if ((saved?.data.grade ?? null) === grade) return true;
+  const key = `${category}:${member}`;
+  if (categoryGradeSaving.has(key)) return categoryGradeSaving.get(key);
+  input.classList.add('is-saving');
+  const pending = (async () => {
+    try {
+      const response = await request('/api/grades/category', {
+        course: current.course.id,
+        category,
+        member,
+        revision: saved?.revision,
+        grade,
+      });
+      if (response.deleted) {
+        const i = current.records.findIndex((r) => r.id === response.id);
+        if (i >= 0) current.records.splice(i, 1);
+      } else {
+        const i = current.records.findIndex((r) => r.id === response.id);
+        if (i >= 0) current.records[i] = response;
+        else current.records.push(response);
+      }
+      refreshGradebook();
+      return true;
+    } catch (error) {
+      input.classList.remove('is-saving');
+      input.classList.add('is-error');
+      toast(error.status === 409 ? 'Otra persona cambió esta calificación. Recarga la página.' : error.message);
+      input.focus();
+      return false;
+    }
+  })().finally(() => categoryGradeSaving.delete(key));
+  categoryGradeSaving.set(key, pending);
+  return pending;
+}
+const categoryGradeSaving = new Map();
+
 /** Casilla del libro: la calificación se escribe ahí mismo y el ícono abre la entrega (o la pantalla para calificar). */
 /** ¿El alumno entregó algo? (una captura manual del docente no es entrega) */
 const hasSubmission = (s) => Boolean(s && !s.data.manual && (s.data.submitted || s.data.body || s.data.fileIds?.length));
@@ -726,16 +827,88 @@ function gradebookCellHtml(t, m, s) {
   }${s && s.data.published === false ? '<span class="draft-tag">borrador</span>' : ''}${sent && s.data.late ? '<span class="late-tag">tardía</span>' : ''}`;
 }
 
-/** Menú ⌄ de cada columna (como en Brightspace). */
-function gradebookColumnMenu(t) {
+/** Menú ⌄ de cada columna (como en Brightspace). `prev`/`next`: columnas visibles a los lados, para moverla. */
+function gradebookColumnMenu(t, prev = null, next = null) {
   return `<details class="gb-col-menu"><summary aria-label="Opciones de ${esc(t.data.title)}" title="Opciones">⌄</summary><div class="gb-col-panel">
     <button type="button" data-action="task" data-id="${esc(t.id)}">Ver entregas</button>
     <button type="button" data-action="edit-task" data-id="${esc(t.id)}">Editar actividad</button>
     <button type="button" data-gb-enter="${esc(t.id)}">Ingresar calificaciones</button>
     <button type="button" data-gb-bulk="${esc(t.id)}">Calificar en bloque</button>
     <button type="button" data-gb-stats="${esc(t.id)}">Ver las estadísticas</button>
+    <button type="button" data-gb-move="${esc(t.id)}" data-gb-target="${esc(prev?.id || '')}" ${prev ? '' : 'disabled'}>← Mover a la izquierda</button>
+    <button type="button" data-gb-move="${esc(t.id)}" data-gb-target="${esc(next?.id || '')}" data-gb-after="1" ${next ? '' : 'disabled'}>Mover a la derecha →</button>
+    <button type="button" class="gb-danger" data-action="trash" data-kind="task" data-id="${esc(t.id)}">Eliminar actividad</button>
   </div></details>`;
 }
+
+/** Mueve la columna `id` antes (o después) de la columna `target` y guarda el orden para todos los docentes del curso. */
+async function moveGradebookColumn(id, target, after = false) {
+  const order = orderedTasks().map((t) => t.id).filter((x) => x !== id);
+  const at = order.indexOf(target);
+  if (at < 0 || id === target) return;
+  order.splice(after ? at + 1 : at, 0, id);
+  await saveColumnOrder(order);
+}
+
+async function saveColumnOrder(order) {
+  const grading = records('grading')[0];
+  const before = grading?.data.columnOrder || [];
+  // Se ve de inmediato; si el servidor lo rechaza, vuelve al orden anterior.
+  if (grading) grading.data = { ...grading.data, columnOrder: order };
+  refreshGradebook();
+  try {
+    const saved = await request('/api/grades/order', { course: current.course.id, order });
+    // La configuración de calificaciones del curso se creó con este cambio: se recarga para tener su revisión.
+    if (saved.created) {
+      current = await request('/api/course?id=' + encodeURIComponent(current.course.id) + viewSuffix());
+      refreshGradebook();
+    }
+  } catch (error) {
+    if (grading) grading.data = { ...grading.data, columnOrder: before };
+    refreshGradebook();
+    toast(error.message);
+  }
+}
+
+// Arrastrar el encabezado de una columna para cambiarla de lugar (en el teléfono: menú ⌄ → Mover).
+let gradebookDragged = null;
+function clearGradebookDrop() {
+  for (const th of document.querySelectorAll('.gb-drop-before, .gb-drop-after, .gb-dragging')) th.classList.remove('gb-drop-before', 'gb-drop-after', 'gb-dragging');
+}
+document.addEventListener('dragstart', (e) => {
+  const th = e.target.closest?.('[data-gb-col]');
+  if (!th) return;
+  gradebookDragged = th.dataset.gbCol;
+  th.classList.add('gb-dragging');
+  e.dataTransfer.effectAllowed = 'move';
+  e.dataTransfer.setData('text/plain', gradebookDragged); // Firefox no arrastra sin datos
+});
+document.addEventListener('dragover', (e) => {
+  const th = gradebookDragged && e.target.closest?.('[data-gb-col]');
+  if (!th) return;
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  const box = th.getBoundingClientRect();
+  const after = e.clientX > box.left + box.width / 2;
+  for (const other of document.querySelectorAll('.gb-drop-before, .gb-drop-after')) if (other !== th) other.classList.remove('gb-drop-before', 'gb-drop-after');
+  if (th.dataset.gbCol === gradebookDragged) return;
+  th.classList.toggle('gb-drop-after', after);
+  th.classList.toggle('gb-drop-before', !after);
+});
+document.addEventListener('drop', (e) => {
+  const th = gradebookDragged && e.target.closest?.('[data-gb-col]');
+  if (!th) return;
+  e.preventDefault();
+  const id = gradebookDragged;
+  const after = th.classList.contains('gb-drop-after');
+  gradebookDragged = null;
+  clearGradebookDrop();
+  moveGradebookColumn(id, th.dataset.gbCol, after);
+});
+document.addEventListener('dragend', () => {
+  gradebookDragged = null;
+  clearGradebookDrop();
+});
 
 /** Guarda lo escrito en una casilla (si cambió) y actualiza el libro sin perder el lugar. */
 async function saveGradebookCell(input) {
@@ -778,8 +951,12 @@ async function saveGradebookGrade(input, task, member, s, grade) {
 /** Vuelve a dibujar el libro conservando el foco, lo que se está escribiendo y el desplazamiento. */
 function refreshGradebook() {
   if (section !== 'grades') return;
-  const active = document.activeElement?.matches?.('.gb-input') ? document.activeElement : null;
-  const keep = active ? { task: active.dataset.gbTask, member: active.dataset.gbMember, value: active.value } : null;
+  const active = document.activeElement?.matches?.('.gb-input, .category-grade-input') ? document.activeElement : null;
+  const keep = active?.matches('.gb-input')
+    ? { type: 'task', task: active.dataset.gbTask, member: active.dataset.gbMember, value: active.value }
+    : active
+      ? { type: 'category', category: active.dataset.cgCategory, member: active.dataset.cgMember, value: active.value }
+      : null;
   const wrap = document.querySelector('.gradebook');
   const [left, top, y] = [wrap?.scrollLeft, wrap?.scrollTop, window.scrollY];
   const search = document.querySelector('[data-search]')?.value || '';
@@ -793,7 +970,9 @@ function refreshGradebook() {
   if (again) [again.scrollLeft, again.scrollTop] = [left, top];
   window.scrollTo(0, y);
   if (keep) {
-    const input = document.querySelector(`.gb-input[data-gb-task="${CSS.escape(keep.task)}"][data-gb-member="${CSS.escape(keep.member)}"]`);
+    const input = keep.type === 'task'
+      ? document.querySelector(`.gb-input[data-gb-task="${CSS.escape(keep.task)}"][data-gb-member="${CSS.escape(keep.member)}"]`)
+      : document.querySelector(`.category-grade-input[data-cg-category="${CSS.escape(keep.category)}"][data-cg-member="${CSS.escape(keep.member)}"]`);
     if (input) {
       input.value = keep.value;
       input.focus({ preventScroll: true });
@@ -860,6 +1039,12 @@ document.addEventListener('change', (e) => {
   if (e.target.closest?.('#fields') && (e.target.name === 'm' || e.target.matches('[data-bulk-replace]'))) bulkGradeCount();
 });
 
+/** Casilla del mismo rubro en otra fila visible (Enter baja, Mayús+Enter sube). */
+function nextCategoryGradeInput(input, step) {
+  const all = [...document.querySelectorAll(`.category-grade-input[data-cg-category="${CSS.escape(input.dataset.cgCategory)}"]`)].filter((x) => !x.closest('tr')?.hidden);
+  return all[all.indexOf(input) + step] || null;
+}
+
 function gradebookStatsModal(taskId) {
   const t = find(taskId);
   const students = studentsInView().filter((m) => itemApplies(t, m));
@@ -906,13 +1091,30 @@ document.addEventListener('keydown', (e) => {
 document.addEventListener('change', (e) => {
   if (e.target.matches?.('.gb-input')) saveGradebookCell(e.target);
 });
+document.addEventListener('keydown', (e) => {
+  if (!e.target.matches?.('.category-grade-input') || e.key !== 'Enter') return;
+  e.preventDefault();
+  const input = e.target;
+  const next = nextCategoryGradeInput(input, e.shiftKey ? -1 : 1);
+  saveCategoryGradeInput(input).then((ok) => {
+    if (!ok || !next) return;
+    const target = document.querySelector(`.category-grade-input[data-cg-category="${CSS.escape(next.dataset.cgCategory)}"][data-cg-member="${CSS.escape(next.dataset.cgMember)}"]`);
+    target?.focus();
+    target?.select?.();
+  });
+});
+document.addEventListener('change', (e) => {
+  if (e.target.matches?.('.category-grade-input')) saveCategoryGradeInput(e.target);
+});
 document.addEventListener('click', (e) => {
   const enter = e.target.closest('[data-gb-enter]');
   const stats = e.target.closest('[data-gb-stats]');
   const bulk = e.target.closest('[data-gb-bulk]');
-  if (enter || stats || bulk) e.target.closest('details')?.removeAttribute('open');
+  const move = e.target.closest('[data-gb-move]');
+  if (enter || stats || bulk || move) e.target.closest('details')?.removeAttribute('open');
   if (bulk) return bulkGradeModal(bulk.dataset.gbBulk);
   if (stats) return gradebookStatsModal(stats.dataset.gbStats);
+  if (move) return moveGradebookColumn(move.dataset.gbMove, move.dataset.gbTarget, Boolean(move.dataset.gbAfter));
   if (enter) {
     const first = document.querySelector(`.gb-input[data-gb-task="${CSS.escape(enter.dataset.gbEnter)}"]`);
     first?.scrollIntoView({ block: 'center', inline: 'center' });

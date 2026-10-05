@@ -44,7 +44,16 @@
 .grading-ok { color: #1e6b43; font-weight: 600; }
 .grading-rules { max-width: 40rem; }
 th.category-col, td.category-col { background: #f4f8fa; }
+.gradebook thead th.category-col { background: #f4f8fa; }
 td.final-grade { font-weight: 700; }
+.category-grade-cell { text-align: center; }
+.category-grade-cell.is-manual { background: #fff8e8; }
+.category-grade-input { display: block; width: 4.8em; margin: 0 auto; padding: 6px; text-align: right; font-variant-numeric: tabular-nums; }
+.category-grade-input.is-saving { background: #f7fbfd; }
+.category-grade-input.is-error { border-color: #b42318; box-shadow: 0 0 0 2px rgba(180, 35, 24, 0.15); }
+.manual-grade-tag, .category-grade-hint { display: block; margin-top: 4px; color: #7a4a00; font-size: 11px; font-weight: 600; }
+.category-grade-hint { color: #5c6169; font-weight: 400; }
+.gb-task-placement { display: block; margin-bottom: 5px; color: #527086; font-size: 11px; font-weight: 700; letter-spacing: 0.02em; text-transform: uppercase; }
 
 .rubric-editor th, .rubric-editor td { vertical-align: top; min-width: 10rem; }
 .rubric-editor th input:not([type='number']) { width: 100%; font-weight: 600; }

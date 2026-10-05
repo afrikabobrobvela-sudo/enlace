@@ -186,7 +186,8 @@ checks += 3;
 // Consultas: el curso del alumno sigue dentro del límite.
 store.counter.queries = 0;
 await call('ana', '/api/course?id=' + c);
-assert(store.counter.queries <= 13, `consultas: ${store.counter.queries}`);
+// 14 desde las calificaciones capturadas directamente por rubro (igual que en test-api.mjs).
+assert(store.counter.queries <= 14, `consultas: ${store.counter.queries}`);
 checks++;
 
 assert.deepEqual(store.raw().prepare('PRAGMA foreign_key_check').all(), []);
