@@ -15,7 +15,7 @@
 :root {
   --ink: #152536;
   --ink-soft: #4a5d6e;
-  --ink-faint: #7a8a98;
+  --ink-faint: #5f6f7e; /* 4.5:1 o más sobre blanco, el fondo y los paneles (WCAG AA) */
   --line: #e2e8ee;
   --line-strong: #cfd9e2;
   --surface: #ffffff;
@@ -1373,3 +1373,22 @@ article.course .course-cover.has-cover .course-letter { opacity: 0; }
 
 /* Importar con imágenes (12.33): miniatura de la imagen de cada pregunta en la vista previa. */
 .import-thumb { display: block; max-width: 160px; max-height: 90px; margin: 6px 0 2px; border: 1px solid var(--line); border-radius: 6px; background: #fff; object-fit: contain; }
+
+/* Diseño 12.35 ------------------------------------------------------------------------------------------------- */
+/* Textos secundarios con colores fijos de capas viejas: al mismo gris accesible que --ink-faint. */
+.material-entry summary small, .dash-meta, .workspace-eyebrow + p, .content-tree small, .toc-all span { color: var(--ink-faint); }
+/* El pie de página siempre al fondo de la ventana (en páginas cortas ya no queda una franja gris debajo). */
+.shell { min-height: 100vh; min-height: 100dvh; display: flex; flex-direction: column; }
+.shell > footer { width: 100%; box-sizing: border-box; }
+.shell > #main { flex: 1 0 auto; width: 100%; min-width: 0; box-sizing: border-box; } /* sin esto, una tabla ancha ensancharía la página */
+/* Ayuda del libro de calificaciones: se puede plegar. */
+.grade-help { margin: 0 0 16px; }
+.grade-help > summary { cursor: pointer; width: fit-content; padding: 6px 0; font-weight: 600; color: var(--link); }
+.grade-help[open] > summary { margin-bottom: 8px; }
+.grade-help .grade-note { margin: 0 0 10px; }
+.cell-pair { white-space: nowrap; }
+.grades-title { margin: 0 0 8px; }
+/* La etiqueta pequeña sobre el título usa un tono más oscuro del acento: el de siempre no llega a 4.5:1 en 11 px. */
+.workspace-eyebrow { color: #0a7383; }
+/* Pastillas y notas pequeñas sobre fondos grises: el texto en --ink-soft para pasar de 4.5:1. */
+.count-pill, .status-pill.draft, .course-guide summary small { color: var(--ink-soft); }
