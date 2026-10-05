@@ -5,3 +5,5 @@ src/generated/
 dist/
 .enlace-url
 respaldos/
+# Grafo de graphify (local; no se sube)
+graphify-out/

@@ -21,3 +21,12 @@ if command -v claude >/dev/null 2>&1 && ! grep -q '"ecc@ecc"' ~/.claude/plugins/
   claude plugin marketplace add affaan-m/ECC >/dev/null 2>&1 || true
   claude plugin install ecc@ecc --scope project >/dev/null 2>&1 || echo "Aviso: no se pudo instalar el plugin ECC." >&2
 fi
+
+# Habilidad graphify (grafo de conocimiento del código, paquete oficial `graphifyy` de PyPI).
+# Si falla, la sesión sigue sin ella.
+if ! command -v graphify >/dev/null 2>&1 && command -v uv >/dev/null 2>&1; then
+  uv tool install 'graphifyy[sql]' >/dev/null 2>&1 || echo "Aviso: no se pudo instalar graphify." >&2
+fi
+if command -v graphify >/dev/null 2>&1 && [ ! -d ~/.claude/skills/graphify ]; then
+  graphify install --platform claude >/dev/null 2>&1 || true
+fi
