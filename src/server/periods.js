@@ -14,16 +14,22 @@ const ARCHIVE_EXEMPT = new Set(['POST /api/course/archive', 'POST /api/course/co
  */
 export async function assertWritable(db, route, url, request) {
   if (ARCHIVE_EXEMPT.has(route)) return;
-  let course = url.searchParams.get('course');
+  // Se revisan los dos (URL y cuerpo): un ?course= señuelo no debe tapar el curso archivado del cuerpo, que es el que
+  // usan los manejadores. Cualquier valor no textual del cuerpo se revisa como texto (así lo trata access()).
+  const courses = new Set();
+  const fromUrl = url.searchParams.get('course');
+  if (fromUrl) courses.add(fromUrl);
   // Sin importar el Content-Type declarado: readJson() del manejador tampoco lo exige.
   const size = Number(request.headers.get('content-length') || 0);
-  if (!course && size <= 180_000) {
+  if (size <= 180_000) {
     const body = await request.clone().json().catch(() => null);
-    course = body && typeof body.course === 'string' ? body.course : null;
+    const fromBody = body && typeof body === 'object' ? body.course : null;
+    if (fromBody !== null && fromBody !== undefined && fromBody !== '') courses.add(String(fromBody));
   }
-  if (!course) return;
-  const row = await one(db, 'SELECT archived_at FROM aula_courses WHERE id=?', course);
-  if (row?.archived_at) fail(ARCHIVED, 409);
+  for (const course of courses) {
+    const row = await one(db, 'SELECT archived_at FROM aula_courses WHERE id=?', course);
+    if (row?.archived_at) fail(ARCHIVED, 409);
+  }
 }
 
 /** Reemplaza cada id viejo por el nuevo dentro de un texto (JSON de un registro o instrucciones con imágenes). */

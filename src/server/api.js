@@ -833,12 +833,15 @@ const routes = {
     const address = validEmail(body.email);
     const existingUser = await one(db, 'SELECT id FROM aula_users WHERE email=?', address);
     const section = await validSection(db, body.course, body.section);
+    const current = await one(db, 'SELECT role FROM aula_members WHERE course=? AND email=?', body.course, address);
+    if (current?.role === 'teacher') fail('Esa persona es co-docente del curso. Solo el propietario puede cambiar su papel.', 409);
     await run(
       db,
       `INSERT INTO aula_members (id,course,email,user_id,name,matricula,role,section) VALUES (?,?,?,?,?,?,'student',?)
        ON CONFLICT(course,email) DO UPDATE SET name=excluded.name,matricula=excluded.matricula,role='student',
          user_id=coalesce(aula_members.user_id,excluded.user_id),
-         section=CASE WHEN excluded.section<>'' THEN excluded.section ELSE aula_members.section END`,
+         section=CASE WHEN excluded.section<>'' THEN excluded.section ELSE aula_members.section END
+       WHERE aula_members.role<>'teacher'`,
       crypto.randomUUID(),
       body.course,
       address,
@@ -892,7 +895,8 @@ const routes = {
        FROM json_each(?2) j WHERE true
        ON CONFLICT(course,email) DO UPDATE SET name=excluded.name,matricula=excluded.matricula,role='student',
          user_id=coalesce(aula_members.user_id,excluded.user_id),
-         section=CASE WHEN excluded.section<>'' THEN excluded.section ELSE aula_members.section END`,
+         section=CASE WHEN excluded.section<>'' THEN excluded.section ELSE aula_members.section END
+       WHERE aula_members.role<>'teacher'`,
       body.course,
       students,
     );
@@ -930,7 +934,8 @@ const routes = {
   'DELETE /api/member': async ({ db, user, request }) => {
     const body = await readJson(request);
     requireTeacher(await access(db, user, body.course));
-    await run(db, "UPDATE aula_members SET role='removed' WHERE id=? AND course=?", text(body.id, 200), body.course);
+    // A un co-docente solo lo quita el propietario (DELETE /api/course/teachers).
+    await run(db, "UPDATE aula_members SET role='removed' WHERE id=? AND course=? AND role<>'teacher'", text(body.id, 200), body.course);
     return json({ ok: true });
   },
 
@@ -1369,23 +1374,37 @@ const routes = {
         // empezar; retomar tras recargar no lo pide.
         const code = startCodeOf(quiz.data.settings);
         if (code) {
-          const tries = await one(db, 'SELECT failures, recent, last_failure FROM aula_exam_tries WHERE quiz=? AND user_id=?', quiz.id, user.id);
-          if ((tries?.failures || 0) >= MAX_PASSWORD_FAILURES) fail('Demasiados códigos equivocados. Pide a tu docente que te desbloquee.', 429);
-          // Además, como máximo 5 códigos equivocados por minuto (12.27): así no se puede probar códigos en serie.
+          // Cada código cuenta como fallo ANTES de compararlo (una sola instrucción, condicionada a los topes): así
+          // varias solicitudes en paralelo no pueden probar más códigos que los permitidos. Si acierta, se descuenta.
           const minuteAgo = new Date(Date.now() - 60_000).toISOString();
-          if ((tries?.recent || 0) >= CODE_PER_MINUTE && tries.last_failure > minuteAgo) fail('Demasiados códigos equivocados seguidos. Espera un minuto y vuelve a intentarlo.', 429);
-          if (!sameSecret(String(body.password ?? '').trim(), code)) {
+          const reserved = await one(
+            db,
+            `INSERT INTO aula_exam_tries (quiz,user_id,failures,recent,last_failure) VALUES (?1,?2,1,1,?3)
+             ON CONFLICT(quiz,user_id) DO UPDATE SET failures=failures+1,
+               recent=CASE WHEN last_failure > ?4 THEN recent+1 ELSE 1 END, last_failure=?3
+             WHERE failures < ?5 AND NOT (recent >= ?6 AND last_failure > ?4)
+             RETURNING failures`,
+            quiz.id,
+            user.id,
+            nowIso(),
+            minuteAgo,
+            MAX_PASSWORD_FAILURES,
+            CODE_PER_MINUTE,
+          );
+          if (!reserved) {
+            const tries = await one(db, 'SELECT failures FROM aula_exam_tries WHERE quiz=? AND user_id=?', quiz.id, user.id);
+            if ((tries?.failures || 0) >= MAX_PASSWORD_FAILURES) fail('Demasiados códigos equivocados. Pide a tu docente que te desbloquee.', 429);
+            fail('Demasiados códigos equivocados seguidos. Espera un minuto y vuelve a intentarlo.', 429);
+          }
+          if (sameSecret(String(body.password ?? '').trim(), code)) {
             await run(
               db,
-              `INSERT INTO aula_exam_tries (quiz,user_id,failures,recent,last_failure) VALUES (?1,?2,1,1,?3)
-               ON CONFLICT(quiz,user_id) DO UPDATE SET failures=failures+1,
-                 recent=CASE WHEN last_failure > ?4 THEN recent+1 ELSE 1 END, last_failure=?3`,
+              'UPDATE aula_exam_tries SET failures=max(failures-1,0), recent=max(recent-1,0) WHERE quiz=? AND user_id=?',
               quiz.id,
               user.id,
-              nowIso(),
-              minuteAgo,
             );
-            const left = MAX_PASSWORD_FAILURES - (tries?.failures || 0) - 1;
+          } else {
+            const left = MAX_PASSWORD_FAILURES - reserved.failures;
             fail(left > 0 ? `Código incorrecto. Te ${left === 1 ? 'queda 1 intento' : `quedan ${left} intentos`}.` : 'Demasiados códigos equivocados. Pide a tu docente que te desbloquee.', left > 0 ? 400 : 429);
           }
         }
@@ -1504,7 +1523,9 @@ const routes = {
     const attempt = done.last + 1;
     const start = await one(db, 'SELECT * FROM aula_attempt_starts WHERE quiz=? AND user_id=? AND attempt=?', quiz.id, user.id, attempt);
     const exam = quiz.data.settings?.exam || null;
-    if ((quiz.data.settings?.timeLimit || exam) && !start) fail('Comienza el intento antes de enviarlo.', 409);
+    // Sin «Comenzar» no hay intento: ahí se revisan fechas, tiempo y el código de la sección o del examen.
+    if ((quiz.data.settings?.timeLimit || exam || startCodeOf(quiz.data.settings)) && !start) fail('Comienza el intento antes de enviarlo.', 409);
+    if (!start) assertOpen(quiz);
     // Tarde de más: se cierra con lo guardado (no con lo que llegue ahora).
     if (start && expired(quiz, start)) {
       await closeExpiredAttempt(db, quiz, user, start);
@@ -1701,11 +1722,20 @@ const routes = {
     if (!start || start.attempt !== Number(body.attempt)) fail('Este intento ya no está en curso.', 409);
     assertDevice(quiz, start, user);
     if (!start.locked_at) return json({ locked: false });
-    if (start.unlock_failures >= MAX_UNLOCK_FAILURES) fail('Demasiados códigos equivocados. Tu docente puede desbloquearte desde su monitor.', 429);
+    // El intento se cuenta antes de comparar (condicionado al tope), para que no se puedan probar códigos en paralelo.
+    const reserved = await one(
+      db,
+      `UPDATE aula_attempt_starts SET unlock_failures=unlock_failures+1
+       WHERE quiz=? AND user_id=? AND attempt=? AND unlock_failures < ? RETURNING unlock_failures`,
+      quiz.id,
+      user.id,
+      start.attempt,
+      MAX_UNLOCK_FAILURES,
+    );
+    if (!reserved) fail('Demasiados códigos equivocados. Tu docente puede desbloquearte desde su monitor.', 429);
     const code = String(body.code ?? '').replace(/\D/g, '');
     if (!sameSecret(code, start.unlock_code || '')) {
-      await run(db, 'UPDATE aula_attempt_starts SET unlock_failures=unlock_failures+1 WHERE quiz=? AND user_id=? AND attempt=?', quiz.id, user.id, start.attempt);
-      const left = MAX_UNLOCK_FAILURES - start.unlock_failures - 1;
+      const left = MAX_UNLOCK_FAILURES - reserved.unlock_failures;
       fail(left > 0 ? `Código incorrecto. Te ${left === 1 ? 'queda 1 intento' : `quedan ${left} intentos`}.` : 'Demasiados códigos equivocados. Tu docente puede desbloquearte desde su monitor.', left > 0 ? 400 : 429);
     }
     await unlockAttempt(db, start, 'code');
@@ -1874,22 +1904,36 @@ const routes = {
     }
     const id = crypto.randomUUID();
     const mime = request.headers.get('content-type') || 'application/octet-stream';
-    await env.BUCKET.put(id, new Blob(parts), { httpMetadata: { contentType: mime } });
+    // El lugar se aparta con una sola instrucción condicionada a las cuotas ANTES de escribir en R2: así varias subidas
+    // en paralelo no pueden pasar juntas la comprobación de arriba (que solo evita leer el cuerpo en vano).
+    const reserved = await one(
+      db,
+      `INSERT INTO aula_files (id,course,owner,scope,name,size,mime,created)
+       SELECT ?1,?2,?3,?4,?5,?6,?7,?8
+       WHERE (SELECT coalesce(sum(size),0) FROM aula_files) + ?6 <= ?9
+         AND (?10 OR (SELECT coalesce(sum(size),0) FROM aula_files WHERE course=?2 AND owner=?3) + ?6 <= ?11)
+       RETURNING id`,
+      id,
+      course,
+      user.id,
+      scope,
+      name,
+      size,
+      mime,
+      nowIso(),
+      TOTAL_QUOTA_BYTES,
+      a.teach ? 1 : 0,
+      STUDENT_QUOTA_BYTES,
+    );
+    if (!reserved) {
+      const total = await one(db, 'SELECT coalesce(sum(size),0) AS n FROM aula_files');
+      if (total.n + size > TOTAL_QUOTA_BYTES) fail('El almacenamiento de Enlace está casi lleno. Avisa a la administración.', 507);
+      fail(`Llegaste al límite de ${STUDENT_QUOTA_BYTES / MB} MB de archivos en este curso. Pide ayuda a tu docente.`, 413);
+    }
     try {
-      await run(
-        db,
-        'INSERT INTO aula_files (id,course,owner,scope,name,size,mime,created) VALUES (?,?,?,?,?,?,?,?)',
-        id,
-        course,
-        user.id,
-        scope,
-        name,
-        size,
-        mime,
-        nowIso(),
-      );
+      await env.BUCKET.put(id, new Blob(parts), { httpMetadata: { contentType: mime } });
     } catch (error) {
-      await env.BUCKET.delete(id);
+      await run(db, 'DELETE FROM aula_files WHERE id=?', id);
       throw error;
     }
     return json({ id, name, size }, 201);

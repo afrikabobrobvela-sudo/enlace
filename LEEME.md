@@ -1,9 +1,22 @@
-# Enlace · versión 12.25
+# Enlace · versión 12.34
 
 Plataforma académica independiente para docentes y alumnos de cualquier academia (nació en la Academia de Física de la BUAP), con interfaz inspirada en Brightspace.
 No es el código de D2L Brightspace ni una plataforma oficial de la BUAP.
 
 Esta versión se despliega en **tu propia cuenta de Cloudflare** (Workers + D1 + R2, plan gratuito) y ya no depende de ChatGPT Sites.
+
+## Novedades de la versión 12.34 (revisión de seguridad)
+
+Se hizo una revisión de seguridad completa (servidor, interfaz y repositorio público). No se encontró nada que permita entrar sin cuenta, ver otro curso, ni secretos en el repositorio. Se corrigió lo siguiente; no hay migraciones ni cambios de base de datos:
+- **Cursos archivados**: un alumno o co-docente podía seguir escribiendo en un curso archivado con una solicitud armada a mano (por ejemplo, volver a entregar y borrar su calificación). Ahora un curso archivado es de solo lectura sin excepción.
+- **Enviar una evaluación sin «Comenzar»**: en evaluaciones sin tiempo límite ni modo examen se podía enviar fuera de fechas o sin el código de la sección. Ahora se revisan siempre las fechas, y con código hay que empezar el intento.
+- **Códigos y PIN**: el tope de códigos equivocados (examen, desbloqueo y PIN de asistencia) se podía rebasar mandando muchas solicitudes al mismo tiempo. Ahora cada intento se cuenta antes de compararlo.
+- **Cuotas de archivos**: varias subidas al mismo tiempo podían rebasar los 300 MB por alumno (y llenar el almacenamiento). Ahora el lugar se aparta antes de guardar el archivo.
+- **Co-docentes**: un co-docente podía quitar o convertir en alumno a otro co-docente desde la lista de alumnos. Ahora solo el propietario cambia a los co-docentes; volver a importar la lista no los toca.
+- **Exportaciones CSV de administración** (reporte y respaldo de archivos): un nombre de archivo que empiece con `=`, `+`, `-` o `@` ya no se ejecuta como fórmula al abrirlo en Excel.
+- Detalles menores: el calendario `.ics` descargado, pesos de actividades ocultas que llegaban al alumno, y errores 500 por direcciones mal formadas.
+
+**Importante sobre Safe Exam Browser (límite conocido)**: con «Exigir Safe Exam Browser», Enlace arma la configuración de SEB y comprueba que cada solicitud traiga la llave de esa configuración. Esa llave se calcula con datos que no son secretos (el código de Enlace es público), así que **un alumno con conocimientos técnicos podría imitarla y presentar desde un navegador normal**. Es la misma limitación de la configuración automática de Moodle. Úsalo como medida **disuasiva** (detiene a la gran mayoría y deja registro), no como garantía. Pegar la Config Key de un archivo .seb propio en «Avanzado» tampoco lo cierra por ahora, porque la llave de Enlace se sigue aceptando. Si en algún examen necesitas certeza total, combínalo con vigilancia presencial (salón y monitor), o pide que se agregue la opción de exigir solo la Browser Exam Key de tus equipos.
 
 ## Novedades de la versión 12.33 (importar preguntas con imágenes)
 
@@ -79,7 +92,7 @@ No requiere migración.
 
 Ya no necesitas preparar un archivo .seb ni copiar llaves:
 - **Tú**: en la evaluación marca **«Exigir Safe Exam Browser»** y guarda. Nada más.
-- **Tus alumnos** (con Safe Exam Browser instalado, gratis para Windows, Mac o iPad) ven en la evaluación el botón **«Abrir en Safe Exam Browser»**: se abre SEB directamente en esa evaluación; entran con su cuenta y la presentan. Desde otro navegador no aparece el botón para empezar y Enlace no lo permite.
+- **Tus alumnos** (con Safe Exam Browser instalado, gratis para Windows, Mac o iPad) ven en la evaluación el botón **«Abrir en Safe Exam Browser»**: se abre SEB directamente en esa evaluación; entran con su cuenta y la presentan. Desde otro navegador no aparece el botón para empezar y Enlace no lo permite (salvo que alguien imite la llave a mano: ver «límite conocido» en la 12.34).
 - Enlace arma la configuración de cada evaluación (en `/seb/<evaluación>.seb`) y comprueba en cada paso (empezar, guardar, enviar) que la solicitud venga de SEB con esa configuración, como lo hace Moodle.
 - Si ya tienes tu propio archivo .seb, puedes seguir usándolo: en «Avanzado» pega su Config Key.
 - Al entrar a Enlace desde un enlace a una evaluación (o desde SEB), después de iniciar sesión se llega a esa evaluación y no al inicio.
