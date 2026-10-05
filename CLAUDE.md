@@ -33,6 +33,8 @@ No hay linter ni TypeScript en tiempo de ejecución (`db/schema.ts` solo documen
 
 Para `wrangler dev` sin tocar el `wrangler.toml` versionado: sustituye temporalmente `PEGA_AQUI_EL_ID_DE_TU_BASE` por cualquier UUID y restáuralo al terminar (nunca subas un `database_id` real ni el correo real). Para entrar sin Google en local, inserta un usuario y una fila en `aula_logins` en la D1 local y firma una cookie `__Host-enlace_session` con `signToken({ uid, sid, ver, exp }, SESSION_SECRET)` de `src/server/http.js`; en Chromium se puede fijar con `document.cookie` sobre `http://localhost:8787` (el prefijo `__Host-` exige contexto seguro; localhost lo es).
 
+Navegador para revisar la interfaz: la habilidad `playwright-cli` (`.claude/skills/`, instalada con `npx skills add`) usa el comando `playwright-cli`; el hook de inicio lo instala y lo configura en `~/.playwright/cli.config.json` con el Chromium del contenedor (`/opt/pw-browsers/chromium`). Los sitios externos fallan por el certificado del proxy; para Enlace en `localhost` no hace falta.
+
 ## Arquitectura
 
 - **Un solo Worker** (`src/worker.js`): `/api/*` → `src/server/api.js`, `/auth/*` → `src/server/auth.js`, todo lo demás se sirve desde `src/generated/assets.js`, que `scripts/build.mjs` genera incrustando `src/public/` (no se edita a mano; está en `.gitignore`). No hay framework ni empaquetador en el frontend: scripts clásicos con `defer`, en el orden de `src/public/index.html`, que comparten globales (`current`, `me`, `section`, `request()`, `esc()`, `modal()`, `render()`…). Un archivo nuevo de `src/public/` debe agregarse a `index.html` **y** a los `vm.runInContext`/`browser.load` de las pruebas de interfaz que cargan los scripts a mano.

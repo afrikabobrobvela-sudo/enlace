@@ -30,3 +30,20 @@ fi
 if command -v graphify >/dev/null 2>&1 && [ ! -d ~/.claude/skills/graphify ]; then
   graphify install --platform claude >/dev/null 2>&1 || true
 fi
+
+# Comando de la habilidad playwright-cli (.claude/skills/playwright-cli). Por omisión busca Google Chrome; aquí se usa
+# el Chromium que ya trae el contenedor (/opt/pw-browsers). Si falla, la sesión sigue sin él.
+if ! command -v playwright-cli >/dev/null 2>&1; then
+  npm install -g @playwright/cli@latest >/dev/null 2>&1 || echo "Aviso: no se pudo instalar playwright-cli." >&2
+fi
+if [ -x /opt/pw-browsers/chromium ] && [ ! -f ~/.playwright/cli.config.json ]; then
+  mkdir -p ~/.playwright
+  cat > ~/.playwright/cli.config.json <<'JSON'
+{
+  "browser": {
+    "browserName": "chromium",
+    "launchOptions": { "executablePath": "/opt/pw-browsers/chromium", "headless": true }
+  }
+}
+JSON
+fi
