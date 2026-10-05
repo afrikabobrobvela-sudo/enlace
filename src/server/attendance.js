@@ -627,22 +627,24 @@ export const attendanceRoutes = {
     if (!claim || claim.k !== 'checkin' || claim.u !== user.id) fail('Tu registro expiró. Vuelve a escanear el código QR.', 410);
     const session = await checkinSession(db, 'id', claim.s);
     if (!isOpen(session)) fail(CLOSED, 410);
-    const tries = await one(db, 'SELECT failures FROM aula_checkins WHERE session=? AND member=?', session.id, claim.m);
-    const failures = tries?.failures || 0;
-    if (failures >= MAX_PIN_FAILURES) fail(BLOCKED, 429);
+    // El PIN se cuenta como fallo antes de compararlo (condicionado al tope): sin carrera entre solicitudes paralelas.
+    const reserved = await one(
+      db,
+      `INSERT INTO aula_checkins (session,member,device,failures) VALUES (?,?,?,1)
+       ON CONFLICT(session,member) DO UPDATE SET failures=failures+1 WHERE failures < ?
+       RETURNING failures`,
+      session.id,
+      claim.m,
+      claim.d,
+      MAX_PIN_FAILURES,
+    );
+    if (!reserved) fail(BLOCKED, 429);
     if (!sameText(String(body.pin ?? '').trim(), session.checkin_pin)) {
-      await run(
-        db,
-        `INSERT INTO aula_checkins (session,member,device,failures) VALUES (?,?,?,1)
-         ON CONFLICT(session,member) DO UPDATE SET failures=failures+1`,
-        session.id,
-        claim.m,
-        claim.d,
-      );
-      const left = MAX_PIN_FAILURES - failures - 1;
+      const left = MAX_PIN_FAILURES - reserved.failures;
       if (left <= 0) fail(BLOCKED, 429);
       fail(`PIN incorrecto. Te ${left === 1 ? 'queda 1 intento' : `quedan ${left} intentos`}.`);
     }
+    await run(db, 'UPDATE aula_checkins SET failures=max(failures-1,0) WHERE session=? AND member=?', session.id, claim.m);
     return json(await registerCheckin(db, session, claim.m, claim.d, user.id));
   },
 

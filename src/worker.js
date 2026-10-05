@@ -65,7 +65,12 @@ export default {
     }
     if (request.method !== 'GET' && request.method !== 'HEAD') return new Response('Method not allowed', { status: 405 });
 
-    let name = url.pathname === '/' ? 'index.html' : decodeURIComponent(url.pathname.slice(1));
+    let name;
+    try {
+      name = url.pathname === '/' ? 'index.html' : decodeURIComponent(url.pathname.slice(1));
+    } catch {
+      name = ''; // un % mal formado es simplemente una página que no existe (404, no 500)
+    }
     // Páginas públicas sin extensión, por ejemplo /privacidad → privacidad.html.
     if (!Object.hasOwn(assets, name) && Object.hasOwn(assets, name + '.html')) name += '.html';
     if (!Object.hasOwn(assets, name)) return new Response('Not found', { status: 404 });

@@ -274,8 +274,15 @@ async function mailAction(target) {
   }
 }
 
+/** Celda CSV entre comillas; lo que empieza como fórmula se neutraliza para que Excel no lo ejecute. */
+function csvCell(v) {
+  let text = String(v ?? '');
+  if (/^[=+@\-\t\r]/.test(text)) text = "'" + text;
+  return `"${text.replace(/"/g, '""')}"`;
+}
+
 function reportCsv() {
-  const cell = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  const cell = csvCell;
   const head = ['Academia', 'Unidad', 'Curso', 'Grupo', 'Periodo', 'Docente', 'Estado', 'Alumnos', 'Actividades', 'Entregas', 'MB de archivos', 'Creado'];
   const lines = reportCache.courses.map((c) =>
     [c.academy, c.unit, c.name, c.group_name, c.period, c.owner, c.archived_at ? 'Archivado' : 'Activo', c.students, c.tasks, c.submissions, (c.bytes / 1048576).toFixed(2), c.created.slice(0, 10)]
@@ -401,7 +408,7 @@ async function backupWriteText(root, name, text) {
 }
 
 function backupIndexCsv(files, missing) {
-  const cell = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  const cell = csvCell;
   const lost = new Set(missing.map((f) => f.key));
   const head = ['Archivo en la carpeta', 'Nombre original', 'Curso', 'Tipo', 'Bytes', 'Subido', 'Estado'];
   const rows = files.map((f) =>

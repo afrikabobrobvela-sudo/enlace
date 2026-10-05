@@ -71,7 +71,8 @@ export function evaluate(formula, vars = {}) {
     if (token.t === 'id') {
       const name = token.v;
       if (take('(')) {
-        const fn = FUNCTIONS[name.toLowerCase()];
+        // Solo funciones propias: `constructor` o `__proto__` no deben resolverse por herencia.
+        const fn = Object.hasOwn(FUNCTIONS, name.toLowerCase()) ? FUNCTIONS[name.toLowerCase()] : undefined;
         if (!fn) throw new Error(`Función desconocida: ${name}`);
         const arg = expression();
         if (!take(')')) throw new Error('Falta cerrar un paréntesis.');

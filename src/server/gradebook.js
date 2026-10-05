@@ -189,7 +189,8 @@ export async function courseGradebook(db, course, { teacher, userId, memberId = 
     ...submissions.map(submissionRecord).map(hideDraft),
     ...attempts.map(attemptRecord),
   ];
-  const weights = weightsRecord(course, settings, tasks);
+  // Al alumno no le llegan ids ni pesos de actividades ocultas (como en la lista de actividades de arriba).
+  const weights = weightsRecord(course, settings, teacher ? tasks : tasks.filter((t) => t.visible === 1));
   if (weights) records.push(weights);
   const categories = await all(db, 'SELECT id, name, weight, source, term, distribution, drop_low, drop_high FROM aula_grade_categories WHERE course=? ORDER BY position, name', course);
   records.push(gradingRecord(course, settings, categories));

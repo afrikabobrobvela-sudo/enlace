@@ -151,7 +151,7 @@ function calAgendaHtml(onlyDay = null) {
 
 // ---- Exportar (.ics) ------------------------------------------------------------------------------
 
-const icsText = (v) => String(v ?? '').replace(/\\/g, '\\\\').replace(/\n/g, '\\n').replace(/[,;]/g, (c) => '\\' + c);
+const icsText = (v) => String(v ?? '').replace(/\\/g, '\\\\').replace(/\r\n?|\n/g, '\\n').replace(/[,;]/g, (c) => '\\' + c);
 const icsUtc = (d) => d.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
 
 /** Archivo iCalendar con los eventos que se ven (actividades en UTC; clases en hora local, de 1 hora). */
