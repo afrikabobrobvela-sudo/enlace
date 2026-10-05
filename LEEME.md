@@ -1,9 +1,34 @@
-# Enlace · versión 12.35
+# Enlace · versión 12.36
 
 Plataforma académica independiente para docentes y alumnos de cualquier academia (nació en la Academia de Física de la BUAP), con interfaz inspirada en Brightspace.
 No es el código de D2L Brightspace ni una plataforma oficial de la BUAP.
 
 Esta versión se despliega en **tu propia cuenta de Cloudflare** (Workers + D1 + R2, plan gratuito) y ya no depende de ChatGPT Sites.
+
+## Novedades de la versión 12.36 (revisión de diseño con impeccable)
+
+Cambios de la revisión de diseño (`.impeccable/critique/`, calificación inicial 26/40). Solo interfaz; sin cambios de servidor ni de base de datos.
+
+**Evaluaciones en el celular**
+- El encabezado del intento (tiempo restante, «3 de 5 contestadas» y guardado) se queda fijo arriba mientras el alumno baja por las preguntas.
+- Avisos cuando quedan 5 minutos y 1 minuto (también para lectores de pantalla).
+- Antes de enviar, Enlace pregunta y dice cuántas preguntas faltan; el envío automático cuando se acaba el tiempo no pregunta.
+- Al enviar, la pantalla lleva directamente al resultado del intento (antes solo salía un aviso que desaparecía).
+- Las opciones de respuesta son más grandes y toda la fila se marca al elegirla; el enunciado ya no queda montado sobre el borde.
+
+**Qué sigue (alumno)**
+- El número de la pestaña Actividades del celular ahora es el mismo que «Por entregar» del inicio (antes contaba también lo vencido hace tiempo y actividades que no se entregan).
+- En Actividades el alumno ve primero lo que está por entregar (lo más próximo arriba), después lo vencido («Venció el …») y al final lo entregado. «Sin calificar» reemplaza a «Pendiente».
+
+**Docente**
+- Libro de calificaciones: la tabla usa el alto de la ventana, su encabezado queda fijo y la ayuda empieza plegada (recuerda si la abres). Si el curso tiene «lo no entregado cuenta como 0», la columna de calificación final lo indica.
+- «Visible para alumnos» se ve discreto (es lo normal); destacan «Oculto» y «Programado». «Retirar» alumno aparece en rojo y separado de «Editar».
+- En cada evaluación, Duplicar, Exportar a Excel y Guardar en el banco están en «Más acciones». «Seguimiento en vivo» solo aparece en modo examen.
+- Los reactivos muestran los datos por alumno como variables (*F*, *m*) y la respuesta como fórmula. Los materiales tienen ícono según su tipo (enlace o simulador, archivos, texto).
+
+**Accesibilidad**: anillo de foco visible al usar el teclado, y el contador de avisos, las iniciales y el número del menú inferior con contraste suficiente.
+
+**Pendiente de tu decisión**: el rediseño visual completo (nuevo estilo y logo) que elegiste en la revisión. *impeccable* primero define contigo la nueva dirección visual antes de tocar pantallas.
 
 ## Novedades de la versión 12.35 (revisión de diseño y accesibilidad)
 
