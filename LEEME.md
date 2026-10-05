@@ -1,9 +1,17 @@
-# Enlace · versión 12.38
+# Enlace · versión 12.39
 
 Plataforma académica independiente para docentes y alumnos de cualquier academia (nació en la Academia de Física de la BUAP), con interfaz inspirada en Brightspace.
 No es el código de D2L Brightspace ni una plataforma oficial de la BUAP.
 
 Esta versión se despliega en **tu propia cuenta de Cloudflare** (Workers + D1 + R2, plan gratuito) y ya no depende de ChatGPT Sites.
+
+## Novedades de la versión 12.39 (calificación final después de los parciales)
+
+- En el libro de calificaciones, la columna **Calificación final** va ahora después de Parcial 1 y Parcial 2, separada con una raya más gruesa.
+- Su encabezado dice de dónde sale:
+  - «Promedio de Parcial 1 y Parcial 2» si los parciales pesan igual;
+  - «Ponderado: Parcial 1 40 % y Parcial 2 60 %» si pesan distinto o hay rubros de toda la materia.
+- El cálculo no cambia. Sin migraciones.
 
 ## Novedades de la versión 12.38 (tu 12.30 local + 12.37, redondeo y colores del libro)
 

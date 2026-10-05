@@ -394,3 +394,5 @@ body.signed-out #crumb { visibility: hidden; }
 /* Títulos de materiales en tinta negra; la tinta del tomo solo al pasar el cursor (listas largas sin ruido). */
 .material-entry summary strong { color: var(--tinta); }
 .material-entry summary:hover strong { color: var(--tomo); }
+/* Calificación final (12.39): después de los parciales, separada con una raya más gruesa. */
+.gradebook th.final-col, .gradebook td.final-grade { border-left: 2px solid var(--tinta); }
