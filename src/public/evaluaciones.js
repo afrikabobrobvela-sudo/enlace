@@ -674,9 +674,9 @@ function renderQuiz() {
     const sebInfo = settings.seb?.required
       ? `<p class="real-status">Exige <b>Safe Exam Browser</b>: tus alumnos ven el botón «Abrir en Safe Exam Browser». <a href="${esc(sebLink(q.id))}">Probarlo aquí</a> · <a href="/seb/${esc(q.id)}.seb" download>Descargar la configuración (.seb)</a></p>`
       : '';
-    $('#main').innerHTML = `${head}<p class="quiz-meta">${total.exact ? '' : 'Aprox. '}${total.total} ${total.total === 1 ? 'punto' : 'puntos'} por alumno.</p>${sebInfo}<div class="toolbar">${button('Editar evaluación', 'edit-quiz', q.id, 'secondary')}<button class="secondary" type="button" data-quiz-preview="${esc(q.id)}">Vista previa</button><button class="secondary" type="button" data-quiz-duplicate="${esc(q.id)}">Duplicar</button>${specialAccessButton('quiz', q.id)}${
+    $('#main').innerHTML = `${head}<p class="quiz-meta">${total.exact ? '' : 'Aprox. '}${total.total} ${total.total === 1 ? 'punto' : 'puntos'} por alumno.</p>${sebInfo}<div class="toolbar">${button('Editar evaluación', 'edit-quiz', q.id, 'secondary')}<button class="secondary" type="button" data-quiz-preview="${esc(q.id)}">Vista previa</button>${specialAccessButton('quiz', q.id)}${
       essays ? `<button class="${toReview ? 'primary' : 'secondary'}" type="button" data-essay-review="${esc(q.id)}">Revisar respuestas escritas${toReview ? ` (${toReview} por calificar)` : ''}</button>` : ''
-    }${attempts.length ? `<button class="secondary" type="button" data-quiz-stats="${esc(q.id)}">Estadísticas</button><button class="secondary" type="button" data-quiz-export="${esc(q.id)}">Exportar a Excel</button>` : ''}<button class="secondary" data-bank-save="${esc(q.id)}">Guardar en el banco</button>${sectionFilterHtml()}</div>${sectionDatesSummary(q.id)}${
+    }${attempts.length ? `<button class="secondary" type="button" data-quiz-stats="${esc(q.id)}">Estadísticas</button>` : ''}<details class="more-actions"><summary class="secondary">Más acciones</summary><div class="more-actions-panel"><button type="button" data-quiz-duplicate="${esc(q.id)}">Duplicar</button>${attempts.length ? `<button type="button" data-quiz-export="${esc(q.id)}">Exportar a Excel</button>` : ''}<button type="button" data-bank-save="${esc(q.id)}">Guardar en el banco</button></div></details>${sectionFilterHtml()}</div>${sectionDatesSummary(q.id)}${
       emptyAttempts.length
         ? `<div class="warning-note void-note"><p><b>${emptyAttempts.length} ${emptyAttempts.length === 1 ? 'intento se cerró' : 'intentos se cerraron'} sin ninguna respuesta</b> (de ${new Set(emptyAttempts.map((a) => a.author)).size} ${new Set(emptyAttempts.map((a) => a.author)).size === 1 ? 'alumno' : 'alumnos'}): se acabó el tiempo antes de que contestaran. Si fue por la configuración, devuélvelos para que puedan volver a presentar.</p><button type="button" class="secondary" data-void-empty="${esc(q.id)}">Devolver intentos sin respuestas</button></div>`
         : ''
@@ -1234,7 +1234,7 @@ async function loadExamMonitor(quizId) {
       }</td><td>${r.correct} de ${r.total}</td><td>${r.attempts}</td><td>${esc(new Date(r.last).toLocaleTimeString('es-MX', { timeStyle: 'short' }))}</td></tr>`,
     )
     .join('');
-  box.innerHTML = `<div class="exam-monitor-head"><h2>${closedNow ? 'Resumen de la evaluación' : 'Seguimiento en vivo'}</h2><button type="button" class="secondary" data-exam-refresh>Actualizar</button></div>
+  box.innerHTML = `<div class="exam-monitor-head"><h2>${closedNow || !q?.data.settings?.exam?.enabled ? 'Resumen de la evaluación' : 'Seguimiento en vivo'}</h2><button type="button" class="secondary" data-exam-refresh>Actualizar</button></div>
     <div class="monitor-stats">
       <div><b>${finished.length}</b><span>terminaron</span></div>
       <div><b>${data.running.filter((r) => !r.locked).length}</b><span>contestando</span></div>
@@ -1772,5 +1772,12 @@ document.addEventListener('click', async (e) => {
     await startQuizAttempt(b.dataset.quizStart);
   } catch (error) {
     toast(error.message);
+  }
+});
+
+// «Más acciones» (12.36): se cierra al elegir una opción o al tocar fuera.
+document.addEventListener('click', (e) => {
+  for (const menu of document.querySelectorAll('details.more-actions[open]')) {
+    if (!menu.contains(e.target) || e.target.closest('.more-actions-panel button')) menu.open = false;
   }
 });

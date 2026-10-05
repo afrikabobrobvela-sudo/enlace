@@ -1421,3 +1421,19 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 3px
 .gradebook .sticky-name { min-width: 230px; }
 .gradebook th .muted { font-weight: 400; text-transform: none; letter-spacing: 0; }
 .gradebook thead th { padding-block: 10px; vertical-align: bottom; }
+
+/* Menos ruido para el docente 12.36: «Visible para alumnos» es lo normal y queda discreto; lo que destaca es la
+   excepción (oculto o programado). Las acciones que quitan algo se distinguen por color y separación. */
+.visibility-toggle:not(.is-hidden):not(.is-scheduled) { background: transparent; border-color: transparent; color: var(--ink-faint); font-weight: 500; box-shadow: none; }
+.visibility-toggle:not(.is-hidden):not(.is-scheduled)::before { opacity: 0.6; }
+.visibility-toggle:not(.is-hidden):not(.is-scheduled):hover { background: #f2f6f9; color: var(--ink-soft); }
+.text-btn.danger-text { color: #b42318; margin-left: 12px; }
+.text-btn.danger-text:hover { background: #fdecea; }
+/* «Más acciones» de la evaluación 12.36: lo poco frecuente sale de la fila principal de botones. */
+.more-actions { position: relative; }
+.more-actions > summary { list-style: none; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+.more-actions > summary::-webkit-details-marker { display: none; }
+.more-actions > summary::after { content: '⌄'; font-size: 0.9em; }
+.more-actions-panel { position: absolute; z-index: 20; top: calc(100% + 6px); left: 0; min-width: 220px; display: grid; padding: 6px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface); box-shadow: var(--shadow-md, 0 8px 24px rgb(16 37 54 / 0.12)); }
+.more-actions-panel button { text-align: left; padding: 10px 12px; border: 0; border-radius: 6px; background: transparent; color: var(--ink); font-weight: 500; box-shadow: none; }
+.more-actions-panel button:hover { background: #f2f6f9; }
