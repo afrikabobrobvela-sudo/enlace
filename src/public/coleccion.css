@@ -396,3 +396,29 @@ body.signed-out #crumb { visibility: hidden; }
 .material-entry summary:hover strong { color: var(--tomo); }
 /* Calificación final (12.39): después de los parciales; la raya gruesa la separa de los rubros que siguen (12.40). */
 .gradebook th.final-col, .gradebook td.final-grade { border-right: 2px solid var(--tinta) !important; }
+
+/* ---- Revisión ui-ux-pro-max (12.41) ------------------------------------------------------------------------- */
+/* Texto: nada por debajo de 12 px (contadores, etiquetas de estado y pie de página). */
+.badge-count, .nav-badge, .count-pill, .role-pill, .status-pill, .att-pill, .review-tag, .late-tag, .draft-tag,
+.gb-task-placement, .category-grade-hint, .manual-grade-tag, .gradebook small, footer, footer a, .bell-kind, .dt-week span,
+.section-pill, .quiz-type-tag, .quiz-points-tag, .thread-flag, #roleLabel, .wordmark .brand-text span, .bottom-nav button { font-size: 12px !important; }
+/* Escritorio: ningún objetivo de clic por debajo de 24 px de alto (WCAG 2.2, 2.5.8). */
+.table-link, .assignment-title, .cal-chip, button.back, footer a, .toc-all, .content-tree [data-action="hub"], #main a[target="_blank"] { min-height: 24px; display: inline-flex; align-items: center; }
+footer a { padding-block: 4px; }
+/* Teléfono: objetivos táctiles de 44 px como mínimo (con relleno, sin agrandar el texto). */
+@media (max-width: 720px) {
+  button, summary, select, .table-link, .assignment-title, .text-btn, .wordmark, .course-heading,
+  input:not([type=checkbox]):not([type=radio]):not([type=hidden]), footer a, .cal-chip { min-height: 44px; }
+  .text-btn, .table-link, .assignment-title, footer a { display: inline-flex; align-items: center; }
+  .bell, .profile-square, .gb-open, button.att-mark, .gb-col-menu summary { min-width: 44px; min-height: 44px; }
+  .gb-input, .category-grade-input { min-height: 44px; }
+  select, .course-heading, .visibility-toggle, button.back, .toc-all, .progress-toggle, .content-tree [data-action="hub"], #main a[target="_blank"] { min-height: 44px !important; }
+  /* Material (vista docente): las acciones bajan a su propia fila; antes se encimaban con el título. */
+  .material-entry { flex-wrap: wrap; }
+  .material-entry > details { flex: 1 0 100%; }
+  .material-entry > .material-actions { flex: 1 0 100%; justify-content: flex-start; gap: 4px 12px; padding: 0 16px 12px; }
+  .material-entry > .material-actions .material-progress-count { flex: 1 0 100%; }
+  /* Las casillas del libro y de asistencia siguen juntas, pero con 4 px entre objetivos. */
+  .gb-cell-row { gap: 6px; }
+}
+#main h1[tabindex="-1"]:focus:not(:focus-visible) { outline: none; }
