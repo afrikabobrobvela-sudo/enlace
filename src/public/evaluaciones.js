@@ -220,6 +220,21 @@ function readQuizQuestions() {
   });
 }
 
+/**
+ * Enunciado para el docente (12.36): los datos por alumno ({F}, {m}) se ven como variables, no como llaves sueltas;
+ * las fórmulas LaTeX ($…$) las sigue dibujando KaTeX como en la vista del alumno.
+ */
+function teacherQuestionText(x) {
+  const names = new Set((x.variables || []).map((v) => v.name));
+  return esc(x.text).replace(/\{([A-Za-z_][A-Za-z0-9_]*)\}/g, (all, name) => (names.has(name) ? `<var class="qvar" title="Dato distinto para cada alumno">${name}</var>` : all));
+}
+
+/** La respuesta numérica como fórmula, con los datos por alumno resaltados igual que en el enunciado. */
+function teacherFormula(x) {
+  const names = new Set((x.variables || []).map((v) => v.name));
+  return esc(x.answer).replace(/\b([A-Za-z_][A-Za-z0-9_]*)\b/g, (name) => (names.has(name) ? `<var class="qvar">${name}</var>` : name));
+}
+
 function renderQuizQuestions() {
   $('#quizQuestions').innerHTML = quizDraft.map(quizQuestionHtml).join('');
   renderQuizDraw();
@@ -638,12 +653,12 @@ function renderQuiz() {
     const questions = q.data.questions
       .map((x, i) =>
         isNewType(x.type)
-          ? `<section class="quiz-question"><h3>${i + 1}. ${esc(x.text)}${pointsTag(x)}${poolTag(x)} <span class="quiz-type-tag">${QUESTION_TYPE_NAME[x.type]}</span></h3>${quizImageHtml(x.image, i)}${newQuestionAnswerHtml(x)}${teacherFeedbackHtml(x)}</section>`
+          ? `<section class="quiz-question"><h3>${i + 1}. ${teacherQuestionText(x)}${pointsTag(x)}${poolTag(x)} <span class="quiz-type-tag">${QUESTION_TYPE_NAME[x.type]}</span></h3>${quizImageHtml(x.image, i)}${newQuestionAnswerHtml(x)}${teacherFeedbackHtml(x)}</section>`
           : x.type === 'numeric'
-          ? `<section class="quiz-question"><h3>${i + 1}. ${esc(x.text)}${pointsTag(x)}${poolTag(x)}</h3>${quizImageHtml(x.image, i)}<p>Respuesta: <code>${esc(x.answer)}</code> ${x.unit ? esc(x.unit) : ''} · tolerancia ${esc(x.tolerance)} %</p>${
-              x.variables?.length ? `<p class="muted">Datos por alumno: ${x.variables.map((v) => `${esc(v.name)} entre ${esc(v.min)} y ${esc(v.max)}`).join('; ')}</p>` : ''
+          ? `<section class="quiz-question"><h3>${i + 1}. ${teacherQuestionText(x)}${pointsTag(x)}${poolTag(x)}</h3>${quizImageHtml(x.image, i)}<p>Respuesta: <code class="formula">${teacherFormula(x)}</code> ${x.unit ? esc(x.unit) : ''} · tolerancia ${esc(x.tolerance)} %</p>${
+              x.variables?.length ? `<p class="muted">Datos por alumno: ${x.variables.map((v) => `<var class="qvar">${esc(v.name)}</var> entre ${esc(v.min)} y ${esc(v.max)}`).join('; ')}</p>` : ''
             }${teacherFeedbackHtml(x)}</section>`
-          : `<section class="quiz-question"><h3>${i + 1}. ${esc(x.text)}${pointsTag(x)}${poolTag(x)}</h3>${quizImageHtml(x.image, i)}<ol type="A">${x.options.map((o, j) => `<li>${esc(o)} ${j === x.correct ? '✓' : x.weights?.[j] ? `<span class="muted">(${x.weights[j]} %)</span>` : ''}</li>`).join('')}</ol>${teacherFeedbackHtml(x)}</section>`,
+          : `<section class="quiz-question"><h3>${i + 1}. ${teacherQuestionText(x)}${pointsTag(x)}${poolTag(x)}</h3>${quizImageHtml(x.image, i)}<ol type="A">${x.options.map((o, j) => `<li>${esc(o)} ${j === x.correct ? '✓' : x.weights?.[j] ? `<span class="muted">(${x.weights[j]} %)</span>` : ''}</li>`).join('')}</ol>${teacherFeedbackHtml(x)}</section>`,
       )
       .join('');
     // Resultados por alumno: mejor calificación y número de intentos.

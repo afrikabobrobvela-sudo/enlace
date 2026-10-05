@@ -176,7 +176,7 @@ function newQuestionAnswerHtml(x) {
       return `<p>${x.boxes} ${x.boxes === 1 ? 'respuesta' : 'respuestas'} de: ${x.answers.map((a) => `<code>${esc(a)}</code>`).join(' · ')}</p>`;
     case 'sigfig':
       return `<p>Respuesta: <code>${esc(x.answer)}</code> ${x.unit ? esc(x.unit) : ''} · ${x.figures} cifras significativas · tolerancia ${esc(x.tolerance)} % · descuento ${esc(x.penalty)} %</p>${
-        x.variables?.length ? `<p class="muted">Datos por alumno: ${x.variables.map((v) => `${esc(v.name)} entre ${esc(v.min)} y ${esc(v.max)}`).join('; ')}</p>` : ''
+        x.variables?.length ? `<p class="muted">Datos por alumno: ${x.variables.map((v) => `<var class="qvar">${esc(v.name)}</var> entre ${esc(v.min)} y ${esc(v.max)}`).join('; ')}</p>` : ''
       }`;
   }
   return '';

@@ -1437,3 +1437,14 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 3px
 .more-actions-panel { position: absolute; z-index: 20; top: calc(100% + 6px); left: 0; min-width: 220px; display: grid; padding: 6px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface); box-shadow: var(--shadow-md, 0 8px 24px rgb(16 37 54 / 0.12)); }
 .more-actions-panel button { text-align: left; padding: 10px 12px; border: 0; border-radius: 6px; background: transparent; color: var(--ink); font-weight: 500; box-shadow: none; }
 .more-actions-panel button:hover { background: #f2f6f9; }
+/* Reactivos de ciencias 12.36: los datos por alumno se leen como variables y la respuesta como fórmula. */
+var.qvar { font-family: 'KaTeX_Math', 'Times New Roman', serif; font-style: italic; font-size: 1.08em; padding: 0 4px; margin: 0 1px; border-radius: 4px; background: #e6f4f7; color: #075766; }
+code.formula { font-family: 'KaTeX_Main', 'Times New Roman', serif; font-size: 1.05em; background: #f6f9fc; border: 1px solid var(--line); border-radius: 6px; padding: 2px 8px; }
+.document-mark { display: inline-grid; place-items: center; }
+.document-mark.is-link { background: #e6f4f7; color: #075766; }
+.document-mark.is-file { background: #eef2fb; color: #2b4a8a; }
+.document-mark.is-text { background: #f2f4f6; color: var(--ink-soft); }
+/* Opciones de respuesta 12.36: texto de 16 px y toda la fila marcada al elegirla (más fácil en el celular). */
+.quiz-question label { font-size: 1rem; border-radius: 8px; padding-inline: 8px; }
+.quiz-question label:has(> input:checked) { background: #e6f4f7; box-shadow: inset 0 0 0 1px #b9dfe7; }
+.quiz-question input[type=radio], .quiz-question input[type=checkbox] { width: 20px; height: 20px; flex: none; }
