@@ -380,3 +380,8 @@ article.course .course-card-footer .text-btn { color: var(--tomo) !important; }
 .gradebook td { border-right: 1px solid var(--line); }
 /* Sin sesión no hay «Mis cursos» que mostrar en la barra. */
 body.signed-out #crumb { visibility: hidden; }
+/* Alerta del libro: además del rojo, un subrayado grueso (no depende solo del color). */
+.gradebook .grade-low { text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 3px; }
+/* Títulos de materiales en tinta negra; la tinta del tomo solo al pasar el cursor (listas largas sin ruido). */
+.material-entry summary strong { color: var(--tinta); }
+.material-entry summary:hover strong { color: var(--tomo); }

@@ -1,9 +1,20 @@
-# Enlace · versión 12.36
+# Enlace · versión 12.37
 
 Plataforma académica independiente para docentes y alumnos de cualquier academia (nació en la Academia de Física de la BUAP), con interfaz inspirada en Brightspace.
 No es el código de D2L Brightspace ni una plataforma oficial de la BUAP.
 
 Esta versión se despliega en **tu propia cuenta de Cloudflare** (Workers + D1 + R2, plan gratuito) y ya no depende de ChatGPT Sites.
+
+## Novedades de la versión 12.37 (rediseño visual «Colección»)
+
+Enlace tiene una imagen nueva. Solo cambia la apariencia: funciones, textos y datos son los mismos, y no hay migraciones.
+- **Cada curso es un tomo de una colección**, con su propia tinta de imprenta (cobalto, verdete, granza, ciruela, ocre o musgo; es el color que ya tenía asignado cada curso o el que elegiste en «Editar curso y portada»). Dentro de un curso, la barra, las pestañas y el botón principal toman esa tinta, así se sabe de un vistazo en qué grupo estás.
+- **Mis cursos** es un estante de portadas: el nombre del curso en grande sobre su tinta, con el lomo a la izquierda. Toda la portada abre el curso.
+- **Logotipo nuevo**: tres lomos de colores que forman una E. También cambian el ícono de la pestaña y el de la app instalada en el celular (puede tardar en actualizarse hasta que el teléfono vuelva a cargar Enlace).
+- **Tipografía nueva** (Archivo), servida desde Enlace mismo: títulos condensados y fuertes, cifras alineadas en las tablas. La página pesa menos que antes.
+- Los contadores de avisos van en amarillo, y en el libro de calificaciones solo lo reprobatorio va en rojo.
+
+Antes de publicar, revisa en tu navegador Mis cursos, un curso, el libro de calificaciones y un examen en el celular.
 
 ## Novedades de la versión 12.36 (revisión de diseño con impeccable)
 
