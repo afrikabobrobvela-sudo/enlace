@@ -154,9 +154,9 @@ for (const file of ['reactivos.js', 'zip.js', 'oficina.js', 'd2l.js', 'importar.
 }
 const g = (name) => vm.runInContext(name, ctx);
 const estudiantes = [
-  { id: 'm1', name: 'Federico Aguilar Becerra', matricula: '202612345', email: 'federico.aguilar@alumno.buap.mx', role: 'student' },
-  { id: 'm2', name: 'Juan David Agustini Cruz', matricula: '202600001', email: 'juan.agustini@alumno.buap.mx', role: 'student' },
-  { id: 'm3', name: 'René Álvarez de la Cuadra Farías', matricula: '', email: 'rene@alumno.buap.mx', role: 'student' },
+  { id: 'm1', name: 'Fabián Aguado Beltrán', matricula: '202612345', email: 'fabian.aguado@alumno.buap.mx', role: 'student' },
+  { id: 'm2', name: 'Julio César Agundis Cano', matricula: '202600001', email: 'julio.agundis@alumno.buap.mx', role: 'student' },
+  { id: 'm3', name: 'Raúl Álvarez de la Torre Fuentes', matricula: '', email: 'raul@alumno.buap.mx', role: 'student' },
 ];
 const plano = (x) => JSON.parse(JSON.stringify(x));
 // Pase de lista: la exportación de Enlace y fechas en formato mexicano.
@@ -164,10 +164,10 @@ const asistencia = plano(
   g('parseAttendanceImport')(
     [
       ['Matrícula', 'Alumno', '2026-09-01 07:00', '03/09/2026', '5/9/26', 'Asistencias', 'Porcentaje'],
-      ['202612345', 'Federico Aguilar Becerra', 'P', 'R', 'Justificada', '1', '100'],
-      ['', 'Agustini Cruz, Juan David', 'F', 'p', '', '0', '0'],
+      ['202612345', 'Fabián Aguado Beltrán', 'P', 'R', 'Justificada', '1', '100'],
+      ['', 'Agundis Cano, Julio César', 'F', 'p', '', '0', '0'],
       ['999', 'Alguien Más', 'P', 'P', 'P', '', ''],
-      ['', 'Álvarez de la Cuadra Farías, René', '?', 'n/a', '1', '', ''],
+      ['', 'Álvarez de la Torre Fuentes, Raúl', '?', 'n/a', '1', '', ''],
     ],
     estudiantes,
   ),
@@ -188,8 +188,8 @@ const libro = plano(
   g('parseGradesImport')(
     [
       ['OrgDefinedId', 'Username', 'Last Name', 'First Name', 'Email', 'Reporte practica 0 Puntos Calificación <Numérico Máx. Puntos:10 Peso:5>', 'Examen 1 Puntos Calificación <Numérico Máx. Puntos:40>', 'Calificación final calculada Numerador', 'End-of-Line Indicator'],
-      ['#202612345', '#federico.aguilar', 'Aguilar Becerra', 'Federico', '', '7', '30', '22', '#'],
-      ['', '#juan.agustini', 'Agustini Cruz', 'Juan David', '', '9 / 10, 90 %', '', '38', '#'],
+      ['#202612345', '#fabian.aguado', 'Aguado Beltrán', 'Fabián', '', '7', '30', '22', '#'],
+      ['', '#julio.agundis', 'Agundis Cano', 'Julio César', '', '9 / 10, 90 %', '', '38', '#'],
     ],
     estudiantes,
     [{ id: 't0', data: { title: 'Reporte práctica 0' } }],
@@ -201,7 +201,7 @@ assert.deepEqual(libro.columns.map((x) => [x.title, x.task, x.max, x.cells.lengt
 ]);
 assert.deepEqual(libro.columns[0].cells.map((x) => [x.member.id, x.cell.value, x.cell.max ?? null]), [['m1', 7, null], ['m2', 9, 10]]);
 // Se reconoce por título aunque cambien los acentos.
-const conAcentos = plano(g('parseGradesImport')([['Alumno', 'Reporte práctica 0'], ['Federico Aguilar Becerra', '8']], estudiantes, [{ id: 't0', data: { title: 'Reporte practica 0' } }]));
+const conAcentos = plano(g('parseGradesImport')([['Alumno', 'Reporte práctica 0'], ['Fabián Aguado Beltrán', '8']], estudiantes, [{ id: 't0', data: { title: 'Reporte practica 0' } }]));
 assert.equal(conAcentos.columns[0].task, 't0');
 // La exportación de Enlace: columnas de promedio, final y categorías se ignoran.
 const deEnlace = plano(g('parseGradesImport')([['Matrícula', 'Alumno', 'Promedio parcial', 'Calificación final', 'Tareas (40 %)', 'Tarea 1', 'Tarea 2'], ['202600001', 'x', '8', '8', '8', 'n/a', '9.5']], estudiantes, []));
