@@ -73,6 +73,20 @@ export function submissionRecord(row) {
   };
 }
 
+/** Calificación capturada directamente para un rubro; sustituye su cálculo automático. */
+export function categoryGradeRecord(row) {
+  return {
+    id: row.id,
+    course: row.course,
+    kind: 'category-grade',
+    author: row.author,
+    revision: row.revision,
+    created: row.created,
+    updated: row.updated,
+    data: parseJson(row.data, {}),
+  };
+}
+
 export function attemptRecord(row) {
   const record = {
     id: row.id,
@@ -129,11 +143,14 @@ export async function loadTask(db, id, course) {
 export async function courseGradebook(db, course, { teacher, userId, memberId = null, attemptUser = userId }) {
   // `memberId`: vista de un alumno concreto (puede no tener cuenta); si no, el alumno se busca por su cuenta (`userId`).
   // Para el alumno, su acceso especial (prórroga) viene en la misma consulta (ext_*): no suma consultas.
+  // Cada consulta recibe exactamente los valores que usa: D1 rechaza los de más («Wrong number of parameter bindings»)
+  // y eso tumbaba la carga del curso de todos los alumnos (12.30).
+  const who = memberId ?? userId ?? null;
   const tasks = teacher
     ? await all(db, 'SELECT * FROM aula_tasks WHERE course=? AND deleted_at IS NULL ORDER BY created', course)
     : await all(
         db,
-        `WITH me AS (SELECT id, section FROM aula_members WHERE course=?1 AND (id=?3 OR (?3 IS NULL AND user_id=?2)) LIMIT 1)
+        `WITH me AS (SELECT id, section FROM aula_members WHERE course=?1 AND ${memberId ? 'id=?2' : 'user_id=?2'} LIMIT 1)
          SELECT t.*, e.task AS ext_task, e.start_at AS ext_start, e.due AS ext_due, e.end_at AS ext_end,
                 d.start_at AS sec_start, d.due AS sec_due, d.end_at AS sec_end FROM aula_tasks t
          LEFT JOIN aula_extensions e ON e.task=t.id AND e.member=(SELECT id FROM me)
@@ -142,25 +159,65 @@ export async function courseGradebook(db, course, { teacher, userId, memberId = 
            AND (NOT EXISTS (SELECT 1 FROM me) OR (${sectionSql('t.sections', '(SELECT section FROM me)')} AND ${specialTaskSql('t', '(SELECT id FROM me)')}))
          ORDER BY t.created`,
         course,
-        userId,
-        memberId,
+        who,
       );
   const settings = await one(db, 'SELECT * FROM aula_grade_settings WHERE course=?', course);
   // Las entregas de una actividad en la papelera se conservan, pero no se muestran ni cuentan.
-  const active = 'AND s.task IN (SELECT id FROM aula_tasks WHERE course=s.course AND deleted_at IS NULL)';
   const submissions = teacher
-    ? await all(db, `SELECT s.* FROM aula_submissions s WHERE s.course=? ${active} ORDER BY s.created`, course)
-    : await all(
+    ? await all(
         db,
-        `SELECT s.* FROM aula_submissions s JOIN aula_members m ON m.id=s.member
-         WHERE s.course=?1 AND (m.id=?3 OR (?3 IS NULL AND m.user_id=?2)) ${active} ORDER BY s.created`,
+        `SELECT s.* FROM aula_submissions s
+         JOIN aula_tasks t ON t.id=s.task AND t.course=s.course AND t.deleted_at IS NULL
+         WHERE s.course=? ORDER BY s.created`,
         course,
-        userId,
-        memberId,
-      );
+      )
+    : memberId
+      ? await all(
+          db,
+          `SELECT s.* FROM aula_submissions s
+           JOIN aula_tasks t ON t.id=s.task AND t.course=s.course AND t.deleted_at IS NULL
+           WHERE s.member=?2 AND s.course=?1 ORDER BY s.created`,
+          course,
+          memberId,
+        )
+      : userId
+        ? await all(
+            db,
+            `SELECT s.* FROM aula_submissions s
+             JOIN aula_tasks t ON t.id=s.task AND t.course=s.course AND t.deleted_at IS NULL
+             WHERE s.course=?1 AND s.member=(SELECT id FROM aula_members WHERE course=?1 AND user_id=?2 AND role='student' LIMIT 1)
+             ORDER BY s.created`,
+            course,
+            userId,
+          )
+        : [];
   const attempts = teacher
     ? await all(db, 'SELECT * FROM aula_attempts WHERE course=? ORDER BY created', course)
-    : await all(db, 'SELECT * FROM aula_attempts WHERE course=? AND user_id=? ORDER BY created', course, attemptUser);
+    : attemptUser
+      ? await all(db, 'SELECT * FROM aula_attempts WHERE course=? AND user_id=? ORDER BY created', course, attemptUser)
+      : [];
+  // Capturas manuales de rubros: quien enseña recibe todas; el alumno, solo la propia.
+  // Los JOIN descartan de la respuesta cualquier fila huérfana de una categoría o inscripción eliminada.
+  const categoryGrades = teacher
+    ? await all(
+        db,
+        `SELECT r.* FROM aula_records r
+         JOIN aula_grade_categories c ON c.id=json_extract(r.data,'$.category') AND c.course=r.course
+         JOIN aula_members m ON m.id=json_extract(r.data,'$.member') AND m.course=r.course AND m.role='student'
+         WHERE r.course=? AND r.kind='category-grade' ORDER BY r.created`,
+        course,
+      )
+    : who
+      ? await all(
+          db,
+          `SELECT r.* FROM aula_records r
+           JOIN aula_grade_categories c ON c.id=json_extract(r.data,'$.category') AND c.course=r.course
+           JOIN aula_members m ON m.id=json_extract(r.data,'$.member') AND m.course=r.course AND m.role='student'
+           WHERE r.course=?1 AND r.kind='category-grade' AND ${memberId ? 'm.id=?2' : 'm.user_id=?2'} ORDER BY r.created`,
+          course,
+          who,
+        )
+      : [];
   // Prórrogas: el docente las ve todas; el alumno recibe sus actividades ya con sus fechas extendidas.
   const extensions = teacher ? await all(db, 'SELECT e.* FROM aula_extensions e JOIN aula_tasks t ON t.id=e.task WHERE t.course=?', course) : [];
   const hideDraft = (record) => {
@@ -188,12 +245,19 @@ export async function courseGradebook(db, course, { teacher, userId, memberId = 
       : []),
     ...submissions.map(submissionRecord).map(hideDraft),
     ...attempts.map(attemptRecord),
+    ...categoryGrades.map(categoryGradeRecord),
   ];
   // Al alumno no le llegan ids ni pesos de actividades ocultas (como en la lista de actividades de arriba).
   const weights = weightsRecord(course, settings, teacher ? tasks : tasks.filter((t) => t.visible === 1));
   if (weights) records.push(weights);
   const categories = await all(db, 'SELECT id, name, weight, source, term, distribution, drop_low, drop_high FROM aula_grade_categories WHERE course=? ORDER BY position, name', course);
-  records.push(gradingRecord(course, settings, categories));
+  const grading = gradingRecord(course, settings, categories);
+  if (!teacher) {
+    // Al alumno solo le llega el orden de las actividades que recibe.
+    const own = new Set(records.filter((r) => r.kind === 'task').map((r) => r.id));
+    grading.data.columnOrder = grading.data.columnOrder.filter((id) => own.has(id));
+  }
+  records.push(grading);
   if (teacher) {
     // Rúbricas asignadas a actividades de este curso (aunque su autor haya dejado de compartirlas).
     const rubrics = await all(db, 'SELECT * FROM aula_rubrics WHERE id IN (SELECT rubric FROM aula_tasks WHERE course=? AND rubric IS NOT NULL AND deleted_at IS NULL)', course);
@@ -233,11 +297,15 @@ export function gradingRecord(course, settings, categories) {
       })),
       // Parciales (12.26): [{ id, name, weight }]; vacío = sin parciales.
       terms: parseTerms(settings?.terms),
+      // Orden de las columnas del libro (12.30): ids de actividades; las que no aparecen van al final, por fecha.
+      columnOrder: parseTerms(settings?.column_order),
       final: {
-        decimals: settings?.final_decimals ?? 1,
-        rounding: settings?.final_rounding ?? 'half_up',
+        // La final usa una sola regla institucional; estos valores normalizados mantienen
+        // compatible el formato que ya consumen la tabla y la exportación.
+        decimals: 0,
+        rounding: 'down',
         passing: settings?.passing_grade ?? 6,
-        failingAs: settings?.failing_as ?? null,
+        failingAs: null,
         missingAsZero: settings?.missing_as_zero === 1,
       },
     },

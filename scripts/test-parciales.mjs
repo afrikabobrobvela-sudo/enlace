@@ -182,7 +182,7 @@ run(`
       { id: 't2', name: 'Tareas', weight: 40, source: 'tasks', term: 'p2' },
       { id: 'lab', name: 'Laboratorio', weight: 20, source: 'tasks', term: '' },
     ],
-    final: { decimals: 1, rounding: 'half_up', passing: 6, failingAs: null, missingAsZero: false },
+    final: { decimals: 0, rounding: 'down', passing: 6, failingAs: null, missingAsZero: false },
   };
   var tasks = [T('a', 't1', 1), T('b', 't1', 5), T('c', 't1', 1), T('d', 't2', 1), T('e', 't2', 3), T('l', 'lab')];
   var grades = new Map([['a', 4], ['b', 8], ['c', 10], ['d', 10], ['e', 6], ['l', 9]]);
@@ -192,9 +192,9 @@ let r = run(`computeGrade({ tasks, grades, settings, quizzes, quizGrades: new Ma
 // Tareas P1: sin la más baja (4) y todas iguales → (8 + 10) / 2 = 9. Exámenes P1 = 7 (la evaluación).
 assert(close(r.categories[1].value, 9), 'Tareas del parcial 1: se descarta la más baja y pesan igual');
 assert(close(r.terms[0].value, 7 * 0.6 + 9 * 0.4), 'Parcial 1 = 7×60 % + 9×40 %');
-// Parcial 2: sin exámenes calificados, solo cuentan las tareas por valor: (10×1 + 6×3) / 4 = 7.
-assert(close(r.terms[1].value, 7), 'Parcial 2: lo no calificado no cuenta y se normaliza');
-assert(close(r.value, ((7 * 0.6 + 9 * 0.4) * 40 + 7 * 40 + 9 * 20) / 100), 'Final = parciales y Laboratorio con sus pesos');
+// Parcial 2: las tareas valen 40 %; Exámenes vacío conserva su 60 % y aporta 0.
+assert(close(r.terms[1].value, 2.8), 'Parcial 2: Tareas 7×40 % = 2.8; el rubro vacío no redistribuye su peso');
+assert(close(r.value, ((7 * 0.6 + 9 * 0.4) * 40 + 2.8 * 40 + 9 * 20) / 100), 'Final = parciales y Laboratorio con sus pesos completos');
 // Sin nada calificado en el parcial 2, la final se normaliza entre el parcial 1 y Laboratorio.
 r = run(`computeGrade({ tasks: tasks.filter((t) => !['d', 'e'].includes(t.id)), grades, settings, quizzes, quizGrades: new Map([['q', 7]]) })`);
 assert(r.terms[1].value === null && close(r.value, ((7 * 0.6 + 9 * 0.4) * 40 + 9 * 20) / 60));
@@ -206,6 +206,34 @@ assert.equal(run(`categoryLabel(settings.categories[4], settings)`), 'Laboratori
 // Sin parciales se calcula como antes: un solo nivel de categorías.
 r = run(`computeGrade({ tasks: [T('l', 'lab'), T('d', 't2')], grades, settings: { ...settings, terms: [], categories: [{ id: 'lab', name: 'Lab', weight: 50, source: 'tasks' }, { id: 't2', name: 'Tareas', weight: 50, source: 'tasks' }] } })`);
 assert(close(r.value, 9.5) && r.terms.length === 0);
+// Caso real: Exámenes (40 %) vacío, Tareas 6.29 (40 %) y otro rubro 9.5 (20 %).
+// El parcial es 4.416, no se reescala el 60 % capturado a 100 %. Con el segundo parcial vacío,
+// el promedio parcial sigue en 4.416, pero la final 50/50 conserva ambos parciales y queda en 2.208.
+run(`
+  var incomplete = {
+    scheme: 'categories',
+    terms: [{ id: 'p1', name: 'Parcial 1', weight: 50 }, { id: 'p2', name: 'Parcial 2', weight: 50 }],
+    categories: [
+      { id: 'exam', name: 'Exámenes', weight: 40, source: 'tasks', term: 'p1' },
+      { id: 'tasks', name: 'Tareas', weight: 40, source: 'tasks', term: 'p1' },
+      { id: 'other', name: 'Otro rubro', weight: 20, source: 'tasks', term: 'p1' },
+      { id: 'p2all', name: 'Parcial 2', weight: 100, source: 'tasks', term: 'p2' },
+    ],
+    final: { decimals: 0, rounding: 'down', passing: 6, failingAs: null, missingAsZero: false },
+  };
+  var incompleteTasks = [T('task-grade', 'tasks'), T('other-grade', 'other')];
+  var incompleteGrades = new Map([['task-grade', 6.29], ['other-grade', 9.5]]);
+`);
+const incompletePartial = run('computeGrade({ tasks: incompleteTasks, grades: incompleteGrades, settings: incomplete })');
+const incompleteFinal = run('computeGrade({ tasks: incompleteTasks, grades: incompleteGrades, settings: incomplete, final: true })');
+assert(close(incompletePartial.terms[0].value, 4.416) && close(incompletePartial.value, 4.416), '6.29×40 % + 9.5×20 % = 4.416');
+assert(incompletePartial.terms[1].value === null && close(incompleteFinal.value, 2.208), 'La final conserva los dos parciales de 50 %');
+assert.equal(run(`courseFinalGrade(${JSON.stringify(incompleteFinal)}, incomplete.final).value`), 2, 'Final: promedio de Parcial 1 asentado en 4 y Parcial 2 vacío en 0');
+assert.equal(
+  run("courseFinalGrade({ value: 7.9, terms: [{ id: 'p1', weight: 50, value: 5.9 }, { id: 'p2', weight: 50, value: 9.9 }], categories: [{ term: 'p1' }, { term: 'p2' }] }, incomplete.final).value"),
+  7,
+  'La final promedia las calificaciones asentadas de los parciales: (5 + 10) / 2 = 7.5 → 7',
+);
 // «Dividir por parciales»: las categorías se copian a cada parcial y la asistencia queda para toda la materia.
 run(`
   var draft = { terms: [], categories: [

@@ -2,8 +2,13 @@
 // actividades del curso. Cada columna es una actividad existente o una nueva (se crea); las calificaciones ya vienen
 // en escala de 0 a 10 (el navegador las convierte) y se guardan como calificación capturada por el docente, con su
 // historial, en un solo batch.
+// Por sección (12.30): con `section`, solo se aceptan alumnos de esa sección (nunca se tocan las calificaciones de
+// otra), las actividades nuevas son solo para esa sección y una actividad existente dirigida a otras secciones
+// también queda para esta (si no, sus alumnos no verían la calificación importada).
 import { access, requireTeacher } from './access.js';
 import { all, fail, json, nowIso, one, readJson, text } from './http.js';
+import { taskSections } from './published.js';
+import { validSection } from './sections.js';
 
 const MAX_ACTIVITIES = 60;
 const MAX_GRADES = 15000;
@@ -17,23 +22,34 @@ export const importRoutes = {
     if (activities.length > MAX_ACTIVITIES) fail(`Importa como máximo ${MAX_ACTIVITIES} actividades a la vez.`);
     const publish = body.publish === false ? 0 : 1;
     const overwrite = body.overwrite === false ? 0 : 1;
-    // Actividades existentes del curso (no eliminadas).
+    const section = await validSection(db, body.course, body.section); // '' = todo el curso
+    // Actividades existentes del curso (no eliminadas), con sus secciones.
     const existingIds = activities.map((a) => a?.task).filter(Boolean).map(String);
-    const existing = new Set(
+    const existing = new Map(
       existingIds.length
-        ? (await all(db, 'SELECT id FROM aula_tasks WHERE course=? AND deleted_at IS NULL AND forum IS NULL AND id IN (SELECT value FROM json_each(?))', body.course, JSON.stringify(existingIds))).map(
-            (r) => r.id,
-          )
+        ? (
+            await all(
+              db,
+              'SELECT id, sections FROM aula_tasks WHERE course=? AND deleted_at IS NULL AND forum IS NULL AND id IN (SELECT value FROM json_each(?))',
+              body.course,
+              JSON.stringify(existingIds),
+            )
+          ).map((r) => [r.id, taskSections(r.sections)])
         : [],
     );
     const newTasks = [];
+    const widened = [];
     const grades = new Map();
     for (const a of activities) {
       let task = a?.task ? String(a.task) : '';
       if (task && !existing.has(task)) fail('Una de las actividades ya no existe o no admite calificaciones importadas. Recarga la página.', 404);
       if (!task) {
         task = crypto.randomUUID();
-        newTasks.push({ id: task, title: text(a?.title, 200) });
+        newTasks.push({ id: task, title: text(a?.title, 200), sections: section ? JSON.stringify([section]) : '' });
+      } else {
+        const sections = existing.get(task);
+        if (section && sections.length && !sections.includes(section) && !widened.some((w) => w.id === task))
+          widened.push({ id: task, sections: JSON.stringify([...sections, section].sort()) });
       }
       for (const g of Array.isArray(a?.grades) ? a.grades : []) {
         const grade = Number(g?.grade);
@@ -47,11 +63,13 @@ export const importRoutes = {
     if (members.length) {
       const valid = await one(
         db,
-        "SELECT count(*) AS n FROM aula_members WHERE course=? AND role='student' AND id IN (SELECT value FROM json_each(?))",
+        "SELECT count(*) AS n FROM aula_members WHERE course=?1 AND role='student' AND id IN (SELECT value FROM json_each(?2)) AND (?3='' OR section=?3)",
         body.course,
         JSON.stringify(members),
+        section,
       );
-      if (valid.n !== members.length) fail('Hay alumnos que no pertenecen a este curso. Recarga la página.');
+      if (valid.n !== members.length)
+        fail(section ? 'Hay alumnos que no son de la sección elegida. Recarga la página.' : 'Hay alumnos que no pertenecen a este curso. Recarga la página.');
     }
     const now = nowIso();
     const list = JSON.stringify(rows);
@@ -61,10 +79,23 @@ export const importRoutes = {
       statements.push(
         db
           .prepare(
-            `INSERT INTO aula_tasks (id,course,author,title,body,visible,submission_mode,max_files,extensions,file_ids,allow_resubmit,due,start_at,end_at,revision,created,updated)
-             SELECT json_extract(value,'$.id'), ?1, ?2, json_extract(value,'$.title'), '', 1, 'both', 5, '[]', '[]', 1, '', '', '', 1, ?3, ?3 FROM json_each(?4)`,
+            `INSERT INTO aula_tasks (id,course,author,title,body,visible,submission_mode,max_files,extensions,file_ids,allow_resubmit,due,start_at,end_at,sections,revision,created,updated)
+             SELECT json_extract(value,'$.id'), ?1, ?2, json_extract(value,'$.title'), '', 1, 'both', 5, '[]', '[]', 1, '', '', '',
+                    json_extract(value,'$.sections'), 1, ?3, ?3 FROM json_each(?4)`,
           )
           .bind(body.course, user.id, now, JSON.stringify(newTasks)),
+      );
+    }
+    if (widened.length) {
+      // Sube la revisión: quien tenga la actividad abierta en el editor recibirá «recarga» en vez de quitar la sección.
+      statements.push(
+        db
+          .prepare(
+            `UPDATE aula_tasks SET sections=(SELECT json_extract(value,'$.sections') FROM json_each(?1) WHERE json_extract(value,'$.id')=aula_tasks.id),
+               revision=revision+1, updated=?2
+             WHERE course=?3 AND id IN (SELECT json_extract(value,'$.id') FROM json_each(?1))`,
+          )
+          .bind(JSON.stringify(widened), now, body.course),
       );
     }
     if (rows.length) {
@@ -94,6 +125,6 @@ export const importRoutes = {
       );
     }
     await db.batch(statements);
-    return json({ created: newTasks.length, grades: rows.length });
+    return json({ created: newTasks.length, grades: rows.length, widened: widened.length });
   },
 };

@@ -162,7 +162,8 @@ function attendancePreviewHtml(x) {
 
 // ---- Calificaciones de actividades ------------------------------------------------------------------------------
 
-const SUMMARY_HEADER = /promedio|calificaci[oó]n final|final calculada|total|porcentaje|asistencia|secci[oó]n|end-of-line|indicador|ajustad|^grupo$|^equipo$/i;
+// «Sección» solo como columna completa: «Tarea 1 (Sección 5BV)» es una actividad (12.30).
+const SUMMARY_HEADER = /promedio|calificaci[oó]n final|final calculada|total|porcentaje|asistencia|^secci[oó]n$|end-of-line|indicador|ajustad|^grupo$|^equipo$/i;
 
 /** Título y puntos máximos de un encabezado (entiende el formato de Brightspace: «Tarea 1 Puntos Calificación <Numérico Máx. Puntos:10>»). */
 function gradeHeader(value) {
@@ -188,36 +189,80 @@ function gradeCell(value) {
   return /^-?[\d.]+$/.test(text) ? { value: Number(text) } : undefined;
 }
 
-/** Interpreta un libro de calificaciones: alumnos en filas y una columna por actividad. */
-function parseGradesImport(rows, students, tasks) {
+/**
+ * Título de una actividad para compararlo con el de una columna: sin acentos ni mayúsculas y sin la sección o el grupo
+ * al final («Tarea 1 (Sección 5AV)», «Tarea 1 - Grupo 2» o el nombre de una sección del curso), para que el archivo de
+ * otra sección vaya a las mismas actividades en vez de crear otras.
+ */
+function taskTitleKey(title, sectionNames = []) {
+  let key = importNormal(title).replace(/\s+(seccion|sec|grupo|gpo|grp)\.?\s*[a-z0-9]{1,8}$/, '');
+  for (const name of sectionNames) {
+    const n = importNormal(name);
+    if (n && key.endsWith(' ' + n)) key = key.slice(0, -n.length - 1);
+  }
+  return key.trim();
+}
+
+/**
+ * Interpreta un libro de calificaciones: alumnos en filas y una columna por actividad. Con `section`, solo cuentan los
+ * alumnos de esa sección; los de otras se informan en `outside` y sus calificaciones no se tocan.
+ */
+function parseGradesImport(rows, students, tasks, { section = '', sectionNames = [] } = {}) {
   const { headerRow, header, cols } = studentColumns(rows);
   const studentCols = new Set(Object.values(cols).filter((i) => i >= 0));
   const find = studentFinder(students);
   const body = rows.slice(headerRow + 1).filter((r) => r.some((c) => String(c ?? '').trim()));
   const matches = body.map((r) => find(r, cols));
-  const byTitle = new Map(tasks.map((t) => [importNormal(t.data.title), t]));
+  const inSection = (m) => !section || m.section === section;
+  // Si dos actividades se llaman igual, va a la que es para esa sección.
+  const applies = (t) => !section || !t.data.sections?.length || t.data.sections.includes(section);
+  const byTitle = new Map();
+  for (const t of tasks) {
+    const key = taskTitleKey(t.data.title, sectionNames);
+    if (!byTitle.has(key) || (!applies(byTitle.get(key)) && applies(t))) byTitle.set(key, t);
+  }
   const columns = [];
   header.forEach((h, i) => {
     if (studentCols.has(i) || !String(h ?? '').trim() || SUMMARY_HEADER.test(h) || /\(\s*[\d.]+\s*%\s*\)\s*$/.test(h) || headerDate(h)) return;
     const { title, max } = gradeHeader(h);
     if (!title) return;
-    const cells = body.map((r, k) => ({ member: matches[k], cell: gradeCell(r[i]) })).filter((x) => x.member && x.cell);
+    const cells = body.map((r, k) => ({ member: matches[k], cell: gradeCell(r[i]) })).filter((x) => x.member && x.cell && inSection(x.member));
     if (!cells.length) return;
     const top = Math.max(...cells.map((x) => x.cell.value));
-    const task = byTitle.get(importNormal(title));
+    const task = byTitle.get(taskTitleKey(title, sectionNames));
     columns.push({ index: i, title, task: task?.id || '', max: max ?? (top > 10 ? (top <= 20 ? 20 : 100) : 10), cells, include: true });
   });
-  if (!columns.length) throw new Error('No se encontraron columnas con calificaciones. Revisa que la primera fila tenga el nombre de cada actividad.');
-  return { columns, matched: matches.filter(Boolean).length, unmatched: body.filter((_, k) => !matches[k]).map((r) => rowLabel(r, cols)) };
+  if (!columns.length)
+    throw new Error(
+      section && matches.some(Boolean)
+        ? 'Ningún alumno del archivo es de la sección elegida. Revisa la sección o el archivo.'
+        : 'No se encontraron columnas con calificaciones. Revisa que la primera fila tenga el nombre de cada actividad.',
+    );
+  return {
+    columns,
+    matched: matches.filter((m) => m && inSection(m)).length,
+    unmatched: body.filter((_, k) => !matches[k]).map((r) => rowLabel(r, cols)),
+    outside: body.filter((_, k) => matches[k] && !inSection(matches[k])).map((r) => rowLabel(r, cols)),
+  };
 }
 
 let gradesImport = null;
+let gradesImportRows = null; // filas del archivo, para volver a interpretarlo si cambia la sección
 
 function importGradesModal() {
-  gradesImport = null;
+  gradesImport = gradesImportRows = null;
+  const sections = courseSections();
   modal(
     'Importar calificaciones',
     `<p>Elige un archivo de Excel (.xlsx) o CSV con <b>un alumno por fila</b> (matrícula, correo o nombre) y <b>una columna por actividad</b>. Sirve el que exporta Brightspace («Exportar calificaciones») o el de Enlace. Las columnas de promedios y calificación final se ignoran.</p>
+     ${
+       sections.length
+         ? `<label>Sección de este archivo<select name="section" data-import-section><option value="">Todo el curso</option>${sections
+             .map((s) => `<option value="${esc(s.id)}" ${s.id === selectedSection() ? 'selected' : ''}>${esc(s.name)}</option>`)
+             .join('')}</select></label>
+           <p class="muted">Con una sección, solo se tocan las calificaciones de sus alumnos: las de las demás secciones se quedan como están. Las columnas van a las actividades que ya existen con ese nombre, y las actividades nuevas serán solo para esa sección.</p>`
+         : ''
+     }
      <label class="secondary file-button">Elegir archivo<input type="file" accept=".xlsx,.csv,.txt" data-import-grades hidden></label>
      <div data-import-preview><p class="muted">Todavía no eliges un archivo.</p></div>
      <label class="check-label"><input type="checkbox" name="publish" checked> Publicar las calificaciones (los alumnos las ven)</label>
@@ -239,26 +284,93 @@ function importGradesModal() {
           };
         });
       if (!activities.length) throw new Error('Marca al menos una actividad para importar.');
-      const r = await request('/api/grades/import', { course: current.course.id, publish: f.get('publish') === 'on', overwrite: f.get('overwrite') === 'on', activities });
-      return `Listo: ${r.grades} calificaciones importadas${r.created ? ` y ${r.created} ${r.created === 1 ? 'actividad nueva' : 'actividades nuevas'}` : ''}.`;
+      const section = f.get('section') || '';
+      const r = await request('/api/grades/import', { course: current.course.id, section, publish: f.get('publish') === 'on', overwrite: f.get('overwrite') === 'on', activities });
+      return `Listo: ${r.grades} calificaciones importadas${r.created ? ` y ${r.created} ${r.created === 1 ? 'actividad nueva' : 'actividades nuevas'}` : ''}${
+        r.widened ? `; ${r.widened === 1 ? 'una actividad ahora también es' : `${r.widened} actividades ahora también son`} para ${sectionName(section)}` : ''
+      }.`;
     },
     'Importar',
   );
 }
 
-function gradesPreviewHtml(x) {
-  const tasks = records('task').filter((t) => !t.data.forum);
-  return `<p class="real-status"><b>${x.matched}</b> ${x.matched === 1 ? 'alumno reconocido' : 'alumnos reconocidos'} y <b>${x.columns.length}</b> ${x.columns.length === 1 ? 'columna' : 'columnas'} con calificaciones. Revisa a qué actividad va cada una y sobre cuántos puntos está (se convierte a la escala de 0 a 10).</p>
-    ${x.unmatched.length ? `<p class="warning-note">No se encontraron en el curso (se omiten): ${x.unmatched.slice(0, 8).map(esc).join('; ')}${x.unmatched.length > 8 ? ` y ${x.unmatched.length - 8} más` : ''}.</p>` : ''}
+/** Lo que pasará con una columna según la actividad elegida en «Va a» (se actualiza al cambiarla). */
+function gradeColumnNote(col, taskId, section) {
+  const sectionLabel = section ? sectionName(section) : '';
+  if (!taskId) {
+    const names = courseSections().map((s) => s.name);
+    const key = taskTitleKey(col.title, names);
+    const similar = records('task').find((t) => {
+      if (t.data.forum) return false;
+      const other = taskTitleKey(t.data.title, names);
+      return other && key && (other.startsWith(key) || key.startsWith(other));
+    });
+    return `<span class="warning-note">Se creará una actividad nueva${sectionLabel ? ` solo para ${esc(sectionLabel)}` : ''}.${
+      similar ? ` ¿Es «${esc(similar.data.title)}»? Elígela en «Va a» para no duplicarla.` : ''
+    }</span>`;
+  }
+  const task = find(taskId);
+  if (!task) return '';
+  const graded = col.cells.filter((x) => {
+    const g = gradeOf(x.member.id, taskId)?.data.grade;
+    return g !== null && g !== undefined;
+  }).length;
+  const notes = [];
+  if (graded) notes.push(`${graded} de estos alumnos ya ${graded === 1 ? 'tiene' : 'tienen'} calificación en esta actividad.`);
+  if (section && task.data.sections?.length && !task.data.sections.includes(section)) notes.push(`La actividad también quedará para ${esc(sectionLabel)}.`);
+  else if (!section) {
+    const outside = col.cells.filter((x) => !itemApplies(task, x.member)).length;
+    if (outside) notes.push(`${outside} de estos alumnos no ${outside === 1 ? 'es' : 'son'} de las secciones de esta actividad: no verán la calificación.`);
+  }
+  return notes.length ? `<span class="muted">${notes.join(' ')}</span>` : '';
+}
+
+function gradesPreviewHtml(x, section = '') {
+  const tasks = orderedTasks(records('task').filter((t) => !t.data.forum));
+  const list = (items) => `${items.slice(0, 8).map(esc).join('; ')}${items.length > 8 ? ` y ${items.length - 8} más` : ''}`;
+  return `<p class="real-status"><b>${x.matched}</b> ${x.matched === 1 ? 'alumno reconocido' : 'alumnos reconocidos'}${section ? ` de ${esc(sectionName(section))}` : ''} y <b>${x.columns.length}</b> ${x.columns.length === 1 ? 'columna' : 'columnas'} con calificaciones. Revisa a qué actividad va cada una y sobre cuántos puntos está (se convierte a la escala de 0 a 10).</p>
+    ${x.outside?.length ? `<p class="warning-note">Son de otra sección (se omiten y sus calificaciones no se tocan): ${list(x.outside)}.</p>` : ''}
+    ${x.unmatched.length ? `<p class="warning-note">No se encontraron en el curso (se omiten): ${list(x.unmatched)}.</p>` : ''}
     <div class="grade-import-list">${x.columns
       .map(
         (c, i) => `<div class="grade-import-row" data-grade-col="${i}"><label class="check-label"><input type="checkbox" data-col-include checked> <b>${esc(c.title)}</b> <span class="muted">· ${c.cells.length} calificaciones</span></label>
         <div class="grade-import-fields"><label>Va a<select data-col-task><option value="">Actividad nueva</option>${tasks.map((t) => `<option value="${esc(t.id)}" ${t.id === c.task ? 'selected' : ''}>${esc(t.data.title)}</option>`).join('')}</select></label>
         <label>Nombre (si es nueva)<input data-col-title value="${esc(c.title)}" maxlength="200"></label>
-        <label>Sobre<input data-col-max type="number" min="0.1" step="0.1" value="${c.max}"> puntos</label></div></div>`,
+        <label>Sobre<input data-col-max type="number" min="0.1" step="0.1" value="${c.max}"> puntos</label></div>
+        <p class="grade-import-note" data-col-note>${gradeColumnNote(c, c.task, section)}</p></div>`,
       )
       .join('')}</div>`;
 }
+
+/** Interpreta (o vuelve a interpretar) el archivo de calificaciones con la sección elegida y muestra la vista previa. */
+function showGradesImport(box) {
+  const section = document.querySelector('#modal [data-import-section]')?.value || '';
+  const students = current.members.filter((m) => m.role === 'student');
+  try {
+    gradesImport = parseGradesImport(gradesImportRows, students, records('task').filter((t) => !t.data.forum), {
+      section,
+      sectionNames: courseSections().map((s) => s.name),
+    });
+    box.innerHTML = gradesPreviewHtml(gradesImport, section);
+  } catch (error) {
+    gradesImport = null;
+    box.innerHTML = `<p class="form-error error">${esc(error.message || 'No se pudo leer el archivo.')}</p>`;
+  }
+}
+
+document.addEventListener('change', (e) => {
+  if (e.target.matches?.('[data-import-section]') && gradesImportRows) {
+    const box = document.querySelector('#modal [data-import-preview]');
+    if (box) showGradesImport(box);
+    return;
+  }
+  const choice = e.target.closest?.('[data-col-task]');
+  const row = choice?.closest('[data-grade-col]');
+  if (!row || !gradesImport) return;
+  const col = gradesImport.columns[Number(row.dataset.gradeCol)];
+  const note = row.querySelector('[data-col-note]');
+  if (col && note) note.innerHTML = gradeColumnNote(col, choice.value, document.querySelector('#modal [data-import-section]')?.value || '');
+});
 
 document.addEventListener('change', async (e) => {
   const attendanceFile = e.target.matches('[data-import-attendance]');
@@ -276,11 +388,11 @@ document.addEventListener('change', async (e) => {
       attendanceImport = parseAttendanceImport(rows, students);
       box.innerHTML = attendancePreviewHtml(attendanceImport);
     } else {
-      gradesImport = parseGradesImport(rows, students, records('task').filter((t) => !t.data.forum));
-      box.innerHTML = gradesPreviewHtml(gradesImport);
+      gradesImportRows = rows;
+      showGradesImport(box);
     }
   } catch (error) {
-    attendanceImport = gradesImport = null;
+    attendanceImport = gradesImport = gradesImportRows = null;
     box.innerHTML = `<p class="form-error error">${esc(error.message || 'No se pudo leer el archivo.')}</p>`;
   }
 });

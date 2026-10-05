@@ -1,6 +1,6 @@
 {
   "name": "enlace",
-  "version": "12.37.0",
+  "version": "12.38.0",
   "private": true,
   "type": "module",
   "engines": {
@@ -10,6 +10,7 @@
     "configurar": "node scripts/configurar.mjs",
     "correo": "node scripts/configurar.mjs --correo",
     "build": "node scripts/build.mjs",
+    "medir": "node scripts/build.mjs && node scripts/medir-consultas.mjs",
     "dev": "node scripts/build.mjs && wrangler dev",
     "deploy": "node scripts/revisar-config.mjs && node scripts/build.mjs && wrangler deploy",
     "deploy:pruebas": "node scripts/revisar-config.mjs --pruebas && node scripts/build.mjs && wrangler deploy --env pruebas",
@@ -20,7 +21,7 @@
     "respaldo": "node scripts/respaldo.mjs",
     "respaldo:pruebas": "node scripts/respaldo.mjs --pruebas",
     "restaurar": "node scripts/restaurar.mjs",
-    "test": "node scripts/build.mjs && node scripts/test-api.mjs && node scripts/test-auth.mjs && node scripts/test-migration.mjs && node scripts/test-fase1.mjs && node scripts/test-fase2.mjs && node scripts/test-fase2b.mjs && node scripts/test-papelera.mjs && node scripts/test-contenido.mjs && node scripts/test-registro.mjs && node scripts/test-periodos.mjs && node scripts/test-codocentes.mjs && node scripts/test-evaluaciones.mjs && node scripts/test-evaluaciones-mejoras.mjs && node scripts/test-pendientes.mjs && node scripts/test-reportes.mjs && node scripts/test-asistencia-codigo.mjs && node scripts/test-lista-calificaciones.mjs && node scripts/test-examen.mjs && node scripts/test-bloqueo-examen.mjs && node scripts/test-examen-estricto.mjs && node scripts/test-banco.mjs && node scripts/test-secciones.mjs && node scripts/test-correo.mjs && node scripts/test-accesos.mjs && node scripts/test-reactivos.mjs && node scripts/test-acceso-especial.mjs && node scripts/test-foros.mjs && node scripts/test-condiciones.mjs && node scripts/test-foto.mjs && node scripts/test-curso-portada.mjs && node scripts/test-parciales.mjs && node scripts/test-d2l.mjs && node scripts/test-duplicar.mjs && node scripts/test-calificar-bloque.mjs && node scripts/test-seguridad.mjs && node scripts/test-importar-imagenes.mjs && node scripts/test-curso-ejemplo.mjs && node scripts/test-configurar.mjs && node scripts/test-respaldo-archivos.mjs && node scripts/test-restaurar.mjs && node scripts/test-usuarios.mjs && node scripts/test-calendario.mjs && node scripts/test-programacion.mjs && node scripts/test-qr.mjs && node scripts/test-auth-ui.mjs && node scripts/test-admin-ui.mjs && node scripts/test-teacher-files.mjs && node scripts/test-workspace-ui.mjs && node scripts/test-fase1-ui.mjs && node scripts/test-fase2-ui.mjs && node scripts/test-fase2b-ui.mjs && node scripts/test-formato-ui.mjs && node scripts/test-movil-ui.mjs"
+    "test": "node scripts/build.mjs && node scripts/test-api.mjs && node scripts/test-auth.mjs && node scripts/test-migration.mjs && node scripts/test-fase1.mjs && node scripts/test-fase2.mjs && node scripts/test-fase2b.mjs && node scripts/test-papelera.mjs && node scripts/test-contenido.mjs && node scripts/test-registro.mjs && node scripts/test-periodos.mjs && node scripts/test-codocentes.mjs && node scripts/test-evaluaciones.mjs && node scripts/test-evaluaciones-mejoras.mjs && node scripts/test-pendientes.mjs && node scripts/test-reportes.mjs && node scripts/test-asistencia-codigo.mjs && node scripts/test-lista-calificaciones.mjs && node scripts/test-libro.mjs && node scripts/medir-consultas.mjs --limite --rapido && node scripts/test-examen.mjs && node scripts/test-bloqueo-examen.mjs && node scripts/test-examen-estricto.mjs && node scripts/test-banco.mjs && node scripts/test-secciones.mjs && node scripts/test-correo.mjs && node scripts/test-accesos.mjs && node scripts/test-reactivos.mjs && node scripts/test-acceso-especial.mjs && node scripts/test-foros.mjs && node scripts/test-condiciones.mjs && node scripts/test-foto.mjs && node scripts/test-curso-portada.mjs && node scripts/test-parciales.mjs && node scripts/test-d2l.mjs && node scripts/test-duplicar.mjs && node scripts/test-calificar-bloque.mjs && node scripts/test-seguridad.mjs && node scripts/test-importar-imagenes.mjs && node scripts/test-curso-ejemplo.mjs && node scripts/test-configurar.mjs && node scripts/test-respaldo-archivos.mjs && node scripts/test-restaurar.mjs && node scripts/test-usuarios.mjs && node scripts/test-calendario.mjs && node scripts/test-programacion.mjs && node scripts/test-qr.mjs && node scripts/test-auth-ui.mjs && node scripts/test-admin-ui.mjs && node scripts/test-teacher-files.mjs && node scripts/test-workspace-ui.mjs && node scripts/test-fase1-ui.mjs && node scripts/test-fase2-ui.mjs && node scripts/test-fase2b-ui.mjs && node scripts/test-formato-ui.mjs && node scripts/test-movil-ui.mjs"
   },
   "devDependencies": {
     "drizzle-kit": "0.31.10",

@@ -22,10 +22,13 @@ function workspaceNav() {
   const bar = $('#previewBar');
   if (bar) {
     const archived = c && c.archived_at && !current.preview;
-    bar.hidden = !current?.preview && !archived;
+    const hiddenCourse = c && c.student_visible === 0 && !current.preview && !archived;
+    bar.hidden = !current?.preview && !archived && !hiddenCourse;
     bar.classList.toggle('is-archived', Boolean(archived));
     bar.innerHTML = archived
       ? `<span><strong>Curso archivado${c.period ? ' · ' + esc(c.period) : ''}.</strong> Solo lectura: se puede consultar y descargar, pero no hacer entregas ni cambios.</span>${current.canDelete ? '<button type="button" class="secondary" data-action="archive-course">Desarchivar</button>' : ''}`
+      : hiddenCourse
+        ? `<span><strong>Curso oculto para los alumnos.</strong> No aparece en sus cursos y no pueden abrirlo; todos los datos se conservan.</span><button type="button" class="secondary" data-action="toggle-course-visible" data-id="${esc(c.id)}">Mostrar a los alumnos</button>`
       : current?.viewing ? `<span><strong>Vista de ${esc(current.viewing.name)}.</strong> Ves exactamente lo que ve este alumno: sus entregas, calificaciones publicadas, intentos y asistencia. Nada se guarda en esta vista y la consulta queda registrada.</span><button type="button" class="secondary" data-action="toggle-preview">Volver a vista de docente</button>`
       : current?.preview ? '<span><strong>Vista de alumno.</strong> Así ven este curso tus alumnos: solo lo visible, sin respuestas correctas ni datos de otros alumnos. Nada se guarda en esta vista.</span><button type="button" class="secondary" data-action="toggle-preview">Volver a vista de docente</button>' : '';
   }
@@ -38,10 +41,30 @@ function workspaceNav() {
 }
 function workspaceHome() {
   $('#main').innerHTML = `<section class="home-courses"><div class="home-title-row"><div><p class="workspace-eyebrow">ENLACE · BUAP</p><h1>Mis cursos</h1><p class="muted">Tus materias, grupos y espacios de aprendizaje.</p></div><div class="action-row">${courses.some(c => !c.canTeach && !c.archived_at) ? '<button class="primary" data-checkin-code>Registrar asistencia</button>' : ''}${courses.length ? button('Calendario', 'calendar', '', 'secondary') : ''}${['admin', 'teacher'].includes(me.role) ? button('Curso de ejemplo', 'demo-course', '', 'secondary') : ''}${me.role === 'admin' ? button('Docentes' + (me.pendingTeacherRequests ? ` <span class="badge-count" aria-label="${me.pendingTeacherRequests} solicitudes pendientes">${me.pendingTeacherRequests}</span>` : ''), 'teachers', '', 'secondary') + button('Usuarios', 'users', '', 'secondary') + button('Reportes', 'reports', '', 'secondary') : ''}${['admin', 'teacher'].includes(me.role) ? button('＋ Crear curso', 'new-course') : ''}</div></div>${registrationBanner()}<div id="homeDashboard" class="home-dashboard" hidden></div><div class="workspace-filterbar"><label class="search-control"><span class="sr-only">Buscar por materia o grupo</span><input type="search" data-course-search placeholder="Buscar por materia o grupo…"></label><label class="filter-control">Mostrar<select data-course-filter><option value="all">Cursos activos</option><option value="teach">Cursos que imparto</option><option value="learn">Cursos en los que estoy inscrito</option><option value="archived">Cursos archivados</option></select></label><span class="muted" id="courseCount">${courses.length} cursos</span></div><div class="cards">${courses.map(c => `<article class="course ${c.archived_at ? 'is-archived' : ''}" data-theme="${courseThemeOf(c)}" data-archived="${c.archived_at ? 'yes' : 'no'}" data-course-card data-teach="${c.canTeach ? 'yes' : 'no'}" data-search-text="${esc((c.name + ' ' + c.group_name).toLowerCase())}"><div class="course-cover ${c.cover_updated ? 'has-cover' : ''}"${coverStyle(c)}><span class="code">${esc(c.group_name)}</span><h2>${button(esc(c.name), 'course', c.id, 'course-title-link')}</h2>${c.canTeach && !c.archived_at || c.canDelete ? `<details class="card-actions"><summary aria-label="Opciones de ${esc(c.name)}">⋯</summary><div class="card-menu">${c.canTeach && !c.archived_at ? button('Editar curso y portada', 'edit-course-card', c.id, 'table-link') : ''}${c.canDelete ? button('Eliminar curso / grupo', 'delete-course', c.id, 'danger-link') : ''}</div></details>` : ''}</div><div class="course-content"><span class="role-pill">${c.canTeach ? 'Docente' : 'Alumno'}</span>${c.period ? `<span class="role-pill period-pill">${esc(c.period)}</span>` : ''}${c.archived_at ? '<span class="role-pill archived-pill">Archivado</span>' : ''}<div class="course-card-footer">${button('Abrir curso →', 'course', c.id, 'text-btn')}</div></div></article>`).join('')}</div>${!courses.length ? empty('Tu espacio está listo', me.role === 'student' ? 'Cuando tu docente te inscriba con el correo de tu cuenta, tus cursos aparecerán aquí.' : 'Crea una materia, asigna su grupo y organiza el contenido para tus alumnos.') : '<p class="empty" id="noCourseResults" hidden>No hay cursos que coincidan con tu búsqueda.</p>'}</section>`;
+  decorateCourseVisibility();
   filterCourses(); // oculta los archivados en la vista inicial
   renderHomeDashboard();
   maybeAskClassification();
 }
+
+function decorateCourseVisibility() {
+  const cards = [...document.querySelectorAll('[data-course-card]')];
+  courses.forEach((course, index) => {
+    const card = cards[index];
+    if (!card || !course.canTeach) return;
+    if (course.student_visible === 0) {
+      card.classList.add('is-course-hidden');
+      card.querySelector('.course-content')?.insertAdjacentHTML('afterbegin', '<span class="role-pill archived-pill">Oculto a alumnos</span>');
+    }
+    if (!course.archived_at) {
+      card.querySelector('.card-menu')?.insertAdjacentHTML(
+        'beforeend',
+        button(course.student_visible === 0 ? 'Mostrar a los alumnos' : 'Ocultar a los alumnos', 'toggle-course-visible', course.id, 'table-link'),
+      );
+    }
+  });
+}
+
 function filterCourses() {
   const query = ($('[data-course-search]')?.value || '').toLowerCase(), type = $('[data-course-filter]')?.value || 'all';
   let count = 0;

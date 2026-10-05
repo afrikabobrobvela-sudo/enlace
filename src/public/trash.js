@@ -15,8 +15,13 @@ function trashButton(kind, id, label = 'Eliminar') {
   return `<button type="button" class="danger-link" data-action="trash" data-kind="${esc(kind)}" data-id="${esc(id)}">${label}</button>`;
 }
 
-function trashConfirmText(kind) {
-  if (kind === 'task') return '¿Eliminar esta actividad? Sus entregas y calificaciones se conservan en la papelera y vuelven si la restauras.';
+function trashConfirmText(kind, id) {
+  if (kind === 'task') {
+    // Con el nombre y cuántas calificaciones tiene, para no eliminar otra por error (por ejemplo, desde el libro).
+    const task = id ? find(id) : null;
+    const graded = task ? records('submission').filter((s) => s.data.task === id && s.data.grade !== null && s.data.grade !== undefined).length : 0;
+    return `¿Eliminar ${task ? `«${task.data.title}»` : 'esta actividad'}?${graded ? ` Tiene ${graded} ${graded === 1 ? 'calificación' : 'calificaciones'}.` : ''} Sus entregas y calificaciones se conservan en la papelera y vuelven si la restauras.`;
+  }
   if (kind === 'quiz') return '¿Eliminar esta evaluación? Los intentos de los alumnos se conservan y vuelven si la restauras.';
   if (kind === 'forum') return '¿Eliminar este foro? Sus publicaciones dejan de verse hasta que lo restaures.';
   if (kind === 'post') return teaches() ? '¿Eliminar esta publicación del foro?' : '¿Eliminar tu publicación?';
@@ -24,7 +29,7 @@ function trashConfirmText(kind) {
 }
 
 async function trashItem(kind, id) {
-  if (!confirm(trashConfirmText(kind))) return false;
+  if (!confirm(trashConfirmText(kind, id))) return false;
   await request('/api/record', { course: current.course.id, kind, id }, 'DELETE');
   return true;
 }

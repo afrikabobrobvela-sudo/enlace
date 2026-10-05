@@ -1,9 +1,28 @@
-# Enlace · versión 12.37
+# Enlace · versión 12.38
 
 Plataforma académica independiente para docentes y alumnos de cualquier academia (nació en la Academia de Física de la BUAP), con interfaz inspirada en Brightspace.
 No es el código de D2L Brightspace ni una plataforma oficial de la BUAP.
 
 Esta versión se despliega en **tu propia cuenta de Cloudflare** (Workers + D1 + R2, plan gratuito) y ya no depende de ChatGPT Sites.
+
+## Novedades de la versión 12.38 (tu 12.30 local + 12.37, redondeo y colores del libro)
+
+- **Una sola versión.** La 12.30 que estaba publicada salió de una copia local (sobre la 12.29) que nunca llegó a GitHub, con cambios propios. Esta versión los junta con todo lo de 12.30 a 12.37 de GitHub, y desde ahora se publica **solo desde la versión de GitHub**. Se conservan de la copia local:
+  - ocultar un curso a los alumnos;
+  - los índices para leer menos de D1 (migraciones 0033 a 0036, que ya están aplicadas en producción);
+  - mover las columnas del libro;
+  - escribir a mano la calificación de un rubro;
+  - la configuración reforzada del examen y el aviso sobre Gemini y Google Assistant;
+  - traer alumnos de otro curso.
+- **Examen: la versión de GitHub, más una protección de tu copia local.** Del cambio de pregunta se queda la de GitHub (12.31 y 12.32): confirmación dentro de la página y respeto de Safe Exam Browser. De tu copia local se agrega una protección: abrir un menú de opciones (relacionar u ordenar) ya no cuenta como salida ni como salida de pantalla completa.
+- **Redondeo de la calificación final y de cada parcial** (siempre entero):
+  - reprobatoria: baja al entero (5.9 → 5);
+  - aprobatoria: sube si la parte decimal pasa de .55 (6.56 → 7) y baja de .00 a .55 (6.55 → 6).
+- **Libro de calificaciones:**
+  - cada casilla se pinta en rojo (debajo de la mínima aprobatoria) o en verde (aprobada), como en Brightspace;
+  - la reprobatoria además va subrayada;
+  - la columna de nombres queda fija con fondo sólido y ya no se encima con las demás al desplazarse a los lados.
+- **Publicar:** sin migraciones nuevas. Descarga el ZIP de GitHub (rama `claude/plataforma-enlace-project-9ugeud`) y corre `npm run configurar` **desde esa carpeta**. Al publicar debe decir 12.38.0, no 12.30.
 
 ## Novedades de la versión 12.37 (rediseño visual «Colección»)
 

@@ -1,9 +1,10 @@
 // Categorías con pesos, reglas de la calificación final y banco de rúbricas.
 import { access, requireTeacher } from './access.js';
-import { loadTask, parseTerms, rubricRecord } from './gradebook.js';
+import { categoryGradeRecord, loadTask, parseTerms, rubricRecord } from './gradebook.js';
 import { all, fail, json, nowIso, one, optionalText, readJson, run, text } from './http.js';
 
 const STALE = 'Recarga la configuración de calificaciones antes de editar.';
+const MAX_COLUMNS = 1000;
 
 /** Toma el turno de edición de la configuración del curso (la misma revisión que usan las ponderaciones). */
 async function claimSettings(db, course, revision, userId) {
@@ -251,6 +252,10 @@ export const gradingRoutes = {
     const list = JSON.stringify(categories);
     const statements = [
       db.prepare('UPDATE aula_grade_settings SET scheme=?, terms=? WHERE course=?').bind(body.scheme, terms.length ? JSON.stringify(terms.map(({ id, name, weight }) => ({ id, name, weight }))) : '', body.course),
+      // Si se elimina una categoría, también se eliminan sus capturas manuales.
+      db
+        .prepare("DELETE FROM aula_records WHERE course=?1 AND kind='category-grade' AND json_extract(data,'$.category') NOT IN (SELECT json_extract(value,'$.id') FROM json_each(?2))")
+        .bind(body.course, list),
       // Las actividades de una categoría eliminada quedan sin categoría (ON DELETE SET NULL).
       db
         .prepare("DELETE FROM aula_grade_categories WHERE course=? AND id NOT IN (SELECT json_extract(value,'$.id') FROM json_each(?))")
@@ -468,27 +473,94 @@ export const gradingRoutes = {
   'POST /api/grades/final-rules': async ({ db, user, request }) => {
     const body = await readJson(request);
     requireTeacher(await access(db, user, body.course));
-    const decimals = Number(body.decimals);
     const passing = Number(body.passing);
-    const failingAs = body.failingAs === null || body.failingAs === '' || body.failingAs === undefined ? null : Number(body.failingAs);
-    if (![0, 1, 2].includes(decimals)) fail('Elige 0, 1 o 2 decimales.');
-    if (!['half_up', 'down'].includes(body.rounding)) fail('Forma de redondeo no válida.');
     if (!Number.isFinite(passing) || passing < 0 || passing > 10) fail('La mínima aprobatoria debe estar entre 0 y 10.');
-    if (failingAs !== null && (!Number.isFinite(failingAs) || failingAs < 0 || failingAs >= passing)) {
-      fail('La calificación para no aprobados debe ser menor que la mínima aprobatoria.');
-    }
     await claimSettings(db, body.course, body.revision, user.id);
     await run(
       db,
       'UPDATE aula_grade_settings SET final_decimals=?, final_rounding=?, passing_grade=?, failing_as=?, missing_as_zero=? WHERE course=?',
-      decimals,
-      body.rounding,
+      0,
+      'down',
       passing,
-      failingAs,
+      null,
       body.missingAsZero ? 1 : 0,
       body.course,
     );
     return json({ ok: true });
+  },
+
+  // Orden de las columnas del libro (12.30): ids de actividades del curso, de izquierda a derecha. No usa la revisión de
+  // la configuración: mover una columna no debe invalidar los pesos o las categorías que alguien esté editando.
+  'POST /api/grades/order': async ({ db, user, request }) => {
+    const body = await readJson(request);
+    requireTeacher(await access(db, user, body.course));
+    if (!Array.isArray(body.order) || body.order.length > MAX_COLUMNS) fail('Orden de columnas no válido.');
+    const wanted = [...new Set(body.order.map(String))];
+    // También las de la papelera: si se restauran, vuelven a su lugar.
+    const known = new Set(
+      (await all(db, 'SELECT id FROM aula_tasks WHERE course=? AND id IN (SELECT value FROM json_each(?))', body.course, JSON.stringify(wanted))).map((t) => t.id),
+    );
+    const order = wanted.filter((id) => known.has(id));
+    const now = nowIso();
+    // Si el curso aún no tenía configuración, la fila nace aquí: `created` avisa al navegador que recargue la revisión.
+    const created = await run(
+      db,
+      'INSERT INTO aula_grade_settings (course,revision,updated,updated_by,column_order) VALUES (?,1,?,?,?) ON CONFLICT(course) DO NOTHING',
+      body.course,
+      now,
+      user.id,
+      order.length ? JSON.stringify(order) : '',
+    );
+    if (!created.meta.changes) await run(db, 'UPDATE aula_grade_settings SET column_order=? WHERE course=?', order.length ? JSON.stringify(order) : '', body.course);
+    return json({ order, created: created.meta.changes > 0 });
+  },
+
+  // Captura directa de un rubro por alumno. Una calificación manual sustituye el cálculo del rubro;
+  // `grade: null` la borra y devuelve el rubro a su cálculo automático.
+  'POST /api/grades/category': async ({ db, user, request }) => {
+    const body = await readJson(request);
+    requireTeacher(await access(db, user, body.course));
+    const [category, member] = await Promise.all([
+      one(db, "SELECT id, source FROM aula_grade_categories WHERE id=? AND course=?", body.category, body.course),
+      one(db, "SELECT id FROM aula_members WHERE id=? AND course=? AND role='student'", body.member, body.course),
+    ]);
+    if (!category) fail('Rubro no encontrado.', 404);
+    if (category.source !== 'tasks') fail('Este rubro se calcula desde asistencia y no admite captura manual.');
+    if (!member) fail('Alumno no encontrado.', 404);
+    const id = `category-grade:${category.id}:${member.id}`;
+    const existing = await one(db, "SELECT * FROM aula_records WHERE id=? AND course=? AND kind='category-grade'", id, body.course);
+    if (existing && body.revision !== existing.revision) fail('Esta calificación cambió. Recarga antes de guardar.', 409);
+    if (!existing && body.revision) fail('Esta calificación cambió. Recarga antes de guardar.', 409);
+    if (body.grade === null) {
+      if (!existing) return json({ deleted: true, id });
+      const deleted = await run(db, "DELETE FROM aula_records WHERE id=? AND course=? AND kind='category-grade' AND revision=?", id, body.course, existing.revision);
+      if (!deleted.meta.changes) fail('Esta calificación cambió. Recarga antes de guardar.', 409);
+      return json({ deleted: true, id });
+    }
+    const grade = Number(body.grade);
+    if (!Number.isFinite(grade) || grade < 0 || grade > 10) fail('La calificación va de 0 a 10.');
+    const now = nowIso();
+    const data = JSON.stringify({ category: category.id, member: member.id, grade });
+    if (existing) {
+      const changed = await run(
+        db,
+        "UPDATE aula_records SET author=?,data=?,revision=revision+1,updated=? WHERE id=? AND course=? AND kind='category-grade' AND revision=?",
+        user.id,
+        data,
+        now,
+        id,
+        body.course,
+        existing.revision,
+      );
+      if (!changed.meta.changes) fail('Esta calificación cambió. Recarga antes de guardar.', 409);
+    } else {
+      try {
+        await run(db, "INSERT INTO aula_records (id,course,kind,author,data,revision,created,updated) VALUES (?,?,'category-grade',?,?,1,?,?)", id, body.course, user.id, data, now, now);
+      } catch {
+        fail('Esta calificación cambió. Recarga antes de guardar.', 409);
+      }
+    }
+    return json(categoryGradeRecord(await one(db, 'SELECT * FROM aula_records WHERE id=?', id)));
   },
 
   // Rúbricas propias y las compartidas con la Academia.

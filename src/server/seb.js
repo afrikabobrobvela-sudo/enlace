@@ -19,7 +19,10 @@ async function sha256hex(value) {
 /** Dirección de la evaluación dentro de Enlace (la ruta que entiende navegacion.js). */
 export const quizStartUrl = (origin, quiz) => `${origin}/#c=${encodeURIComponent(quiz.course)}&s=quiz&d=${encodeURIComponent(quiz.id)}`;
 
-/** Configuración de SEB de una evaluación: empieza en ella, manda las llaves en cada solicitud y deja recargar. */
+/**
+ * Configuración de SEB de una evaluación: empieza en ella, manda las llaves en cada solicitud y deja recargar.
+ * Las restricciones se declaran explícitamente porque sus valores predeterminados cambian entre Windows, macOS e iOS.
+ */
 export function sebSettings(origin, quiz) {
   return {
     originatorVersion: 'Enlace',
@@ -32,6 +35,20 @@ export function sebSettings(origin, quiz) {
     showReloadButton: true,
     showTaskBar: true,
     showTime: true,
+    allowSwitchToApplications: false,
+    allowUserSwitching: false,
+    allowSiri: false,
+    allowDictation: false,
+    allowScreenCapture: false,
+    allowWindowCapture: false,
+    allowScreenSharing: false,
+    enablePrintScreen: false,
+    allowAudioCapture: false,
+    allowVideoCapture: false,
+    allowVirtualMachine: false,
+    allowDeveloperConsole: false,
+    allowDictionaryLookup: false,
+    monitorProcesses: true,
     allowSpellCheck: false,
     URLFilterEnable: false,
   };

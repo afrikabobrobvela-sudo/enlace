@@ -188,10 +188,10 @@ assert.equal(tareaCopiada.data.forum, foroCopiado.id);
 assert.equal(copiado.records.filter((r) => r.kind === 'post').length, 0);
 checks += 2;
 
-// Consultas: el curso con foros sigue dentro del límite.
+// Consultas: el curso con foros sigue dentro del límite (14 desde las capturas manuales por rubro).
 store.counter.queries = 0;
 await course('ana');
-assert(store.counter.queries <= 13, `consultas: ${store.counter.queries}`);
+assert(store.counter.queries <= 14, `consultas: ${store.counter.queries}`);
 store.counter.queries = 0;
 await call('ana', '/api/notifications');
 assert(store.counter.queries <= 8, `consultas de avisos: ${store.counter.queries}`);

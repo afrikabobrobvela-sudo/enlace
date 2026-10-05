@@ -39,6 +39,18 @@ function remap(textValue, map) {
   return out;
 }
 
+/** Orden de columnas del libro para el curso copiado: solo las actividades que se copiaron, con sus ids nuevos. */
+function columnOrderCopy(value, map) {
+  let list = [];
+  try {
+    list = JSON.parse(value || '[]');
+  } catch {
+    // Un valor dañado se trata como «sin orden».
+  }
+  const ids = (Array.isArray(list) ? list : []).map((id) => map.get(id)).filter(Boolean);
+  return ids.length ? JSON.stringify(ids) : '';
+}
+
 export const periodRoutes = {
   'POST /api/course/archive': async ({ db, user, request }) => {
     const body = await readJson(request);
@@ -64,7 +76,7 @@ export const periodRoutes = {
     const period = optionalText(body.period, 60);
     const keepDates = body.keepDates === true;
 
-    const [records, tasks, files, categories, sections] = await Promise.all([
+    const [records, tasks, files, categories, sections, settings] = await Promise.all([
       all(
         db,
         `SELECT * FROM aula_records WHERE course=? AND deleted_at IS NULL AND kind IN (${COPY_KINDS.map(() => '?').join(',')}) ORDER BY created`,
@@ -75,6 +87,7 @@ export const periodRoutes = {
       all(db, "SELECT * FROM aula_files WHERE course=? AND scope='material'", source),
       all(db, 'SELECT * FROM aula_grade_categories WHERE course=?', source),
       all(db, 'SELECT * FROM aula_sections WHERE course=?', source),
+      one(db, 'SELECT column_order FROM aula_grade_settings WHERE course=?', source),
     ]);
 
     const id = crypto.randomUUID();
@@ -139,10 +152,11 @@ export const periodRoutes = {
         .bind(id, user.id, name, group, remap(a.course.intro, map), now, user.academy_id ?? a.course.academy_id ?? null, user.unit_id ?? a.course.unit_id ?? null, period, a.course.theme ?? 0),
       db
         .prepare(
-          `INSERT INTO aula_grade_settings (course,revision,updated,updated_by,scheme,final_decimals,final_rounding,passing_grade,failing_as,missing_as_zero,terms)
-           SELECT ?1,1,?2,?3,scheme,final_decimals,final_rounding,passing_grade,failing_as,missing_as_zero,terms FROM aula_grade_settings WHERE course=?4`,
+          `INSERT INTO aula_grade_settings (course,revision,updated,updated_by,scheme,final_decimals,final_rounding,passing_grade,failing_as,missing_as_zero,terms,column_order)
+           SELECT ?1,1,?2,?3,scheme,final_decimals,final_rounding,passing_grade,failing_as,missing_as_zero,terms,?5 FROM aula_grade_settings WHERE course=?4`,
         )
-        .bind(id, now, user.id, source),
+        // El orden de las columnas del libro, con los ids de las actividades copiadas (las de la papelera no se copian).
+        .bind(id, now, user.id, source, columnOrderCopy(settings?.column_order, map)),
       db
         .prepare(
           `INSERT INTO aula_attendance_settings (course,min_percent,lates_per_absence,excused_counts,updated)

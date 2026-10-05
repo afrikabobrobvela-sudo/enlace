@@ -373,11 +373,20 @@ article.course .course-card-footer .text-btn { color: var(--tomo) !important; }
 /* Índice de unidades: el elemento activo es un bloque de la tinta, sin franja lateral. */
 .content-tree .tree-unit button.active, .toc-all.selected { background: var(--tomo) !important; color: #fff !important; box-shadow: none !important; border-color: var(--tomo) !important; }
 .content-tree .tree-unit button.active small, .toc-all.selected span { color: #fff !important; background: transparent; }
-/* Libro: sin rellenos pastel; el estado va en la cifra (tinta del tomo o rojo de alerta). */
-.gradebook td, .gradebook .grade-pass, .gradebook .grade-low { background: transparent !important; }
+/* Libro: fondo sólido en todas las casillas (la columna fija de nombres no debe dejar ver lo que pasa por debajo). */
+.gradebook td { background: var(--surface) !important; border-right: 1px solid var(--line); }
 .gradebook .grade-pass { color: var(--tinta); font-weight: 700; } /* nunca en la tinta: con granza parecería reprobado */
-.gradebook .grade-low { color: #b42318; font-weight: 800; }
-.gradebook td { border-right: 1px solid var(--line); }
+.gradebook .grade-low { color: #8f1c12; font-weight: 800; }
+/* Color por calificación (como en Brightspace): rojo debajo de la mínima, verde desde ella; la cifra va en texto oscuro. */
+.gradebook td.gb-fail, .gradebook td.grade-low { background: #fce4e1 !important; color: #8f1c12; }
+.gradebook td.gb-pass, .gradebook td.grade-pass { background: #e2f3e6 !important; color: #14532d; }
+.gradebook td.gb-fail .gb-input, .gradebook td.gb-pass .gb-input, .gradebook td.gb-fail .category-grade-input, .gradebook td.gb-pass .category-grade-input { background: rgba(255, 255, 255, 0.7); }
+.gradebook td.gb-fail .gb-input, .gradebook td.gb-fail .category-grade-input { color: #8f1c12; font-weight: 700; text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 3px; }
+.gradebook td.gb-pass .gb-input, .gradebook td.gb-pass .category-grade-input { color: #14532d; font-weight: 600; }
+.gradebook td.grade-na { background: #f4f6f9 !important; }
+/* Columna fija de nombres: por encima de las demás al desplazarse a los lados, con una raya que marca el borde. */
+.gradebook td.sticky-name { position: sticky; left: 0; z-index: 2; background: var(--surface) !important; box-shadow: 2px 0 0 var(--line); }
+.gradebook thead th.sticky-name { position: sticky; left: 0; top: 0; z-index: 4; background: #f4f6f9 !important; box-shadow: 2px 0 0 var(--line); }
 /* Sin sesión no hay «Mis cursos» que mostrar en la barra. */
 body.signed-out #crumb { visibility: hidden; }
 /* Alerta del libro: además del rojo, un subrayado grueso (no depende solo del color). */

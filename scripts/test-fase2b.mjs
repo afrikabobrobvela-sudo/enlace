@@ -87,13 +87,31 @@ g = await grading();
 assert.equal(g.data.categories[0].id, exams);
 
 // ---- Reglas de la calificación final ----
-const rules = { course: c, decimals: 0, rounding: 'half_up', passing: 6, failingAs: 5, missingAsZero: true };
-await call('docente', '/api/grades/final-rules', { ...rules, revision: g.revision, failingAs: 6 }, 400);
-await call('docente', '/api/grades/final-rules', { ...rules, revision: g.revision, decimals: 3 }, 400);
+const rules = { course: c, passing: 6, missingAsZero: true };
+await call('docente', '/api/grades/final-rules', { ...rules, revision: g.revision, passing: 11 }, 400);
 await call('docente', '/api/grades/final-rules', { ...rules, revision: g.revision });
 g = await grading();
-assert.deepEqual(g.data.final, { decimals: 0, rounding: 'half_up', passing: 6, failingAs: 5, missingAsZero: true });
+assert.deepEqual(g.data.final, { decimals: 0, rounding: 'down', passing: 6, failingAs: null, missingAsZero: true });
 assert.equal((await call('ana', '/api/course?id=' + c)).records.find((r) => r.kind === 'grading').data.scheme, 'categories', 'El alumno calcula con las mismas reglas');
+
+// ---- Captura manual de un rubro ----
+const categoryGrade = { course: c, category: exams, member: id('ana'), grade: 8.75 };
+await call('ana', '/api/grades/category', categoryGrade, 403);
+await call('docente', '/api/grades/category', { ...categoryGrade, category: 'no-existe' }, 404);
+await call('docente', '/api/grades/category', { ...categoryGrade, category: g.data.categories.find((x) => x.source === 'attendance').id }, 400);
+await call('docente', '/api/grades/category', { ...categoryGrade, grade: 11 }, 400);
+const manualCategory = await call('docente', '/api/grades/category', categoryGrade);
+assert.deepEqual([manualCategory.kind, manualCategory.data.category, manualCategory.data.member, manualCategory.data.grade, manualCategory.revision], ['category-grade', exams, id('ana'), 8.75, 1]);
+let manualForStudent = (await call('ana', '/api/course?id=' + c)).records.find((r) => r.kind === 'category-grade');
+assert.deepEqual([manualForStudent.data.category, manualForStudent.data.grade], [exams, 8.75], 'El alumno recibe su captura manual para calcular el rubro');
+const changedCategory = await call('docente', '/api/grades/category', { ...categoryGrade, revision: manualCategory.revision, grade: 7.25 });
+assert.deepEqual([changedCategory.data.grade, changedCategory.revision], [7.25, 2]);
+await call('docente', '/api/grades/category', { ...categoryGrade, revision: manualCategory.revision, grade: 9 }, 409);
+const removedCategory = await call('docente', '/api/grades/category', { ...categoryGrade, revision: changedCategory.revision, grade: null });
+assert.equal(removedCategory.deleted, true);
+manualForStudent = (await call('ana', '/api/course?id=' + c)).records.find((r) => r.kind === 'category-grade');
+assert.equal(manualForStudent, undefined, 'Vacío devuelve el rubro al cálculo automático');
+checks += 5;
 
 // ---- Rúbricas ----
 const lab = {
