@@ -313,7 +313,9 @@ dialog.sheet::backdrop { background: rgba(12, 28, 42, 0.45); }
   /* Libro de calificaciones y lista de asistencia (matrices): columna de nombres más angosta. */
   .gradebook .sticky-name { min-width: 132px !important; max-width: 150px; white-space: normal; }
   .gradebook td { min-width: 76px !important; }
-  .home-tabs { flex-wrap: wrap; gap: 0 18px; }
+  /* Pestañas en una sola fila (se desplazan si no caben) en vez de apilarse. */
+  .home-tabs { flex-wrap: nowrap; gap: 0 18px; overflow-x: auto; scrollbar-width: none; }
+  .home-tabs button { flex: 0 0 auto; white-space: nowrap; }
   .home-tabs button { font-size: 15px !important; }
 
   /* Revisión: anterior y siguiente en una fila; los botones de guardar siempre a la vista. */
@@ -463,4 +465,16 @@ dialog.sheet::backdrop { background: rgba(12, 28, 42, 0.45); }
   .gradebook .sticky-name { width: 44vw; min-width: 0 !important; max-width: 44vw; }
   .gradebook .sticky-name .person { align-items: flex-start; }
   .gradebook .sticky-name .person > span:last-child { font-size: 0.85rem; overflow-wrap: anywhere; }
+
+  /* Diseño 12.35: el índice de unidades es una fila que se desliza, para que el contenido se vea desde el inicio. */
+  .content-layout:not(.has-unit) .content-tree { display: flex !important; gap: 8px; overflow-x: auto; max-height: none !important; padding: 10px !important; scroll-snap-type: x proximity; scrollbar-width: thin; }
+  .content-layout:not(.has-unit) .content-tree > h2 { display: none; }
+  .content-layout:not(.has-unit) .content-tree > .toc-all,
+  .content-layout:not(.has-unit) .content-tree > .tree-unit,
+  .content-layout:not(.has-unit) .content-tree > .secondary { flex: 0 0 auto; width: 62vw; max-width: 230px; margin: 0 !important; scroll-snap-align: start; }
+  .content-layout:not(.has-unit) .content-tree > .tree-unit > button { height: 100%; margin: 0 !important; }
+  /* Nombre del curso en la barra: puntos suspensivos si no cabe. */
+  #crumb.course-heading { display: block; } /* una regla vieja lo hace flex y ahí los puntos suspensivos no aplican */
+  /* Enlaces y botones de texto: al menos 24 px de alto para tocarlos con el dedo. */
+  footer a, .crumbs button, .table-link, .assignment-title, .material-entry-body a, .text-btn { display: inline-block; min-height: 24px; padding-block: 3px; }
 }

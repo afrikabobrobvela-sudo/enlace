@@ -1,9 +1,19 @@
-# Enlace · versión 12.34
+# Enlace · versión 12.35
 
 Plataforma académica independiente para docentes y alumnos de cualquier academia (nació en la Academia de Física de la BUAP), con interfaz inspirada en Brightspace.
 No es el código de D2L Brightspace ni una plataforma oficial de la BUAP.
 
 Esta versión se despliega en **tu propia cuenta de Cloudflare** (Workers + D1 + R2, plan gratuito) y ya no depende de ChatGPT Sites.
+
+## Novedades de la versión 12.35 (revisión de diseño y accesibilidad)
+
+Ajustes de apariencia tras revisar las pantallas principales en computadora y en teléfono; no cambia nada de cómo funciona:
+- **Textos grises más legibles**: los textos secundarios (fechas, conteos, el pie de página, «Aula virtual · BUAP») ahora tienen el contraste mínimo de accesibilidad (WCAG AA). También las etiquetas pequeñas sobre fondos grises.
+- **Calificaciones**: la pantalla tiene su título y la explicación de cómo se calcula queda en un apartado que se puede plegar (en el teléfono empieza plegado, para ver la tabla de inmediato). Las pestañas ya no se apilan en el teléfono.
+- **Contenido en el teléfono**: las unidades son una fila que se desliza, así los materiales se ven desde el inicio.
+- **Detalles**: el nombre largo del curso termina en «…» en el teléfono; «1 material» en singular; ya no aparece «0 archivos» en materiales sin archivos; en Actividades, «17 calificadas» ya no se separa; enlaces y botones de texto más fáciles de tocar; el pie de página queda siempre al fondo.
+
+Nota: en el libro de calificaciones, un alumno sin entregas vencidas aparece con **0.0** en la calificación final cuando el curso tiene activada la regla «lo no entregado cuenta como 0» (Administrar calificaciones). Es correcto: el promedio parcial sí muestra «—».
 
 ## Novedades de la versión 12.34 (revisión de seguridad)
 
