@@ -1,0 +1,360 @@
+/* «Colección» (12.37): Enlace como una colección de divulgación científica; cada curso es un tomo con su tinta.
+ * Capa visual superior: se carga después de tema.css y movil.css y solo cambia la apariencia.
+ * Las tintas salen de data-theme (1 a 6, portadas y vista previa) y de body[data-tomo] (el curso abierto):
+ * --tomo (tinta plana), --tomo-lomo (el lomo, más oscuro) y --tomo-papel (fondo claro de la misma tinta).
+ * Todas llevan texto blanco a más de 4.5:1. Contrato de diseño: .impeccable/surfaces/src-public-index-html.md.
+ */
+
+@font-face {
+  font-family: 'Archivo';
+  font-style: normal;
+  font-weight: 100 900;
+  font-stretch: 62% 125%;
+  font-display: swap;
+  src: url('/vendor/archivo/archivo-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Archivo';
+  font-style: normal;
+  font-weight: 100 900;
+  font-stretch: 62% 125%;
+  font-display: swap;
+  src: url('/vendor/archivo/archivo-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+/* ---- Tintas ------------------------------------------------------------------------------------------ */
+
+:root,
+[data-theme],
+[data-theme='1'],
+body[data-tomo='1'] { --tomo: #1f3fd1; --tomo-lomo: #142b96; --tomo-papel: #e8ecfb; } /* cobalto */
+[data-theme='2'], body[data-tomo='2'] { --tomo: #0a6e60; --tomo-lomo: #064a40; --tomo-papel: #e2f1ee; } /* verdete */
+[data-theme='3'], body[data-tomo='3'] { --tomo: #c0183f; --tomo-lomo: #86102c; --tomo-papel: #fbe7ec; } /* granza */
+[data-theme='4'], body[data-tomo='4'] { --tomo: #6a2c9e; --tomo-lomo: #4a1e70; --tomo-papel: #f0e8f7; } /* ciruela */
+[data-theme='5'], body[data-tomo='5'] { --tomo: #b04a05; --tomo-lomo: #7a3303; --tomo-papel: #fbede2; } /* ocre */
+[data-theme='6'], body[data-tomo='6'] { --tomo: #4b6a0f; --tomo-lomo: #33490a; --tomo-papel: #edf2e1; } /* musgo */
+/* Las capas anteriores leen --c1/--c2 (portadas, selector de color) y --brand/--accent/--link: se vuelven a
+   declarar en cada elemento con tinta, porque una variable que usa var() se resuelve donde se declara. */
+:root, [data-theme], body[data-tomo] { --c1: var(--tomo); --c2: var(--tomo-lomo); --pattern: none; --brand: var(--tomo); --brand-2: var(--tomo-lomo); --accent: var(--tomo); --link: var(--tomo); }
+
+:root {
+  --tinta: #111a2e; /* azul casi negro: el texto y la barra de la colección */
+  --tinta-2: #1d2942;
+  --senal: #ffc414; /* amarillo de señal: solo contadores y avisos que piden atención (tinta encima, 10.9:1) */
+  --ink: var(--tinta);
+  --ink-soft: #3b475c;
+  --ink-faint: #56627a;
+  --line: #d8dde5;
+  --line-strong: #b4bdca;
+  --surface: #ffffff;
+  --canvas: #eceff3;
+  --radius: 8px;
+  --radius-sm: 6px;
+  --shadow-sm: 0 1px 2px rgba(17, 26, 46, 0.08);
+  --shadow: 0 3px 10px rgba(17, 26, 46, 0.12);
+  --shadow-lg: 0 14px 34px rgba(17, 26, 46, 0.2);
+  --condensada: 'Archivo', 'Arial Narrow', sans-serif;
+  font-family: 'Archivo', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-stretch: 100%;
+  accent-color: var(--tomo);
+  scrollbar-color: #9aa4b4 transparent;
+}
+body { background: var(--canvas); color: var(--tinta); caret-color: var(--tomo); word-spacing: 0.04em; } /* el espacio de Archivo es angosto */
+::selection { background: var(--tomo); color: #fff; }
+a { color: var(--link); text-underline-offset: 0.18em; text-decoration-thickness: 1.5px; }
+table, .gradebook, .quiz-clock, .badge-count, .count-pill { font-variant-numeric: tabular-nums; }
+
+/* Títulos: la condensada pesada de las portadas de la colección. */
+h1, h2, h3,
+.wordmark,
+.login-panel h1 { font-family: var(--condensada); }
+h1 { font-stretch: 75%; font-weight: 800; font-size: clamp(30px, 3.4vw, 44px); line-height: 1.04; letter-spacing: -0.02em; color: var(--tinta); }
+h2 { font-stretch: 85%; font-weight: 750; letter-spacing: -0.01em; }
+h3 { font-stretch: 90%; font-weight: 700; }
+/* En los anchos condensados el espacio de Archivo es muy angosto: se abre un poco entre palabras. */
+h1, h2, h3, .wordmark, .course-heading, .course-title-link, th { word-spacing: 0.08em; }
+/* El título de cada pantalla lleva el filete de tinta del tomo. */
+#main h1 { padding-bottom: 10px; border-bottom: 3px solid var(--tomo); }
+#main .quiz-question h1, #main .empty h1 { border: 0; padding: 0; }
+/* Sin antetítulos sobre los títulos: el título habla solo. */
+.workspace-eyebrow { display: none !important; }
+
+/* ---- Barra de la colección y del tomo --------------------------------------------------------------- */
+
+.shell > header {
+  background: var(--tinta);
+  color: #fff;
+  border: 0;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow: none;
+  transition: background-color 0.45s cubic-bezier(0.16, 1, 0.3, 1);
+}
+body.in-course .shell > header { background: var(--tomo); }
+.wordmark { color: #fff; font-stretch: 80%; font-weight: 800; font-size: 26px; letter-spacing: -0.01em; }
+.wordmark .brand-mark { border-radius: 7px; }
+.wordmark .brand-text span { font-family: 'Archivo', sans-serif; font-stretch: 100%; color: #fff; font-weight: 500; letter-spacing: 0.02em; word-spacing: 0.12em; }
+/* La raya de color de las capas viejas sobre la página ya no va: la barra es la tinta. */
+body { border-top: 0 !important; }
+.course-heading { color: #fff; font-weight: 700; font-stretch: 90%; border-left-color: rgba(255, 255, 255, 0.4); font-size: 17px; }
+.header-tools .course-picker > summary,
+#bell,
+#logoutButton { color: #fff; }
+.header-tools .course-picker > summary:hover,
+#bell:hover { background: rgba(255, 255, 255, 0.14); border-radius: 6px; }
+#roleLabel { color: #fff; opacity: 1; }
+.profile-square { background: #fff; color: var(--tinta); box-shadow: none; font-weight: 800; }
+body.in-course .profile-square { color: var(--tomo); }
+.badge-count { background: var(--senal); color: var(--tinta); }
+.bell .badge-count { box-shadow: 0 0 0 2px var(--tinta); }
+body.in-course .bell .badge-count { box-shadow: 0 0 0 2px var(--tomo); }
+
+#topnav {
+  background: var(--tomo-lomo);
+  border: 0;
+  box-shadow: none;
+  transition: background-color 0.45s cubic-bezier(0.16, 1, 0.3, 1);
+}
+#topnav > button,
+#topnav .more-menu > summary { color: #fff; font-weight: 600; border-radius: 6px; }
+#topnav > button:hover,
+#topnav .more-menu > summary:hover { background: rgba(255, 255, 255, 0.16); color: #fff; }
+#topnav > button.active { background: #fff; color: var(--tomo-lomo); font-weight: 800; }
+#topnav .view-toggle { color: #fff; background: transparent; border: 1.5px solid rgba(255, 255, 255, 0.7); border-radius: 6px; font-weight: 700; }
+#topnav .view-toggle:hover, #topnav .view-toggle.is-on { background: #fff; color: var(--tomo-lomo); }
+#topnav .menu-panel { border-radius: var(--radius); }
+#topnav .menu-panel button { color: var(--tinta); }
+#topnav .menu-panel button:hover { background: var(--tomo-papel); color: var(--tomo-lomo); }
+#previewBar { background: var(--senal); color: var(--tinta); border: 0; }
+
+/* ---- Controles ---------------------------------------------------------------------------------------- */
+
+.primary,
+button.primary {
+  background: var(--tomo);
+  border: 1px solid var(--tomo-lomo);
+  color: #fff;
+  border-radius: var(--radius-sm);
+  font-weight: 700;
+  box-shadow: 0 2px 0 var(--tomo-lomo), 0 3px 8px rgba(17, 26, 46, 0.16);
+}
+.primary:hover,
+button.primary:hover { background: var(--tomo-lomo); }
+.primary:active,
+button.primary:active { box-shadow: 0 1px 0 var(--tomo-lomo); }
+.secondary,
+button.secondary {
+  background: var(--surface);
+  border: 1.5px solid var(--tinta);
+  color: var(--tinta);
+  border-radius: var(--radius-sm);
+  font-weight: 700;
+  box-shadow: none;
+}
+.secondary:hover,
+button.secondary:hover { background: var(--tomo-papel); border-color: var(--tomo); color: var(--tomo-lomo); }
+.text-btn,
+.table-link,
+.assignment-title { color: var(--tomo); font-weight: 700; }
+.text-btn:hover, .table-link:hover, .assignment-title:hover { color: var(--tomo-lomo); text-decoration: underline; text-underline-offset: 0.2em; }
+button:disabled, .primary:disabled { opacity: 0.55; box-shadow: none; }
+
+input:not([type='checkbox']):not([type='radio']):not([type='file']),
+select,
+textarea { border: 1.5px solid var(--line-strong); border-radius: var(--radius-sm); }
+input:not([type='checkbox']):not([type='radio']):not([type='file']):focus,
+select:focus,
+textarea:focus { border-color: var(--tomo); box-shadow: 0 0 0 3px var(--tomo-papel); }
+::placeholder { color: var(--ink-faint); opacity: 1; }
+button:focus-visible, a:focus-visible, summary:focus-visible, .dt-display:focus-visible, .thread-row:focus-visible,
+input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 3px solid var(--tinta); outline-offset: 2px; }
+body.in-course button:focus-visible, body.in-course a:focus-visible, body.in-course summary:focus-visible { outline-color: var(--tomo-lomo); }
+.shell > header :focus-visible, #topnav :focus-visible { outline-color: #fff; }
+
+/* ---- Superficies -------------------------------------------------------------------------------------- */
+
+/* Elevación declarada una vez: borde, sin sombra difusa. */
+.panel,
+.table-wrap,
+.material-entry,
+.forum-block,
+.admin-section,
+.workspace-filterbar,
+.module-card,
+.content-tree,
+.content-detail { border: 1px solid var(--line); border-radius: var(--radius); box-shadow: none; }
+.panel h2, .panel-head h2 { font-size: 20px; font-weight: 800; font-stretch: 80%; }
+th { font-family: var(--condensada); font-stretch: 85%; font-weight: 800; letter-spacing: 0.04em; color: var(--tinta); background: #f4f6f9; border-bottom: 2px solid var(--tinta) !important; }
+.role-pill, .status-pill, .count-pill { border-radius: 4px; font-weight: 700; }
+.role-pill { background: var(--tomo-papel); color: var(--tomo-lomo); }
+.count-pill { background: var(--tinta); color: #fff; }
+.status-pill.is-due { background: var(--tomo-papel); color: var(--tomo-lomo); border-color: transparent; }
+.notice { border-left: 0; border-radius: var(--radius-sm); background: var(--tomo-papel); }
+.notice h3 { color: var(--tomo-lomo); }
+dialog#modal { border-radius: var(--radius); border: 0; box-shadow: var(--shadow-lg); }
+dialog#modal .dialog-head { border-bottom: 3px solid var(--tomo); }
+dialog#modal .dialog-head h2 { font-size: 24px; font-weight: 800; font-stretch: 78%; }
+#toast { background: var(--tinta); color: #fff; border-radius: var(--radius-sm); }
+footer { background: transparent; color: var(--ink-faint); }
+
+/* ---- Mis cursos: el estante de la colección --------------------------------------------------------- */
+
+.cards { gap: 20px !important; }
+article.course {
+  position: relative;
+  border: 0;
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: var(--surface);
+  box-shadow: 0 1px 0 rgba(17, 26, 46, 0.1), 0 2px 6px rgba(17, 26, 46, 0.1);
+  transition: box-shadow 0.2s ease;
+}
+article.course:hover { transform: none; box-shadow: 0 1px 0 rgba(17, 26, 46, 0.12), 0 8px 22px rgba(17, 26, 46, 0.18); }
+/* La portada: tinta plana, el lomo a la izquierda y el título condensado en blanco. */
+article.course .course-cover {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 14px;
+  min-height: 190px;
+  padding: 16px 16px 18px 38px;
+  background: var(--tomo) !important;
+}
+article.course .course-cover::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 18px;
+  background: var(--tomo-lomo);
+  box-shadow: inset -2px 0 0 rgba(0, 0, 0, 0.18);
+}
+article.course .course-cover::after { display: none; }
+article.course .course-cover .code {
+  align-self: flex-start;
+  padding: 3px 8px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.16);
+  color: #fff;
+  font-weight: 700;
+  font-size: 12.5px;
+  letter-spacing: 0.04em;
+  backdrop-filter: none;
+}
+article.course .course-cover h2 { margin: 0; padding-right: 32px; }
+article.course .course-cover .course-title-link {
+  color: #fff;
+  font-family: var(--condensada);
+  font-stretch: 72%;
+  font-weight: 800;
+  font-size: clamp(24px, 2.4vw, 30px);
+  line-height: 1.02;
+  letter-spacing: -0.015em;
+  text-align: left !important;
+  width: 100%;
+  padding: 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+/* Toda la portada abre el curso (el menú «⋯» queda encima). */
+article.course .course-cover .course-title-link::after { content: ''; position: absolute; inset: 0; z-index: 1; }
+article.course .course-cover .course-title-link:hover { color: #fff; text-decoration: underline; text-decoration-thickness: 2px; }
+article.course .card-actions { position: absolute; top: 12px; right: 12px; z-index: 2; }
+article.course .card-actions summary { background: rgba(255, 255, 255, 0.18); color: #fff; border-radius: 6px; }
+article.course .course-cover.has-cover {
+  background: linear-gradient(180deg, rgba(17, 26, 46, 0.2), rgba(17, 26, 46, 0.78)), var(--cover) center / cover no-repeat, var(--tomo) !important;
+}
+article.course .course-content { padding: 14px 16px 12px 38px; position: relative; }
+article.course .course-content::before { content: ''; position: absolute; inset: 0 auto 0 0; width: 18px; background: var(--tomo-papel); }
+article.course .course-card-footer { border-top: 1px solid var(--line); }
+article.course.is-archived .course-cover { filter: grayscale(0.85); }
+
+/* ---- Inicio del curso: la portada del tomo -------------------------------------------------------- */
+
+.hub-banner {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 38px 32px 30px 58px;
+  border-radius: var(--radius);
+  background: var(--tomo);
+  box-shadow: none;
+}
+.hub-banner::before { content: ''; position: absolute; inset: 0 auto 0 0; width: 26px; background: var(--tomo-lomo); }
+.hub-banner::after { display: none; }
+.hub-banner h1 { order: 0; margin: 0; padding: 0; border: 0 !important; color: #fff; font-size: clamp(34px, 5vw, 60px); font-stretch: 70%; line-height: 0.98; }
+.hub-eyebrow { order: 1; align-self: flex-start; background: rgba(255, 255, 255, 0.16); border-radius: 4px; font-weight: 700; }
+.hub-banner .hub-edit { order: 2; }
+.hub-banner.has-cover { background: linear-gradient(90deg, rgba(17, 26, 46, 0.8), rgba(17, 26, 46, 0.3)), var(--cover) center / cover no-repeat, var(--tomo); }
+.module-card .module-cover,
+.module-card:nth-child(n) .module-cover { background: var(--tomo) !important; color: #fff; font-family: var(--condensada); font-stretch: 80%; font-weight: 800; font-size: 20px; }
+.module-card:nth-child(2n) .module-cover { background: var(--tomo-lomo) !important; }
+.module-card:hover { transform: none; border-color: var(--tomo); }
+.cover-preview { background: var(--tomo); }
+.cover-preview.has-cover { background: linear-gradient(180deg, rgba(17, 26, 46, 0.1), rgba(17, 26, 46, 0.6)), var(--cover) center / cover no-repeat; }
+
+/* Pestañas de las pantallas (calificaciones, evaluaciones…): subrayado de la tinta del tomo. */
+.home-tabs button.active, .home-tabs .active { color: var(--tinta); border-bottom-color: var(--tomo) !important; font-weight: 800; }
+.avatar { background: var(--tomo-papel); color: var(--tomo-lomo); border-color: transparent; }
+.course-guide summary { background: #f4f6f9; }
+
+/* ---- Contenido, actividades y libro --------------------------------------------------------------- */
+
+.content-tree { background: var(--surface); }
+.content-tree .tree-unit button.active, .toc-all.selected { box-shadow: inset 4px 0 0 var(--tomo); background: var(--tomo-papel); }
+.document-mark.is-link { background: var(--tomo-papel); color: var(--tomo-lomo); }
+.crumbs button { color: var(--tomo); font-weight: 700; }
+.gradebook thead th { background: #f4f6f9; }
+.gradebook .sticky-name { background: var(--surface); }
+.grade-pass { background: var(--tomo-papel); color: var(--tomo-lomo); }
+.grade-help > summary { color: var(--tomo); }
+var.qvar { background: var(--tomo-papel); color: var(--tomo-lomo); }
+
+/* ---- Evaluación ------------------------------------------------------------------------------------ */
+
+.quiz-attempt-head { background: var(--tinta); color: #fff; border: 0; }
+.quiz-attempt-head .muted, .quiz-answered, .quiz-save-status { color: #fff !important; }
+.quiz-clock { color: #fff; }
+.quiz-clock.is-warn { color: var(--senal); }
+.quiz-clock.is-low { color: #ff8a8a; }
+.quiz-question label:has(> input:checked) { background: var(--tomo-papel); box-shadow: inset 0 0 0 1.5px var(--tomo); }
+
+/* ---- Acceso ------------------------------------------------------------------------------------------ */
+
+.login-layout { border-radius: var(--radius); box-shadow: var(--shadow-lg); border: 0; }
+.login-brand { background: var(--tinta); }
+.login-brand h2 { font-family: var(--condensada); font-stretch: 72%; font-weight: 800; font-size: 40px; line-height: 1; }
+.login-brand li::before { background-color: var(--tomo); }
+.login-panel h1 { font-stretch: 75%; font-size: 36px; }
+
+/* ---- Teléfono ---------------------------------------------------------------------------------------- */
+
+@media (max-width: 720px) {
+  .bottom-nav:not([hidden]) { background: var(--surface); backdrop-filter: none; border-top: 2px solid var(--tomo); box-shadow: none; }
+  .bottom-nav button { font-family: 'Archivo', sans-serif; color: var(--ink-soft); }
+  .bottom-nav button.active { color: var(--tomo-lomo); font-weight: 800; }
+  .bottom-nav button.active::before { background: var(--tomo-papel); border-radius: 8px; }
+  .sheet-link { font-family: 'Archivo', sans-serif; }
+  .course-heading { color: #fff !important; }
+  /* Portadas en el celular: una franja de tinta con el título, el lomo a la izquierda y los datos abajo. */
+  article.course { display: block; border-radius: var(--radius); }
+  article.course .course-cover { position: relative; min-height: 112px; padding: 12px 52px 14px 32px; display: flex; justify-content: space-between; align-items: stretch; }
+  article.course .course-cover::before { width: 14px; }
+  article.course .course-cover .code { display: inline-block; }
+  article.course .course-cover .course-title-link { font-size: 25px; }
+  article.course .course-content { padding: 10px 14px 10px 32px; display: block; }
+  article.course .course-content::before { width: 14px; }
+  article.course .card-actions summary { background: rgba(255, 255, 255, 0.18) !important; color: #fff !important; }
+  .hub-banner { padding: 26px 18px 22px 40px; }
+  .hub-banner::before { width: 18px; }
+  #main h1 { font-size: 30px !important; }
+  .hub-banner h1 { font-size: 34px !important; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shell > header, #topnav, article.course { transition: none; }
+}
+.expand-mark { color: var(--ink-soft); }

@@ -1,6 +1,6 @@
 /* Service worker de Enlace: permite instalar la app en el celular y abrirla sin conexión con la última versión vista.
  * NUNCA guarda en caché /api, /auth ni archivos de alumnos: esos datos siempre vienen del servidor. */
-const CACHE = 'enlace-v1';
+const CACHE = 'enlace-v2'; // v2 (12.37): logotipo e íconos nuevos; borra los guardados de la v1
 const PRIVATE = /^\/(api|auth|salud)(\/|$)/;
 
 self.addEventListener('install', (event) => {
