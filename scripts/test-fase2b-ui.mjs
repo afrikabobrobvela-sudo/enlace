@@ -136,6 +136,7 @@ check(categoryCell.includes('manual-grade-tag') && categoryCell.includes('value=
 run("current.records.pop()");
 run(`section = 'grades'; gradeTab = 'entry'; renderGrades();`);
 page = run("$('#main').innerHTML");
+check(run(`(() => { const n = gradebookStudents().map((m) => m.name); return n.length > 1 && n.join('|') === [...n].sort((a, b) => a.localeCompare(b, 'es', { sensitivity: 'base' })).join('|'); })()`), 'Libro de calificaciones en orden alfabético');
 check(page.includes('<th class="final-col">Calificación final<div class="muted">Promedio ponderado de los rubros</div></th>') && page.includes('Exámenes<div class="muted">50 %</div>'), 'Columnas de final y de categorías');
 check((page.match(/class="category-grade-input"/g) || []).length === 6, 'El libro completo muestra una casilla directa por alumno en cada rubro editable');
 check(page.includes('<small class="gb-task-placement">Exámenes</small>Examen') && page.includes('<small class="gb-task-placement">Prácticas</small>Práctica'), 'Cada actividad muestra arriba el rubro o parcial al que pertenece');
