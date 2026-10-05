@@ -15,7 +15,7 @@ const DB_ID = '0f6b1c2d-3e4f-4a5b-8c7d-9e0f1a2b3c4d';
 
 // ---- Revisión de wrangler.toml ----
 assert.equal(configProblems(TOML).length, 2, 'El wrangler.toml del ZIP no se puede publicar');
-const listo = TOML.replace('PEGA_AQUI_EL_ID_DE_TU_BASE', DB_ID).replaceAll('AULA_OWNER_EMAIL = "tu-correo@gmail.com"', 'AULA_OWNER_EMAIL = "rodrigo@correo.buap.mx"');
+const listo = TOML.replace('PEGA_AQUI_EL_ID_DE_TU_BASE', DB_ID).replaceAll('AULA_OWNER_EMAIL = "tu-correo@gmail.com"', 'AULA_OWNER_EMAIL = "titular@correo.buap.mx"');
 assert.deepEqual(configProblems(listo), []);
 // El entorno de pruebas se revisa por separado: su base sigue con el marcador.
 assert.equal(configProblems(listo, { testing: true }).length, 1);
@@ -87,14 +87,14 @@ function configurar(dir, answers, users) {
 }
 
 // Primera vez: escribe mal su correo; como nunca entró a Enlace, se le advierte y lo corrige.
-const primera = configurar(freshFolder(), ['rodrigo@gmail.con', 'no', 'rodrigo@correo.buap.mx', 'https://enlace.enlace-academia.workers.dev'], ['rodrigo@correo.buap.mx', 'ana@alumno.buap.mx']);
+const primera = configurar(freshFolder(), ['titular@gmail.con', 'no', 'titular@correo.buap.mx', 'https://enlace.enlace-academia.workers.dev'], ['titular@correo.buap.mx', 'ana@alumno.buap.mx']);
 assert.equal(primera.status, 0, primera.stdout + primera.stderr);
-assert.match(primera.stdout, /rodrigo@gmail\.con nunca ha entrado a Enlace/);
+assert.match(primera.stdout, /titular@gmail\.con nunca ha entrado a Enlace/);
 assert.deepEqual(configProblems(primera.deployed), [], 'Se publicó con la base y el correo reales');
-assert.match(primera.deployed, /AULA_OWNER_EMAIL = "rodrigo@correo\.buap\.mx"/);
+assert.match(primera.deployed, /AULA_OWNER_EMAIL = "titular@correo\.buap\.mx"/);
 assert.deepEqual(JSON.parse(readFileSync(join(memoryDir, 'configuracion.json'), 'utf8')), {
   databaseId: DB_ID,
-  owner: 'rodrigo@correo.buap.mx',
+  owner: 'titular@correo.buap.mx',
   url: 'https://enlace.enlace-academia.workers.dev',
   // La dirección que llevan los botones de los correos de avisos (se guarda como secreto ENLACE_URL).
   mailUrl: 'https://enlace.enlace-academia.workers.dev',
@@ -103,23 +103,23 @@ assert.match(primera.calls, /secret put ENLACE_URL/);
 checks += 6;
 
 // Versión nueva descomprimida en otra carpeta: no pregunta nada y publica con los mismos datos.
-const nueva = configurar(freshFolder(), [], ['rodrigo@correo.buap.mx']);
+const nueva = configurar(freshFolder(), [], ['titular@correo.buap.mx']);
 assert.equal(nueva.status, 0, nueva.stdout + nueva.stderr);
-assert.match(nueva.stdout, /Se usa el correo de la vez anterior: rodrigo@correo\.buap\.mx/);
-assert.match(nueva.deployed, /AULA_OWNER_EMAIL = "rodrigo@correo\.buap\.mx"/);
+assert.match(nueva.stdout, /Se usa el correo de la vez anterior: titular@correo\.buap\.mx/);
+assert.match(nueva.deployed, /AULA_OWNER_EMAIL = "titular@correo\.buap\.mx"/);
 assert.match(nueva.deployed, new RegExp(`database_id = "${DB_ID}"`));
 checks += 4;
 
 // Sin memoria y con un correo que nunca entró: si confirma, se respeta su decisión (por ejemplo, otra cuenta).
 writeFileSync(join(memoryDir, 'configuracion.json'), '{}');
-const confirmado = configurar(freshFolder(), ['nueva@correo.buap.mx', 'sí', 'https://enlace.enlace-academia.workers.dev'], ['rodrigo@correo.buap.mx']);
+const confirmado = configurar(freshFolder(), ['nueva@correo.buap.mx', 'sí', 'https://enlace.enlace-academia.workers.dev'], ['titular@correo.buap.mx']);
 assert.equal(confirmado.status, 0, confirmado.stdout + confirmado.stderr);
 assert.match(confirmado.deployed, /AULA_OWNER_EMAIL = "nueva@correo\.buap\.mx"/);
 checks += 2;
 
 // Una respuesta con comillas no llega a la consulta de la base.
 writeFileSync(join(memoryDir, 'configuracion.json'), '{}');
-const comillas = configurar(freshFolder(), ["x'@y.mx"], ['rodrigo@correo.buap.mx']);
+const comillas = configurar(freshFolder(), ["x'@y.mx"], ['titular@correo.buap.mx']);
 assert.notEqual(comillas.status, 0);
 assert(!comillas.calls.includes('d1 execute'));
 assert.equal(comillas.deployed, null);

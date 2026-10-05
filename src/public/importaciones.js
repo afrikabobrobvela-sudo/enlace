@@ -1,6 +1,6 @@
 /* Importar pase de lista y calificaciones de actividades (12.24) desde Excel (.xlsx), CSV o texto pegado de Excel.
- * Se reconoce a cada alumno por matrícula, correo o nombre (en cualquier orden: «Aguilar Becerra, Federico» es
- * «Federico Aguilar Becerra»). Antes de guardar se muestra qué se entendió. Lee los archivos con oficina.js. */
+ * Se reconoce a cada alumno por matrícula, correo o nombre (en cualquier orden: «Aguado Beltrán, Fabián» es
+ * «Fabián Aguado Beltrán»). Antes de guardar se muestra qué se entendió. Lee los archivos con oficina.js. */
 
 const importNormal = (s) =>
   String(s ?? '')
