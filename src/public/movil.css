@@ -464,7 +464,7 @@ dialog.sheet::backdrop { background: rgba(12, 28, 42, 0.45); }
   .att-grid .sticky-name > .muted { margin-left: 36px; font-size: 0.72rem; }
   .gradebook .sticky-name { width: 44vw; min-width: 0 !important; max-width: 44vw; }
   .gradebook .sticky-name .person { align-items: flex-start; }
-  .gradebook .sticky-name .person > span:last-child { font-size: 0.85rem; overflow-wrap: anywhere; }
+  .gradebook .sticky-name .person > span:last-child { font-size: 0.85rem; overflow-wrap: break-word; hyphens: auto; } /* sin cortar nombres a media palabra */
 
   /* Diseño 12.35: el índice de unidades es una fila que se desliza, para que el contenido se vea desde el inicio. */
   .content-layout:not(.has-unit) .content-tree { display: flex !important; gap: 8px; overflow-x: auto; max-height: none !important; padding: 10px !important; scroll-snap-type: x proximity; scrollbar-width: thin; }

@@ -1412,3 +1412,12 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 3px
 .profile-square { background: linear-gradient(135deg, var(--brand), #0a7383); color: #fff; }
 /* Grises de capas viejas que no llegaban a 4.5:1. */
 .pending-message, .course-content p, .empty, .course-picker-panel small { color: var(--ink-faint); }
+
+/* Libro de calificaciones 12.36: más alumnos a la vista (alto de la ventana, filas compactas, encabezado fijo). */
+.gradebook { max-height: max(320px, calc(100dvh - 190px)); }
+.gradebook thead th { position: sticky; top: 0; z-index: 2; background: #f6f9fc; }
+.gradebook thead .sticky-name { z-index: 3; }
+.gradebook td { min-width: 112px; padding-block: 8px; }
+.gradebook .sticky-name { min-width: 230px; }
+.gradebook th .muted { font-weight: 400; text-transform: none; letter-spacing: 0; }
+.gradebook thead th { padding-block: 10px; vertical-align: bottom; }
