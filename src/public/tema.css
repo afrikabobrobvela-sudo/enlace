@@ -1399,3 +1399,6 @@ article.course .course-cover.has-cover .course-letter { opacity: 0; }
 .quiz-result.is-new { scroll-margin-top: 140px; }
 .quiz-result.is-new:focus { outline: 3px solid var(--brand); outline-offset: 3px; }
 @media (max-width: 720px) { .quiz-result.is-new { scroll-margin-top: 72px; } }
+/* Actividades del alumno 12.36: por entregar (acento) y vencidas (aviso, sin usar el rojo de error). */
+.status-pill.is-due { background: #e6f4f7; color: #075766; border-color: #b9dfe7; }
+.status-pill.is-late { background: #fff4e5; color: #7a4100; border-color: #f3d3a6; }

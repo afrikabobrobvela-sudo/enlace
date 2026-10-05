@@ -101,11 +101,28 @@ function filterGroups() {
   $('#groupCount').textContent = count + ' grupos';
   $('#noGroupResults').hidden = count > 0 || !records('group').length;
 }
+/** Estado de una actividad para el alumno (12.36): entregada, por entregar, vencida o calificada sin entrega. */
+function studentTaskState(t, mine) {
+  if (t.data.forum) return { order: 3, html: '<span class="status-pill">Participación en foro</span>' };
+  if (mine && !mine.data.manual && mine.data.submitted) return { order: 2, html: '<span class="status-pill">Entregada</span>' };
+  if (mine?.data.grade != null) return { order: 2, html: '<span class="status-pill">Calificada sin entrega en línea</span>' };
+  const due = Date.parse(dueFor(t, myMember()?.id) || '');
+  if (!Number.isFinite(due)) return { order: 0, due: Infinity, html: '<span class="status-pill draft">Por entregar</span>' };
+  if (due < Date.now()) return { order: 1, due: -due, html: `<span class="status-pill is-late">Venció el ${esc(fmt(new Date(due).toISOString()))}</span>` };
+  return { order: 0, due, html: `<span class="status-pill is-due">Por entregar · ${esc(typeof relativeDue === 'function' ? relativeDue(new Date(due).toISOString()) : 'vence ' + fmt(new Date(due).toISOString()))}</span>` };
+}
+
 function workspaceTasks() {
-  const ts = records('task');
+  let ts = records('task');
+  if (!teaches()) {
+    // Lo próximo primero (12.36): por entregar (la más cercana arriba), vencidas (la más reciente arriba), entregadas.
+    const subs = records('submission');
+    const stateOf = new Map(ts.map((t) => [t.id, studentTaskState(t, subs.find((s) => s.data.task === t.id && s.author === viewerKey()))]));
+    ts = [...ts].sort((a, b) => stateOf.get(a.id).order - stateOf.get(b.id).order || (stateOf.get(a.id).due ?? 0) - (stateOf.get(b.id).due ?? 0));
+  }
   $('#main').innerHTML = `<div class="page-heading"><div><p class="workspace-eyebrow">ENSEÑANZA Y EVALUACIÓN</p><h1>Actividades</h1></div>${teaches() ? button('＋ Nueva actividad', 'new-task') : ''}</div><div class="workspace-filterbar"><input type="search" data-task-search placeholder="Buscar actividades…" aria-label="Buscar actividades"><label class="filter-control">Estado<select data-task-filter><option value="all">Todas</option>${teaches() ? '<option value="visible">Visibles para alumnos</option><option value="draft">Borradores</option><option value="pending">Por calificar</option>' : '<option value="pending">Sin entregar</option><option value="done">Entregadas</option>'}</select></label><span class="muted" id="taskCount">${ts.length} actividades</span></div><div class="table-wrap"><table><caption class="sr-only">Actividades, entregas y calificaciones</caption><thead><tr><th scope="col">Actividad y disponibilidad</th><th scope="col">${teaches() ? 'Entregas' : 'Estado'}</th><th scope="col">Evaluación</th>${teaches() ? '<th scope="col">Acciones</th>' : ''}</tr></thead><tbody>${ts.map(t => {
     const ss = records('submission').filter(s => s.data.task === t.id), mine = ss.find(s => s.author === viewerKey()), sent = ss.filter(s => !s.data.manual), pending = sent.filter(s => s.data.grade == null).length;
-    return `<tr data-task-row data-visibility="${t.data.visible === false ? 'draft' : 'visible'}" data-pending="${teaches() ? pending > 0 : !t.data.forum && (!mine || mine.data.manual)}" data-done="${!!mine && !mine.data.manual}"><td>${button(esc(t.data.title), 'task', t.id, 'assignment-title')}${sectionTag(t)}<p class="assignment-date">Fecha límite: ${fmt(t.data.due)}</p><div class="task-meta">${teaches() ? visibilityToggle('task', t) : ''}${t.data.fileIds?.length ? '<span>' + t.data.fileIds.length + ' archivos del docente</span>' : ''}</div></td><td>${teaches() ? button(sent.length + (sent.length === 1 ? ' entrega' : ' entregas'), 'task', t.id, 'table-link') : t.data.forum ? '<span class="status-pill">Participación en foro</span>' : `<span class="status-pill ${mine && !mine.data.manual ? '' : 'draft'}">${mine && !mine.data.manual ? 'Entregada' : 'Sin entrega'}</span>`}</td><td>${teaches() ? `<span class="cell-pair"><strong>${ss.filter(s => s.data.grade != null).length}</strong> calificadas</span>${pending ? `<p class="pending-grade">${pending} por calificar</p>` : ''}` : mine?.data.grade == null ? 'Pendiente' : mine.data.grade + ' / 10'}</td>${teaches() ? `<td><div class="row-actions vertical">${button('Editar actividad', 'edit-task', t.id, 'text-btn')}${button('Adjuntar material', 'task-files', t.id, 'text-btn')}</div></td>` : ''}</tr>`;
+    return `<tr data-task-row data-visibility="${t.data.visible === false ? 'draft' : 'visible'}" data-pending="${teaches() ? pending > 0 : !t.data.forum && (!mine || mine.data.manual)}" data-done="${!!mine && !mine.data.manual}"><td>${button(esc(t.data.title), 'task', t.id, 'assignment-title')}${sectionTag(t)}<p class="assignment-date">Fecha límite: ${fmt(t.data.due)}</p><div class="task-meta">${teaches() ? visibilityToggle('task', t) : ''}${t.data.fileIds?.length ? '<span>' + t.data.fileIds.length + ' archivos del docente</span>' : ''}</div></td><td>${teaches() ? button(sent.length + (sent.length === 1 ? ' entrega' : ' entregas'), 'task', t.id, 'table-link') : studentTaskState(t, mine).html}</td><td>${teaches() ? `<span class="cell-pair"><strong>${ss.filter(s => s.data.grade != null).length}</strong> calificadas</span>${pending ? `<p class="pending-grade">${pending} por calificar</p>` : ''}` : mine?.data.grade == null ? (t.data.forum || mine?.data.submitted ? 'Sin calificar' : '—') : mine.data.grade + ' / 10'}</td>${teaches() ? `<td><div class="row-actions vertical">${button('Editar actividad', 'edit-task', t.id, 'text-btn')}${button('Adjuntar material', 'task-files', t.id, 'text-btn')}</div></td>` : ''}</tr>`;
   }).join('') || '<tr><td colspan="4" class="empty">No hay actividades publicadas.</td></tr>'}</tbody></table></div><p id="noTaskResults" class="empty" hidden>No hay actividades que coincidan con los filtros.</p>`;
 }
 function filterTasks() {

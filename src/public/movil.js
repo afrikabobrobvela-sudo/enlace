@@ -59,15 +59,27 @@ function activeSection() {
 }
 
 /** Alumno: actividades visibles sin entregar que siguen abiertas. Docente: entregas por calificar. */
+/**
+ * Actividades por entregar del alumno (12.36): la misma regla que «Por entregar» del inicio (dashboard.js): visibles,
+ * sin foro, ya disponibles, que vencen entre hace 7 días y dentro de 14, sin entrega ni calificación.
+ */
+function studentPendingTasks() {
+  const subs = records('submission');
+  const member = myMember()?.id;
+  const now = Date.now();
+  return records('task').filter((t) => {
+    if (t.data.forum || t.data.visible === false) return false;
+    const due = Date.parse(dueFor(t, member) || '');
+    if (!Number.isFinite(due) || due < now - 7 * 86_400_000 || due > now + 14 * 86_400_000) return false;
+    if (t.data.start && Date.parse(t.data.start) > now) return false;
+    return !subs.some((s) => s.data.task === t.id && (s.data.member === member || s.author === viewerKey()) && ((s.data.submitted && !s.data.manual) || s.data.grade != null));
+  });
+}
+
 function tasksBadge() {
   const subs = records('submission');
   if (teaches()) return subs.filter((s) => !s.data.manual && s.data.submitted && (s.data.grade === null || s.data.grade === undefined)).length;
-  const mine = myMember()?.id;
-  const now = Date.now();
-  return records('task').filter((t) => {
-    if (t.data.end && Date.parse(t.data.end) < now) return false;
-    return !subs.some((s) => s.data.task === t.id && !s.data.manual && (s.data.member === mine || s.author === viewerKey()));
-  }).length;
+  return studentPendingTasks().length;
 }
 
 function renderBottomNav() {
