@@ -65,7 +65,7 @@ function renderLogin(methods = { google: true, email: false }) {
     <div class="login-layout">
     <div class="login-brand">
       <div>
-        <svg class="brand-mark" viewBox="0 0 40 40" aria-hidden="true"><rect width="40" height="40" rx="10" fill="#ffffff" fill-opacity=".14"/><ellipse cx="20" cy="20" rx="14" ry="5.5" fill="none" stroke="#7fe3f0" stroke-width="2" transform="rotate(-30 20 20)"/><ellipse cx="20" cy="20" rx="14" ry="5.5" fill="none" stroke="#ffffff" stroke-width="2" transform="rotate(30 20 20)"/><circle cx="20" cy="20" r="3.4" fill="#7fe3f0"/></svg>
+        <svg class="brand-mark" viewBox="0 0 40 40" aria-hidden="true"><rect width="40" height="40" rx="7" fill="#ffffff"/><rect x="9" y="8" width="23" height="6.5" rx="1.2" fill="#1f3fd1"/><rect x="9" y="16.75" width="15" height="6.5" rx="1.2" fill="#c0183f"/><rect x="9" y="25.5" width="23" height="6.5" rx="1.2" fill="#0a6e60"/></svg>
         <h2>Tu aula virtual</h2>
         <p>Para docentes y alumnos de cualquier academia: materiales, actividades, calificaciones y asistencia en un solo lugar.</p>
       </div>

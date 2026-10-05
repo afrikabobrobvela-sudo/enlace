@@ -4,13 +4,7 @@
  * courseTheme() a partir del id del curso, y cada uno lleva un patrón geométrico (cuadrícula, ondas u órbitas).
  */
 
-@font-face {
-  font-family: 'Inter';
-  font-style: normal;
-  font-display: swap;
-  font-weight: 100 900;
-  src: url('/vendor/inter-5.3.0/inter-latin-wght-normal.woff2') format('woff2');
-}
+/* La tipografía (Archivo, servida desde vendor/) se declara en coleccion.css (12.37). */
 
 :root {
   --ink: #152536;
@@ -34,7 +28,7 @@
   --pattern-grid: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='28'%3E%3Cpath d='M28 0H0v28' fill='none' stroke='white' stroke-opacity='.13'/%3E%3C/svg%3E");
   --pattern-waves: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='40'%3E%3Cpath d='M0 20c15-18 45-18 60 0s45 18 60 0' fill='none' stroke='white' stroke-opacity='.16' stroke-width='2'/%3E%3C/svg%3E");
   --pattern-orbits: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cg fill='none' stroke='white' stroke-opacity='.15' stroke-width='1.5'%3E%3Cellipse cx='80' cy='80' rx='70' ry='24'/%3E%3Cellipse cx='80' cy='80' rx='70' ry='24' transform='rotate(60 80 80)'/%3E%3Cellipse cx='80' cy='80' rx='70' ry='24' transform='rotate(120 80 80)'/%3E%3C/g%3E%3Ccircle cx='80' cy='80' r='5' fill='white' fill-opacity='.25'/%3E%3C/svg%3E");
-  font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-family: 'Archivo', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
   color: var(--ink);
   background: var(--canvas);
 }
@@ -68,14 +62,14 @@ a { color: var(--link); }
   display: inline-flex;
   align-items: center;
   gap: 10px;
-  font: 800 24px/1 'Inter', sans-serif;
+  font: 800 24px/1 'Archivo', sans-serif;
   letter-spacing: -0.02em;
   color: var(--brand);
 }
 .wordmark .brand-mark { width: 34px; height: 34px; flex: none; }
 .wordmark .brand-text { display: block; text-align: left; font: inherit; letter-spacing: inherit; color: inherit; margin: 0; }
 .wordmark .brand-text span {
-  font: 500 11.5px/1.2 'Inter', sans-serif;
+  font: 500 11.5px/1.2 'Archivo', sans-serif;
   letter-spacing: 0.02em;
   color: var(--ink-faint);
   margin-top: 3px;
@@ -425,7 +419,7 @@ dialog:not(.viewer)::backdrop { background: rgba(12, 28, 42, 0.45); backdrop-fil
   flex-direction: column;
   justify-content: center;
 }
-.login-panel h1 { font-family: 'Inter', sans-serif; font-weight: 800; font-size: 30px; color: var(--ink); letter-spacing: -0.02em; }
+.login-panel h1 { font-family: 'Archivo', sans-serif; font-weight: 800; font-size: 30px; color: var(--ink); letter-spacing: -0.02em; }
 .login-panel .login-lead { color: var(--ink-soft); }
 
 /* ---- Celular ------------------------------------------------------------------------------------- */

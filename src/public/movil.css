@@ -43,7 +43,7 @@ dialog.sheet::backdrop { background: rgba(12, 28, 42, 0.45); }
   border-radius: 14px;
   background: var(--canvas);
   color: var(--ink);
-  font: 600 13.5px/1.2 'Inter', sans-serif;
+  font: 600 13.5px/1.2 'Archivo', sans-serif;
   text-align: center;
 }
 .sheet-item svg { color: var(--brand-2); }
@@ -60,7 +60,7 @@ dialog.sheet::backdrop { background: rgba(12, 28, 42, 0.45); }
   border-radius: 10px;
   background: none;
   color: var(--ink);
-  font: 600 15px 'Inter', sans-serif;
+  font: 600 15px 'Archivo', sans-serif;
   text-align: left;
 }
 .sheet-link svg { color: var(--ink-soft); }
@@ -134,7 +134,7 @@ dialog.sheet::backdrop { background: rgba(12, 28, 42, 0.45); }
     border-radius: 12px;
     background: none;
     color: var(--ink-soft);
-    font: 600 11.5px/1.1 'Inter', sans-serif;
+    font: 600 11.5px/1.1 'Archivo', sans-serif;
     letter-spacing: -0.01em;
   }
   .bottom-nav button span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: inherit; }
@@ -162,7 +162,7 @@ dialog.sheet::backdrop { background: rgba(12, 28, 42, 0.45); }
     border-radius: 999px;
     background: #b42318; /* blanco sobre este rojo: 6.5:1 (antes 4.3:1) */
     color: #fff;
-    font: 700 11px/18px 'Inter', sans-serif;
+    font: 700 11px/18px 'Archivo', sans-serif;
     text-align: center;
     box-shadow: 0 0 0 2px #fff;
   }
