@@ -477,4 +477,9 @@ dialog.sheet::backdrop { background: rgba(12, 28, 42, 0.45); }
   #crumb.course-heading { display: block; } /* una regla vieja lo hace flex y ahí los puntos suspensivos no aplican */
   /* Enlaces y botones de texto: al menos 24 px de alto para tocarlos con el dedo. */
   footer a, .crumbs button, .table-link, .assignment-title, .material-entry-body a, .text-btn { display: inline-block; min-height: 24px; padding-block: 3px; }
+
+  /* Examen 12.36: encabezado del intento fijo arriba (bajo la barra; sin barra durante el examen). */
+  .quiz-attempt-head { position: sticky !important; top: 60px !important; z-index: 6; flex-wrap: wrap; gap: 2px 12px; box-shadow: 0 2px 6px rgb(16 37 54 / 0.08); }
+  body.exam-running .quiz-attempt-head { top: 0 !important; }
+  .quiz-attempt #quizSubmit, [data-quiz-start] { width: 100%; min-height: 48px; }
 }

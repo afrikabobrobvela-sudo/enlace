@@ -609,7 +609,7 @@ article.course.is-archived { opacity: 0.92; }
 .quiz-detail .ok { color: var(--success); }
 .quiz-detail .bad { color: #b42318; }
 .quiz-result.is-new { border-left: 4px solid var(--accent); }
-@media (max-width: 700px) { .quiz-var { grid-template-columns: 1fr 1fr; } .quiz-attempt-head { position: static; } }
+@media (max-width: 700px) { .quiz-var { grid-template-columns: 1fr 1fr; } }
 /* Las reglas antiguas dan width: 100% a todo input dentro de formularios: aquí se ajustan. */
 .quiz-option input[type='radio'] { flex: none; width: 18px !important; min-width: 18px; margin: 0; }
 .quiz-option input[data-o] { flex: 1 1 auto; width: auto !important; min-width: 0; }
@@ -1392,3 +1392,10 @@ article.course .course-cover.has-cover .course-letter { opacity: 0; }
 .workspace-eyebrow { color: #0a7383; }
 /* Pastillas y notas pequeñas sobre fondos grises: el texto en --ink-soft para pasar de 4.5:1. */
 .count-pill, .status-pill.draft, .course-guide summary small { color: var(--ink-soft); }
+
+/* Examen en el celular 12.36: el encabezado del intento (reloj, contestadas) siempre a la vista. */
+.quiz-answered { font-size: 0.9rem; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+.quiz-clock.is-warn { color: #8a5300; }
+.quiz-result.is-new { scroll-margin-top: 140px; }
+.quiz-result.is-new:focus { outline: 3px solid var(--brand); outline-offset: 3px; }
+@media (max-width: 720px) { .quiz-result.is-new { scroll-margin-top: 72px; } }
