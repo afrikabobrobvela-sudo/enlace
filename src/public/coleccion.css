@@ -76,7 +76,7 @@ h3 { font-stretch: 90%; font-weight: 700; }
 /* En los anchos condensados el espacio de Archivo es muy angosto: se abre un poco entre palabras. */
 h1, h2, h3, .wordmark, .course-heading, .course-title-link, th { word-spacing: 0.08em; }
 /* El título de cada pantalla lleva el filete de tinta del tomo. */
-#main h1 { padding-bottom: 10px; border-bottom: 3px solid var(--tomo); }
+#main h1 { padding-bottom: 10px; border-bottom: 2px solid var(--tomo); }
 #main .quiz-question h1, #main .empty h1 { border: 0; padding: 0; }
 /* Sin antetítulos sobre los títulos: el título habla solo. */
 .workspace-eyebrow { display: none !important; }
@@ -194,7 +194,7 @@ th { font-family: var(--condensada); font-stretch: 85%; font-weight: 800; letter
 .notice { border-left: 0; border-radius: var(--radius-sm); background: var(--tomo-papel); }
 .notice h3 { color: var(--tomo-lomo); }
 dialog#modal { border-radius: var(--radius); border: 0; box-shadow: var(--shadow-lg); }
-dialog#modal .dialog-head { border-bottom: 3px solid var(--tomo); }
+dialog#modal .dialog-head { border-bottom: 2px solid var(--tomo); }
 dialog#modal .dialog-head h2 { font-size: 24px; font-weight: 800; font-stretch: 78%; }
 #toast { background: var(--tinta); color: #fff; border-radius: var(--radius-sm); }
 footer { background: transparent; color: var(--ink-faint); }
@@ -358,3 +358,25 @@ var.qvar { background: var(--tomo-papel); color: var(--tomo-lomo); }
   .shell > header, #topnav, article.course { transition: none; }
 }
 .expand-mark { color: var(--ink-soft); }
+
+/* ---- Ajustes de la revisión final (12.37) ----------------------------------------------------------- */
+/* Papel blanco frío; los paneles se separan por filete y una sombra corta con desplazamiento, no difusa. */
+:root { --canvas: #f6f8fa; }
+.panel, .dash-card, .home-dashboard > section, .workspace-filterbar, .material-entry, .table-wrap, .login-layout, .module-card {
+  box-shadow: 0 2px 0 rgba(17, 26, 46, 0.1) !important;
+}
+article.course { box-shadow: 0 2px 0 rgba(17, 26, 46, 0.14); }
+article.course:hover { box-shadow: 0 3px 0 var(--tomo-lomo); }
+/* La portada: el título siempre a la izquierda, en la misma línea base. */
+article.course .course-cover h2 { width: 100%; text-align: left; margin-top: auto; }
+article.course .course-card-footer .text-btn { color: var(--tomo) !important; }
+/* Índice de unidades: el elemento activo es un bloque de la tinta, sin franja lateral. */
+.content-tree .tree-unit button.active, .toc-all.selected { background: var(--tomo) !important; color: #fff !important; box-shadow: none !important; border-color: var(--tomo) !important; }
+.content-tree .tree-unit button.active small, .toc-all.selected span { color: #fff !important; background: transparent; }
+/* Libro: sin rellenos pastel; el estado va en la cifra (tinta del tomo o rojo de alerta). */
+.gradebook td, .gradebook .grade-pass, .gradebook .grade-low { background: transparent !important; }
+.gradebook .grade-pass { color: var(--tinta); font-weight: 700; } /* nunca en la tinta: con granza parecería reprobado */
+.gradebook .grade-low { color: #b42318; font-weight: 800; }
+.gradebook td { border-right: 1px solid var(--line); }
+/* Sin sesión no hay «Mis cursos» que mostrar en la barra. */
+body.signed-out #crumb { visibility: hidden; }
