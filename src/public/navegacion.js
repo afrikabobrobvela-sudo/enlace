@@ -58,7 +58,23 @@ function syncRoute() {
   const route = routeNow();
   const known = history.state?.route;
   if (routeApplying || !known) history.replaceState({ route }, '', routeUrl(route));
-  else if (!sameRoute(route, known)) history.pushState({ route }, '', routeUrl(route));
+  else if (!sameRoute(route, known)) {
+    history.pushState({ route }, '', routeUrl(route));
+    focusScreenTitle();
+  }
+}
+
+/**
+ * Pantalla nueva: el foco pasa a su título, así el lector de pantalla anuncia dónde está la persona (antes toda la
+ * zona principal se anunciaba en cada cambio). No se mueve si alguien está escribiendo o hay una ventana abierta.
+ */
+function focusScreenTitle() {
+  const active = document.activeElement;
+  if (active?.closest?.('dialog[open]') || active?.matches?.('input, textarea, select, [contenteditable]')) return;
+  const title = document.querySelector('#main h1');
+  if (!title) return;
+  if (!title.hasAttribute('tabindex')) title.setAttribute('tabindex', '-1');
+  title.focus({ preventScroll: true });
 }
 
 /** ¿Se puede salir de la pantalla actual? (cambios sin guardar o examen en curso). */

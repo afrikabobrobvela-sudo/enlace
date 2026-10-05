@@ -1,9 +1,21 @@
-# Enlace · versión 12.40
+# Enlace · versión 12.42
 
 Plataforma académica independiente para docentes y alumnos de cualquier academia (nació en la Academia de Física de la BUAP), con interfaz inspirada en Brightspace.
 No es el código de D2L Brightspace ni una plataforma oficial de la BUAP.
 
 Esta versión se despliega en **tu propia cuenta de Cloudflare** (Workers + D1 + R2, plan gratuito) y ya no depende de ChatGPT Sites.
+
+## Novedades de la versión 12.42
+
+- El libro de calificaciones y su exportación a Excel muestran a los alumnos en orden alfabético por nombre (sin distinguir acentos ni mayúsculas). Las demás listas no cambian.
+
+## Novedades de la versión 12.41 (revisión con ui-ux-pro-max)
+
+- **Botones y casillas más fáciles de tocar en el celular.** Los controles miden ahora al menos 44 px: botones de texto, casillas del libro, campana, perfil, asistencia, menús y fechas. En la computadora, ningún enlace o botón mide menos de 24 px de alto. Los controles chicos pasaron de unos 300 a 59, y los que quedan ya tienen 44 px de alto, solo son angostos (por ejemplo, las fechas de asistencia).
+- **Textos de al menos 12 px.** Antes medían 11 px los contadores, las etiquetas de estado («sin revisar», «tardía», «borrador»), el pie de página y los nombres de la barra inferior.
+- **Lector de pantalla:** ya no se vuelve a leer toda la pantalla con cada cambio. Al pasar a otra pantalla, el foco va a su título.
+- **Contenido en el celular (docente):** el título del material, «Completado por…» y «Visible para alumnos / Editar» se encimaban. Ahora las acciones van en su propia fila.
+- Sin migraciones.
 
 ## Novedades de la versión 12.40
 

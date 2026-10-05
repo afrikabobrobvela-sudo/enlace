@@ -304,8 +304,13 @@ document.addEventListener(
   true,
 );
 
+/** Alumnos del libro de calificaciones (y de su exportación) en orden alfabético (12.42). */
+function gradebookStudents() {
+  return studentsInView().sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'es', { sensitivity: 'base' }));
+}
+
 function renderGrades() {
-  const ts = orderedTasks(), members = teaches() ? studentsInView() : [myMember()].filter(Boolean), w = records('weights')[0];
+  const ts = orderedTasks(), members = teaches() ? gradebookStudents() : [myMember()].filter(Boolean), w = records('weights')[0];
   // Columnas: con el filtro de secciones, solo las actividades que les tocan a esos alumnos.
   const cols = teaches() ? ts.filter(t => !t.data.sections?.length || members.some(m => itemApplies(t, m))) : ts;
   const grading = gradingSettings(), cats = grading.scheme === 'categories' ? grading.categories : [];
@@ -812,7 +817,7 @@ function exportGrades() {
       s = "'" + s;
     return '"' + s.replace(/"/g, '""') + '"';
   };
-  const rows = [['Matrícula', 'Alumno', ...(courseSections().length ? ['Sección'] : []), 'Promedio parcial', 'Calificación final', ...(cats.length ? grading.terms || [] : []).map(t => `${t.name} (${t.weight} %)`), ...cats.map(c => `${categoryLabel(c, grading)} (${c.weight} %)`), ...ts.map(t => t.data.title)], ...studentsInView().map(m => { const result = studentGrade(m.id); return [m.matricula, m.name, ...(courseSections().length ? [sectionName(m.section)] : []), result.value?.toFixed(2) || '', courseFinalGrade(studentGrade(m.id, { final: true }), grading.final)?.value.toFixed(0) ?? '', ...(result.terms || []).map(t => finalGrade(t.value, grading.final)?.value.toFixed(0) ?? ''), ...result.categories.map(c => c.value === null ? '' : c.value.toFixed(2)), ...ts.map(t => itemApplies(t, m) ? gradeOf(m.id, t.id)?.data.grade ?? '' : 'n/a')]; })];
+  const rows = [['Matrícula', 'Alumno', ...(courseSections().length ? ['Sección'] : []), 'Promedio parcial', 'Calificación final', ...(cats.length ? grading.terms || [] : []).map(t => `${t.name} (${t.weight} %)`), ...cats.map(c => `${categoryLabel(c, grading)} (${c.weight} %)`), ...ts.map(t => t.data.title)], ...gradebookStudents().map(m => { const result = studentGrade(m.id); return [m.matricula, m.name, ...(courseSections().length ? [sectionName(m.section)] : []), result.value?.toFixed(2) || '', courseFinalGrade(studentGrade(m.id, { final: true }), grading.final)?.value.toFixed(0) ?? '', ...(result.terms || []).map(t => finalGrade(t.value, grading.final)?.value.toFixed(0) ?? ''), ...result.categories.map(c => c.value === null ? '' : c.value.toFixed(2)), ...ts.map(t => itemApplies(t, m) ? gradeOf(m.id, t.id)?.data.grade ?? '' : 'n/a')]; })];
   download('calificaciones.csv', '\uFEFF' + rows.map(r => r.map(quote).join(',')).join('\r\n'), 'text/csv;charset=utf-8');
 }
 document.addEventListener('click', async (e) => {
