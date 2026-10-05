@@ -1402,3 +1402,13 @@ article.course .course-cover.has-cover .course-letter { opacity: 0; }
 /* Actividades del alumno 12.36: por entregar (acento) y vencidas (aviso, sin usar el rojo de error). */
 .status-pill.is-due { background: #e6f4f7; color: #075766; border-color: #b9dfe7; }
 .status-pill.is-late { background: #fff4e5; color: #7a4100; border-color: #f3d3a6; }
+
+/* Accesibilidad 12.36 ------------------------------------------------------------------------------------------- */
+/* Anillo de foco sólido (≥ 3:1 sobre blanco y sobre el fondo, WCAG 1.4.11); antes era turquesa translúcido (~1.5:1). */
+button:focus-visible, a:focus-visible, summary:focus-visible, .dt-display:focus-visible, .thread-row:focus-visible,
+input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 3px solid #0a7383; outline-offset: 2px; }
+/* Contador de avisos e iniciales del perfil: blanco sobre turquesa daba 3.2:1; con el tono oscuro del acento, ≥ 5:1. */
+.badge-count { background: #0a7383; color: #fff; }
+.profile-square { background: linear-gradient(135deg, var(--brand), #0a7383); color: #fff; }
+/* Grises de capas viejas que no llegaban a 4.5:1. */
+.pending-message, .course-content p, .empty, .course-picker-panel small { color: var(--ink-faint); }

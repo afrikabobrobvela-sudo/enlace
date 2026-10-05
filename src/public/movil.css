@@ -160,7 +160,7 @@ dialog.sheet::backdrop { background: rgba(12, 28, 42, 0.45); }
     height: 18px;
     padding: 0 5px;
     border-radius: 999px;
-    background: #d64528;
+    background: #b42318; /* blanco sobre este rojo: 6.5:1 (antes 4.3:1) */
     color: #fff;
     font: 700 11px/18px 'Inter', sans-serif;
     text-align: center;
