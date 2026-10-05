@@ -175,6 +175,19 @@ function courseFinalGrade(result, rules) {
   return finalGrade(average, rules);
 }
 
+/** De qué sale la calificación final (encabezado del libro): «Promedio de Parcial 1 y Parcial 2», o con sus pesos si son distintos. */
+function finalGradeHint(settings = gradingSettings()) {
+  const cats = settings.scheme === 'categories' ? settings.categories : [];
+  const terms = cats.length ? settings.terms || [] : [];
+  if (!terms.length) return cats.length ? 'Promedio ponderado de los rubros' : 'Promedio ponderado de las actividades';
+  const names = (list) => (list.length > 1 ? `${list.slice(0, -1).join(', ')} y ${list.at(-1)}` : list[0]);
+  const ids = new Set(terms.map((t) => t.id));
+  const general = cats.filter((c) => !c.term || !ids.has(c.term));
+  const equal = !general.length && terms.every((t) => Number(t.weight) === Number(terms[0].weight));
+  if (equal) return terms.length === 1 ? terms[0].name : `Promedio de ${names(terms.map((t) => t.name))}`;
+  return `Ponderado: ${names([...terms, ...general].map((t) => `${t.name} ${t.weight} %`))}`;
+}
+
 /** Asistencia del alumno en «Mis calificaciones» (12.24). */
 function myAttendanceSummaryHtml(member) {
   const pct = attendancePercentFor(member.id);
