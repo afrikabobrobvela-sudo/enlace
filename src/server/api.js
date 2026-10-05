@@ -414,6 +414,85 @@ async function attemptContext(db, user, body) {
   return { a, quiz };
 }
 
+const STORAGE_RECOUNT_MS = 60 * 60_000;
+
+/**
+ * Bytes guardados en toda la plataforma (12.30). Sumar `aula_files` en cada subida leía una fila por archivo de Enlace
+ * (miles en cada entrega); ahora el total vive en `aula_storage`: cada subida lo aumenta y se vuelve a contar completo
+ * si pasó una hora (corrige lo que se borre por otras vías). El margen hasta el límite de R2 cubre esa hora.
+ */
+async function storageTotal(db) {
+  const row = await one(db, 'SELECT bytes, counted_at FROM aula_storage WHERE id=1');
+  if (row && Date.now() - Date.parse(row.counted_at) < STORAGE_RECOUNT_MS) return row.bytes;
+  const { bytes } = await one(db, 'SELECT coalesce(sum(size),0) AS bytes FROM aula_files');
+  await run(
+    db,
+    'INSERT INTO aula_storage (id,bytes,counted_at) VALUES (1,?,?) ON CONFLICT(id) DO UPDATE SET bytes=excluded.bytes, counted_at=excluded.counted_at',
+    bytes,
+    nowIso(),
+  );
+  return bytes;
+}
+
+/**
+ * Curso de un alumno con un examen abierto que bloquea la plataforma: solo esa evaluación, sus intentos, su inscripción y
+ * las imágenes de las preguntas, con 5 consultas (12.30). Antes se armaba el curso completo (≈14 consultas y cientos de
+ * filas) en cada recarga a media prueba para luego quitar casi todo. Si la evaluación ya no está disponible (oculta,
+ * de otra sección…) devuelve null y se usa el camino normal, que la filtra como siempre.
+ */
+async function examOnlyCourse(db, a, user) {
+  const { quiz: quizId } = user.activeExam;
+  const row = unpack(await one(db, "SELECT * FROM aula_records WHERE id=? AND course=? AND kind='quiz' AND deleted_at IS NULL", quizId, a.course.id));
+  if (!row || !isPublished(row)) return null;
+  let lived;
+  try {
+    lived = await quizForStudent(db, row, user.id);
+  } catch (error) {
+    if (error.status === 403) return null;
+    throw error;
+  }
+  const images = [...new Set(row.data.questions.map((q) => q?.image).filter(Boolean))];
+  const [attemptRows, me, files] = await Promise.all([
+    all(db, 'SELECT * FROM aula_attempts WHERE quiz=? AND user_id=? ORDER BY created', quizId, user.id),
+    one(
+      db,
+      `SELECT m.id, m.user_id, m.name, m.role, m.section, CASE WHEN u.photo IS NOT NULL THEN u.photo_updated END AS photo
+       FROM aula_members m LEFT JOIN aula_users u ON u.id=m.user_id WHERE m.course=? AND m.user_id=? AND m.role='student'`,
+      a.course.id,
+      user.id,
+    ),
+    images.length
+      ? all(db, 'SELECT id,course,owner,scope,name,size,mime,created FROM aula_files WHERE course=? AND id IN (SELECT value FROM json_each(?))', a.course.id, JSON.stringify(images))
+      : [],
+  ]);
+  const attempts = attemptRows.map(attemptRecord).map((r) => studentAttemptView(r, row));
+  // Como en el curso completo: de las preguntas solo llegan las que ya contestó en un intento enviado.
+  const seen = new Set(attempts.flatMap((r) => (r.data.details || []).map((d) => d.index)));
+  const quiz = {
+    ...lived,
+    data: {
+      ...lived.data,
+      questions: publicQuestions(lived.data.questions).map((q, i) => (seen.has(i) ? q : null)),
+      questionCount: questionCount(lived.data),
+      settings: publicSettings(lived.data.settings),
+    },
+  };
+  const { photo, ...member } = me || {};
+  return {
+    course: publicCourse(a.course),
+    canTeach: false,
+    canPreview: false,
+    preview: false,
+    viewing: null,
+    canDelete: false,
+    records: [quiz, ...attempts],
+    members: me ? [{ ...member, ...(photo ? { photo } : {}) }] : [],
+    files,
+    progress: [],
+    examOnly: true,
+  };
+}
+
 // ---- Rutas -------------------------------------------------------------------------------------
 
 const routes = {
@@ -461,9 +540,10 @@ const routes = {
                CASE WHEN ?2 AND (c.owner=?1 OR EXISTS (SELECT 1 FROM aula_members t WHERE t.course=c.id AND t.user_id=?1 AND t.role='teacher'))
                  THEN 1 ELSE 0 END AS can_teach
              FROM aula_courses c
-             WHERE ((?2 AND c.owner=?1)
-                    OR EXISTS (SELECT 1 FROM aula_members m WHERE m.course=c.id AND m.user_id=?1
-                               AND (m.role='student' OR (?2 AND m.role='teacher'))))
+             -- Primero, por índice, solo los cursos propios o con inscripción (12.30: antes se recorrían todos los cursos).
+             WHERE (c.owner=?1 OR c.id IN (SELECT i.course FROM aula_members i WHERE i.user_id=?1))
+               AND ((?2 AND (c.owner=?1 OR EXISTS (SELECT 1 FROM aula_members t WHERE t.course=c.id AND t.user_id=?1 AND t.role='teacher')))
+                    OR (c.student_visible=1 AND EXISTS (SELECT 1 FROM aula_members m WHERE m.course=c.id AND m.user_id=?1 AND m.role='student')))
                AND ${notDeleted}
              ORDER BY c.created DESC`,
             user.id,
@@ -485,7 +565,7 @@ const routes = {
     await run(
       db,
       // El curso queda clasificado con la academia y la unidad de quien lo crea.
-      'INSERT INTO aula_courses (id,owner,name,group_name,intro,created,academy_id,unit_id,period,theme) VALUES (?,?,?,?,?,?,?,?,?,?)',
+      'INSERT INTO aula_courses (id,owner,name,group_name,intro,created,academy_id,unit_id,period,theme,student_visible) VALUES (?,?,?,?,?,?,?,?,?,?,?)',
       id,
       user.id,
       text(body.name, 150),
@@ -496,6 +576,7 @@ const routes = {
       user.unit_id ?? null,
       optionalText(body.period, 60),
       body.theme === undefined ? 0 : validTheme(body.theme),
+      body.studentVisible === false ? 0 : 1,
     );
     return json({ id }, 201);
   },
@@ -503,6 +584,11 @@ const routes = {
   'GET /api/course': async ({ db, user, url }) => {
     const courseId = url.searchParams.get('id');
     const a = await access(db, user, courseId);
+    // Examen abierto que bloquea la plataforma: ruta ligera (12.30), sin armar el curso completo en cada recarga.
+    if (user.activeExam && !a.teach && user.activeExam.course === courseId) {
+      const exam = await examOnlyCourse(db, a, user);
+      if (exam) return json(exam);
+    }
     const { teach, preview, viewer, member: viewing, attemptUser } = await viewAs(db, a, user, url);
     if (viewing) await viewAudit(db, user, courseId, viewing);
     await recordVisit(db, a, user); // ingresos al curso (accesos)
@@ -706,15 +792,24 @@ const routes = {
     requireTeacher(await access(db, user, body.course));
     await run(
       db,
-      'UPDATE aula_courses SET name=?,group_name=?,intro=?,period=?,theme=coalesce(?,theme) WHERE id=?',
+      'UPDATE aula_courses SET name=?,group_name=?,intro=?,period=?,theme=coalesce(?,theme),student_visible=coalesce(?,student_visible) WHERE id=?',
       text(body.name, 150),
       text(body.group, 100),
       optionalText(body.intro, 10000),
       optionalText(body.period, 60),
       body.theme === undefined ? null : validTheme(body.theme),
+      body.studentVisible === undefined ? null : body.studentVisible === false ? 0 : 1,
       body.course,
     );
     return json({ ok: true });
+  },
+
+  // Oculta o vuelve a mostrar el curso completo sin borrar alumnos, contenido ni calificaciones.
+  'POST /api/course/visibility': async ({ db, user, request }) => {
+    const body = await readJson(request);
+    requireTeacher(await access(db, user, body.course));
+    await run(db, 'UPDATE aula_courses SET student_visible=? WHERE id=?', body.visible === false ? 0 : 1, body.course);
+    return json({ visible: body.visible !== false });
   },
 
   // Retirar un curso lo oculta y bloquea el acceso, pero conserva registros y archivos.
@@ -883,6 +978,82 @@ const routes = {
       students,
     );
     return json({ total: byEmail.size, created: byEmail.size - before.n, updated: before.n });
+  },
+
+  // Cursos y secciones de los que el docente puede reutilizar una lista de alumnos.
+  'GET /api/members/sources': async ({ db, user, url }) => {
+    const destination = String(url.searchParams.get('course') ?? '');
+    requireTeacher(await access(db, user, destination));
+    const notDeleted = 'NOT EXISTS (SELECT 1 FROM aula_deleted_courses d WHERE d.course=c.id)';
+    const sources = user.role === 'admin'
+      ? await all(
+          db,
+          `SELECT c.id,c.name,c.group_name,c.period,c.archived_at,c.student_visible,
+                  (SELECT count(*) FROM aula_members m WHERE m.course=c.id AND m.role='student') AS students
+           FROM aula_courses c WHERE c.id<>? AND ${notDeleted} ORDER BY c.name,c.group_name`,
+          destination,
+        )
+      : await all(
+          db,
+          `SELECT c.id,c.name,c.group_name,c.period,c.archived_at,c.student_visible,
+                  (SELECT count(*) FROM aula_members m WHERE m.course=c.id AND m.role='student') AS students
+           FROM aula_courses c WHERE c.id<>?1 AND (c.owner=?2 OR EXISTS (
+             SELECT 1 FROM aula_members t WHERE t.course=c.id AND t.user_id=?2 AND t.role='teacher'))
+             AND ${notDeleted} ORDER BY c.name,c.group_name`,
+          destination,
+          user.id,
+        );
+    const ids = sources.map((c) => c.id);
+    const sections = ids.length
+      ? await all(
+          db,
+          `SELECT s.id,s.course,s.name,s.position,
+                  (SELECT count(*) FROM aula_members m WHERE m.course=s.course AND m.section=s.id AND m.role='student') AS students
+           FROM aula_sections s WHERE s.course IN (SELECT value FROM json_each(?)) ORDER BY s.course,s.position,s.name`,
+          JSON.stringify(ids),
+        )
+      : [];
+    return json(sources.map((c) => ({ ...c, sections: sections.filter((s) => s.course === c.id).map(({ course: _course, ...s }) => s) })));
+  },
+
+  // Reutiliza alumnos de otro curso o de una sola sección. Los correos repetidos se actualizan, no se duplican.
+  'POST /api/members/copy': async ({ db, user, request }) => {
+    const body = await readJson(request);
+    requireTeacher(await access(db, user, body.course));
+    requireTeacher(await access(db, user, body.source));
+    if (body.course === body.source) fail('Elige otro curso como origen.');
+    const sourceSection = await validSection(db, body.source, body.sourceSection);
+    const destinationSection = await validSection(db, body.course, body.destinationSection);
+    const source = await all(
+      db,
+      `SELECT email,name,matricula FROM aula_members
+       WHERE course=?1 AND role='student' AND (?2='' OR section=?2) ORDER BY name`,
+      body.source,
+      sourceSection,
+    );
+    if (!source.length) fail('Ese curso o sección no tiene alumnos para traer.');
+    if (source.length > MAX_BULK_STUDENTS) fail(`Trae como máximo ${MAX_BULK_STUDENTS} alumnos a la vez.`);
+    const students = JSON.stringify(source.map((m) => ({ id: crypto.randomUUID(), ...m, section: destinationSection })));
+    const before = await one(
+      db,
+      "SELECT count(*) AS n FROM aula_members WHERE course=? AND email IN (SELECT json_extract(value,'$.email') FROM json_each(?))",
+      body.course,
+      students,
+    );
+    await run(
+      db,
+      `INSERT INTO aula_members (id,course,email,user_id,name,matricula,role,section)
+       SELECT json_extract(j.value,'$.id'), ?1, json_extract(j.value,'$.email'),
+              (SELECT u.id FROM aula_users u WHERE u.email=json_extract(j.value,'$.email')),
+              json_extract(j.value,'$.name'), json_extract(j.value,'$.matricula'), 'student', json_extract(j.value,'$.section')
+       FROM json_each(?2) j WHERE true
+       ON CONFLICT(course,email) DO UPDATE SET name=excluded.name,matricula=excluded.matricula,role='student',
+         user_id=coalesce(aula_members.user_id,excluded.user_id),
+         section=CASE WHEN excluded.section<>'' THEN excluded.section ELSE aula_members.section END`,
+      body.course,
+      students,
+    );
+    return json({ total: source.length, created: source.length - before.n, updated: before.n });
   },
 
   // Corregir los datos de un alumno inscrito (12.25): nombre, matrícula, correo y sección. Si el correo cambia, la
@@ -1417,7 +1588,7 @@ const routes = {
         // 12.27: las respuestas guardadas vuelven en cualquier evaluación (recargar la página no pierde nada).
         saved, perPage: quiz.data.settings?.perPage || 0,
         exam: exam
-          ? { oneByOne: exam.oneByOne, noBack: exam.noBack, position: start.position, flagged: Boolean(start.flag), lockOnLeave: Boolean(exam.lockOnLeave), lockGrace: exam.lockGrace ?? 0, locked }
+          ? { oneByOne: exam.oneByOne, noBack: exam.noBack, randomOrder: Boolean(quiz.data.settings?.shuffle), position: start.position, flagged: Boolean(start.flag), lockOnLeave: Boolean(exam.lockOnLeave), lockGrace: exam.lockGrace ?? 0, locked, lockPlatform: Boolean(exam.lockPlatform) }
           : null,
       });
     }
@@ -1736,13 +1907,12 @@ const routes = {
     name = text(name, 180).replace(/[\x00-\x1f/\\]/g, '_');
     const declared = Number(request.headers.get('content-length')) || 0;
     if (declared > MAX_UPLOAD_BYTES) fail('El límite por archivo es de 20 MB.', 413);
-    // Una sola consulta: lo que ya subió esta persona en el curso y el total de la plataforma.
-    const used = await one(
-      db,
-      'SELECT (SELECT coalesce(sum(size),0) FROM aula_files WHERE course=? AND owner=?) AS mine, (SELECT coalesce(sum(size),0) FROM aula_files) AS total',
-      course,
-      user.id,
-    );
+    // Lo que ya subió esta persona en el curso (por índice) y el total de la plataforma (guardado; ver storageTotal).
+    const [mine, total] = await Promise.all([
+      one(db, 'SELECT coalesce(sum(size),0) AS bytes FROM aula_files WHERE course=? AND owner=?', course, user.id),
+      storageTotal(db),
+    ]);
+    const used = { mine: mine.bytes, total };
     if (used.total + declared > TOTAL_QUOTA_BYTES) {
       console.error('aula-api almacenamiento casi lleno', used.total);
       fail('El almacenamiento de Enlace está casi lleno. Avisa a la administración.', 507);
@@ -1772,18 +1942,10 @@ const routes = {
     const mime = request.headers.get('content-type') || 'application/octet-stream';
     await env.BUCKET.put(id, new Blob(parts), { httpMetadata: { contentType: mime } });
     try {
-      await run(
-        db,
-        'INSERT INTO aula_files (id,course,owner,scope,name,size,mime,created) VALUES (?,?,?,?,?,?,?,?)',
-        id,
-        course,
-        user.id,
-        scope,
-        name,
-        size,
-        mime,
-        nowIso(),
-      );
+      await db.batch([
+        db.prepare('INSERT INTO aula_files (id,course,owner,scope,name,size,mime,created) VALUES (?,?,?,?,?,?,?,?)').bind(id, course, user.id, scope, name, size, mime, nowIso()),
+        db.prepare('UPDATE aula_storage SET bytes=bytes+? WHERE id=1').bind(size),
+      ]);
     } catch (error) {
       await env.BUCKET.delete(id);
       throw error;

@@ -45,7 +45,7 @@ const foro = await call('docente', '/api/record', { course: c, kind: 'forum', da
 await call('ana', '/api/record', { course: c, kind: 'post', data: { forum: foro.id, title: 'Hola', body: 'pregunta' } }, 201);
 await call('docente', '/api/record', { course: c, kind: 'quiz', data: { title: 'Diagnóstico', visible: true, questions: [{ text: '¿1+1?', options: ['1', '2'], correct: 1 }] } }, 201);
 const g0 = (await view('docente')).records.find((r) => r.kind === 'grading');
-await call('docente', '/api/grades/final-rules', { course: c, revision: g0.revision, decimals: 0, rounding: 'down', passing: 7, failingAs: 5, missingAsZero: true });
+await call('docente', '/api/grades/final-rules', { course: c, revision: g0.revision, passing: 7, missingAsZero: true });
 const tarea = await call('docente', '/api/record', { course: c, kind: 'task', data: { title: 'Práctica 1', visible: true, due: '2026-03-10T12:00:00Z', fileIds: [guia] } }, 201);
 const g1 = (await view('docente')).records.find((r) => r.kind === 'grading');
 await call('docente', '/api/grades/scheme', { course: c, revision: g1.revision, scheme: 'categories', categories: [{ key: 'p', name: 'Prácticas', weight: 100 }], assignments: [{ task: tarea.id, category: 'p', points: 2 }] });
@@ -75,7 +75,7 @@ assert.equal(nuevaUnidad.data.body, `Mira: ![diagrama](archivo:${nuevaFoto})`, '
 const nuevaTarea = nuevo.records.find((r) => r.kind === 'task');
 assert.deepEqual([nuevaTarea.data.due, nuevaTarea.data.points], ['', 2], 'Fechas vacías para el nuevo periodo; conserva el valor');
 const nuevoGrading = nuevo.records.find((r) => r.kind === 'grading');
-assert.deepEqual([nuevoGrading.data.scheme, nuevoGrading.data.final.passing, nuevoGrading.data.final.failingAs], ['categories', 7, 5]);
+assert.deepEqual([nuevoGrading.data.scheme, nuevoGrading.data.final.passing, nuevoGrading.data.final.failingAs], ['categories', 7, null]);
 assert.equal(nuevaTarea.data.category, nuevoGrading.data.categories[0].id, 'La actividad queda en la categoría copiada');
 assert.equal(nuevo.files.length, 2);
 assert.equal((await call('docente', '/api/attendance?course=' + n)).settings.min_percent, 90);

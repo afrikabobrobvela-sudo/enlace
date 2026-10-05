@@ -1251,6 +1251,14 @@ button.att-mark.none { background: #f4f6f8; }
 .gb-col-panel button { display: block; width: 100%; text-align: left; background: none; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; padding: 10px 14px; font: inherit; font-weight: 500; color: var(--ink); cursor: pointer; box-shadow: none; }
 .gb-col-panel button:last-child { border-bottom: 0; }
 .gb-col-panel button:hover, .gb-col-panel button:focus-visible { background: #f2f7fa; outline: none; }
+.gb-col-panel button:disabled { color: var(--ink-faint); cursor: default; background: none; }
+.gb-col-panel button.gb-danger { color: #aa3027; }
+.gb-col-panel button.gb-danger:hover, .gb-col-panel button.gb-danger:focus-visible { background: #fdf1f0; }
+/* Mover columnas (12.30): se arrastra el encabezado; la raya marca dónde quedará. */
+.gb-task-col[draggable="true"] { cursor: grab; }
+.gb-task-col.gb-dragging { opacity: 0.45; }
+.gb-task-col.gb-drop-before { box-shadow: inset 3px 0 0 var(--accent); }
+.gb-task-col.gb-drop-after { box-shadow: inset -3px 0 0 var(--accent); }
 .gb-cell-row { display: flex; align-items: center; gap: 4px; }
 .gb-input { width: 4.6em !important; min-width: 0; margin: 0 !important; padding: 6px 6px !important; text-align: right; font-variant-numeric: tabular-nums; }
 .gb-input.is-saving { background: #f7fbfd; }
@@ -1269,6 +1277,9 @@ button.att-mark.none { background: #f4f6f8; }
 .grade-import-fields label { margin: 0; font-size: 0.85rem; }
 .grade-import-fields input, .grade-import-fields select { margin: 2px 0 0; }
 .grade-import-fields [data-col-max] { width: 5em !important; display: inline-block; }
+.grade-import-note { margin: 6px 0 0; font-size: 0.85rem; }
+.grade-import-note:empty { display: none; }
+.grade-import-note .warning-note { display: inline; margin: 0; padding: 0; background: none; border: 0; color: #8a5a00; }
 @media (max-width: 720px) {
   .grade-import-fields { grid-template-columns: 1fr; }
   .my-attendance { margin-left: 0; text-align: left; }

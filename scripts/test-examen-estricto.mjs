@@ -96,6 +96,16 @@ const reducido = await call('ana', '/api/course?id=' + c);
 assert.equal(reducido.examOnly, true);
 assert.deepEqual([...new Set(reducido.records.map((r) => r.kind))], ['quiz']);
 assert(!reducido.records.some((r) => r.id === unidad.id));
+// Ruta ligera (12.30): no se arma el curso completo en cada recarga a media prueba; las preguntas siguen sin llegar
+// (llegan con el intento) y el navegador sabe desde el inicio que el examen bloquea la plataforma.
+assert.deepEqual(reducido.records[0].data.questions, [null, null, null]);
+assert(!JSON.stringify(reducido).includes('"correct"'));
+assert.deepEqual(reducido.members.map((m) => m.name), ['Ana']);
+store.counter.queries = 0;
+await call('ana', '/api/course?id=' + c);
+assert(store.counter.queries <= 8, `curso con el examen abierto: ${store.counter.queries} consultas`);
+assert.equal(inicio.exam.lockPlatform, true);
+checks += 5;
 // Archivos: la imagen de la pregunta sí; el apunte de la unidad no.
 assert.equal((await raw('ana', '/api/file/' + imagen)).status, 200);
 assert.equal((await raw('ana', '/api/file/' + apunte)).status, 423);

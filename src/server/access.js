@@ -19,11 +19,15 @@ export async function access(db, user, courseId) {
   // Un co-docente solo conserva el acceso mientras siga en la lista de docentes (igual que el propietario).
   const staff = user.role === 'teacher' || isAdmin;
   const coTeacher = memberRole === 'teacher' && staff;
+  const canTeach = isAdmin || isOwner || coTeacher;
   if (!isAdmin && !isOwner && !coTeacher && (!memberRole || memberRole === 'removed' || memberRole === 'teacher')) {
     fail('No tienes acceso a este curso.', 403);
   }
+  if (!canTeach && memberRole === 'student' && course.student_visible === 0) {
+    fail('Este curso está oculto para los alumnos.', 403);
+  }
   // `visitor`: su ingreso cuenta en los accesos del curso (la administración que solo revisa no cuenta).
-  return { course, teach: isAdmin || isOwner || coTeacher, visitor: isOwner || coTeacher || memberRole === 'student' };
+  return { course, teach: canTeach, visitor: isOwner || coTeacher || memberRole === 'student' };
 }
 
 export function requireTeacher(access) {

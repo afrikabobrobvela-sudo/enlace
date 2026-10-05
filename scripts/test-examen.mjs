@@ -43,7 +43,7 @@ const preguntas = [
   { type: 'choice', text: 'Unidad de energía', options: ['J', 'N'], correct: 0 },
   { type: 'numeric', text: '¿2 + 2?', answer: '4', tolerance: 0 },
 ];
-const examen = (exam, extra = {}) => ({ course: c, kind: 'quiz', data: { title: 'Parcial', visible: true, questions: preguntas, settings: { attempts: 1, timeLimit: 30, exam }, ...extra } });
+const examen = (exam, extra = {}) => ({ course: c, kind: 'quiz', data: { title: 'Parcial', visible: true, questions: preguntas, settings: { attempts: 1, timeLimit: 30, shuffle: true, exam }, ...extra } });
 
 // ---- Validación de la configuración ----
 await call('docente', '/api/record', examen({ enabled: true, password: 'abc' }), 400);
@@ -87,15 +87,17 @@ checks += 2;
 // ---- Empezar: con la contraseña (sin importar espacios) y la ubicación ----
 const inicio = await call('ana', '/api/attempt/start', { course: c, quiz: q.id, password: ' gauss ', location: cerca });
 assert.deepEqual([inicio.exam.oneByOne, inicio.exam.noBack, inicio.exam.position, inicio.exam.flagged], [true, true, 0, false]);
+assert.equal(inicio.exam.randomOrder, true);
 assert(!JSON.stringify(inicio).includes('gauss'));
 // Retomar tras recargar no pide la contraseña.
 const retomado = await call('ana', '/api/attempt/start', { course: c, quiz: q.id });
 assert.equal(retomado.started, inicio.started);
+assert.deepEqual(retomado.questions, inicio.questions, 'Al retomar conserva exactamente el mismo orden aleatorio y las mismas opciones');
 const beto = await call('beto', '/api/attempt/start', { course: c, quiz: q.id, password: 'gauss', location: lejos });
 assert.equal(beto.exam.flagged, true);
 const carla = await call('carla', '/api/attempt/start', { course: c, quiz: q.id, password: 'gauss', locationError: 'denied' });
 assert.equal(carla.exam.flagged, true);
-checks += 5;
+checks += 7;
 
 // ---- Guardado mientras contesta y "sin regresar" ----
 const orden = inicio.questions.map((x) => x.index); // una sola pregunta por pantalla, en este orden

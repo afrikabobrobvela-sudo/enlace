@@ -2,12 +2,33 @@
 // Activa las llaves foráneas (D1 las aplica siempre) y cuenta las consultas para vigilar
 // el límite de 50 consultas por solicitud del plan gratuito.
 import { DatabaseSync } from 'node:sqlite';
-import { readFileSync, readdirSync } from 'node:fs';
+import { appendFileSync, readFileSync, readdirSync } from 'node:fs';
+
+/** Parámetros que usa la consulta (?N numerados o ? sueltos), sin contar los que aparecen dentro de textos '…'. */
+function paramCount(sql) {
+  const code = sql.replace(/'(?:[^']|'')*'/g, "''");
+  const numbered = [...code.matchAll(/\?(\d+)/g)].map((m) => Number(m[1]));
+  return numbered.length ? Math.max(...numbered) : (code.match(/\?/g) || []).length;
+}
 
 export function openD1(file, { migrations = 'all' } = {}) {
   let sqlite = new DatabaseSync(file);
   sqlite.exec('PRAGMA foreign_keys = ON');
   const counter = { queries: 0 };
+  // D1_PLANES=archivo: anota las consultas que recorren una tabla grande completa (SCAN), para revisarlas (12.30).
+  const planes = process.env.D1_PLANES;
+  const revisadas = new Set();
+  const revisa = (sql, args) => {
+    if (!planes || revisadas.has(sql)) return;
+    revisadas.add(sql);
+    try {
+      const plan = sqlite.prepare('EXPLAIN QUERY PLAN ' + sql).all(...args).map((p) => p.detail);
+      const scans = plan.filter((d) => /^SCAN (\w+)(?! VIRTUAL)/.test(d) && !/USING (COVERING )?INDEX/.test(d));
+      if (scans.length) appendFileSync(planes, `${scans.join(' | ')}\n    ${sql.replace(/\s+/g, ' ').slice(0, 400)}\n`);
+    } catch {
+      // EXPLAIN de algo que no es SELECT/UPDATE (p. ej. PRAGMA): no importa.
+    }
+  };
   const statement = (sql) => {
     // D1 limita un SELECT compuesto a 5 términos (SQLite local admite 500): se imita para detectarlo en las pruebas.
     if ((sql.match(/\bUNION\b/gi) || []).length + 1 > 5) throw new Error('D1_ERROR: too many terms in compound SELECT');
@@ -15,19 +36,25 @@ export function openD1(file, { migrations = 'all' } = {}) {
     return {
       sql,
       bind(...params) {
+        // Como D1: si la consulta usa ?1 y ?2 y se mandan tres valores, falla («Wrong number of parameter bindings»).
+        // node:sqlite 22 los aceptaba en silencio y así se publicó un error que tumbaba la carga del curso (12.30).
+        if (params.length !== paramCount(sql)) throw new Error(`D1_ERROR: Wrong number of parameter bindings for SQL query. (${params.length} valores para ${paramCount(sql)}: ${sql.replace(/\s+/g, ' ').slice(0, 120)})`);
         args = params;
         return this;
       },
       async first() {
         counter.queries++;
+        revisa(sql, args);
         return sqlite.prepare(sql).get(...args) || null;
       },
       async all() {
         counter.queries++;
+        revisa(sql, args);
         return { results: sqlite.prepare(sql).all(...args) };
       },
       async run() {
         counter.queries++;
+        revisa(sql, args);
         return { meta: { changes: sqlite.prepare(sql).run(...args).changes } };
       },
     };

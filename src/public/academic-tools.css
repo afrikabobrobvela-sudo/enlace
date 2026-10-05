@@ -25,6 +25,14 @@
   vertical-align: middle;
 }
 
+/* Al bajar dentro de Calificaciones o Asistencia, los títulos de actividades y fechas siguen visibles. */
+.gradebook thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: #f8f9fc;
+}
+
 .gradebook td {
   min-width: 160px;
   vertical-align: middle;
@@ -40,6 +48,7 @@
 
 .gradebook thead .sticky-name {
   background: #f8f9fc;
+  z-index: 3;
 }
 
 .gradebook .sticky-name .table-link {

@@ -174,6 +174,46 @@ function bulkMembersModal() {
   });
 }
 
+/** Trae el grupo completo de otro curso o una sola de sus secciones, sin duplicar correos. */
+async function copyMembersModal() {
+  const sources = await request('/api/members/sources?course=' + encodeURIComponent(current.course.id));
+  if (!sources.length) return toast('No hay otro curso tuyo del que se puedan traer alumnos.');
+  const sourceOptions = sources
+    .map((c) => `<option value="${esc(c.id)}">${esc(c.name)} · ${esc(c.group_name)}${c.period ? ' · ' + esc(c.period) : ''} (${c.students} alumnos)</option>`)
+    .join('');
+  const destination = courseSections().length
+    ? `<label>Sección de destino<select name="destinationSection"><option value="">Sin sección</option>${courseSections().map((s) => `<option value="${esc(s.id)}" ${selectedSection() === s.id ? 'selected' : ''}>${esc(s.name)}</option>`).join('')}</select></label>`
+    : '';
+  modal(
+    'Traer alumnos de otro curso',
+    `<p>Reutiliza una lista ya inscrita, por ejemplo el grupo <strong>5CV</strong> de Física I para Tutoría. Se copian nombre, matrícula y correo; no se copian calificaciones ni entregas.</p>
+     <label>Curso o grupo de origen<select name="source" data-member-source>${sourceOptions}</select></label>
+     <label>Qué alumnos<select name="sourceSection" data-member-source-section></select></label>
+     ${destination}
+     <p class="pending-message">Si un correo ya existe en este curso, se actualizan sus datos y no se duplica.</p>`,
+    async (f) => {
+      const result = await request('/api/members/copy', {
+        course: current.course.id,
+        source: f.get('source'),
+        sourceSection: f.get('sourceSection') || '',
+        destinationSection: f.get('destinationSection') || '',
+      });
+      return `Grupo traído: ${result.created} ${result.created === 1 ? 'alumno nuevo' : 'alumnos nuevos'}, ${result.updated} ${result.updated === 1 ? 'actualizado' : 'actualizados'}.`;
+    },
+    'Traer alumnos',
+  );
+  const source = $('#fields [data-member-source]');
+  const section = $('#fields [data-member-source-section]');
+  const update = () => {
+    const selected = sources.find((c) => c.id === source.value) || sources[0];
+    section.innerHTML = `<option value="">Grupo completo (${selected.students} alumnos)</option>${selected.sections
+      .map((s) => `<option value="${esc(s.id)}">Sólo ${esc(s.name)} (${s.students} alumnos)</option>`)
+      .join('')}`;
+  };
+  source.addEventListener('change', update);
+  update();
+}
+
 // ---- Reportes por academia y unidad, y limpieza de archivos ----------------------------------
 
 const bytesText = (n) => (n >= 1073741824 ? (n / 1073741824).toFixed(2) + ' GB' : n >= 1048576 ? (n / 1048576).toFixed(1) + ' MB' : Math.ceil(n / 1024) + ' KB');

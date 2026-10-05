@@ -251,6 +251,10 @@ assert.equal(conf.status, 200);
 assert.equal(conf.headers.get('Content-Type'), 'application/seb');
 const xml = await conf.text();
 ok(xml.includes(`<key>startURL</key>\n\t<string>https://t.local/#c=${c}&amp;s=quiz&amp;d=${facil.id}</string>`) && xml.includes('<key>sendBrowserExamKey</key>\n\t<true/>'), 'La configuración abre la evaluación y manda las llaves');
+for (const key of ['allowSwitchToApplications', 'allowUserSwitching', 'allowSiri', 'allowDictation', 'allowScreenCapture', 'allowWindowCapture', 'allowScreenSharing', 'enablePrintScreen', 'allowAudioCapture', 'allowVideoCapture', 'allowVirtualMachine', 'allowDeveloperConsole', 'allowDictionaryLookup']) {
+  assert.ok(xml.includes(`<key>${key}</key>\n\t<false/>`), `SEB debe desactivar ${key}`);
+}
+assert.ok(xml.includes('<key>monitorProcesses</key>\n\t<true/>'), 'SEB debe vigilar procesos prohibidos');
 // La Config Key sale del archivo mismo (como la calcula SEB): JSON sin originatorVersion, llaves en orden sin mayúsculas.
 const dict = {};
 for (const [, k, v] of xml.matchAll(/<key>([^<]+)<\/key>\n\t(<true\/>|<false\/>|<integer>-?\d+<\/integer>|<string>[^<]*<\/string>)/g)) {

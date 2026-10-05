@@ -305,7 +305,7 @@ Resolver problemas de movimiento con el teorema trabajo-energía y la conservaci
     { id: cat.examen, course: courseId, name: 'Exámenes', weight: 35, source: 'tasks', position: 2, updated: created },
     { id: cat.asistencia, course: courseId, name: 'Asistencia', weight: 10, source: 'attendance', position: 3, updated: created },
   ];
-  const settings = { course: courseId, revision: 1, updated: created, updated_by: teacher, scheme: 'categories', final_decimals: 1, final_rounding: 'half_up', passing_grade: 6, missing_as_zero: 1 };
+  const settings = { course: courseId, revision: 1, updated: created, updated_by: teacher, scheme: 'categories', final_decimals: 0, final_rounding: 'down', passing_grade: 6, missing_as_zero: 1 };
 
   const rubricId = id();
   const levels = [

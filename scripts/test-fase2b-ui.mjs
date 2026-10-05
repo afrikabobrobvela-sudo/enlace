@@ -44,14 +44,16 @@ run(`
   var settings = {
     scheme: 'categories',
     categories: [{ id: 'E', name: 'Exámenes', weight: 60, source: 'tasks' }, { id: 'T', name: 'Tareas', weight: 30, source: 'tasks' }, { id: 'A', name: 'Asistencia', weight: 10, source: 'attendance' }],
-    final: { decimals: 1, rounding: 'half_up', passing: 6, failingAs: null, missingAsZero: true },
+    final: { decimals: 0, rounding: 'down', passing: 6, failingAs: null, missingAsZero: true },
   };
 `);
 let result = run('computeGrade({ tasks, grades, settings, attendancePercent: 90 })');
 check(close(result.categories[0].value, 7), 'Exámenes por puntos: (8×2 + 5×1) / 3 = 7');
 check(close(result.categories[1].value, 10) && close(result.categories[2].value, 9), 'Tareas 10; asistencia 90 % = 9');
 check(close(result.value, 8.1), 'Parcial: 7×0.6 + 10×0.3 + 9×0.1 = 8.1 (la actividad sin categoría no cuenta)');
-check(close(run('computeGrade({ tasks, grades, settings, attendancePercent: null }).value'), 8), 'Sin datos de asistencia se normaliza: (7×60 + 10×30) / 90 = 8');
+check(close(run('computeGrade({ tasks, grades, settings, attendancePercent: null }).value'), 7.2), 'Sin asistencia, su 10 % no se redistribuye: 7×60 % + 10×30 % = 7.2');
+result = run("computeGrade({ tasks, grades, settings, attendancePercent: 90, categoryGrades: new Map([['E', 6.25]]) })");
+check(close(result.categories[0].value, 6.25) && close(result.value, 7.65), 'La captura manual sustituye el cálculo automático del rubro');
 result = run('computeGrade({ tasks, grades, settings, attendancePercent: 90, final: true })');
 check(close(result.categories[1].value, 5), 'Final: la tarea vencida sin calificar vale 0; la oculta no cuenta');
 check(close(result.value, 6.6), 'Final: 7×0.6 + 5×0.3 + 9×0.1 = 6.6');
@@ -63,15 +65,12 @@ check(close(run('computeGrade({ tasks: plain, grades: g2, settings: tasksMode, w
 check(run('computeGrade({ tasks: plain, grades: new Map(), settings: tasksMode }).value') === null);
 
 // ---- Redondeo y calificación final ----
-check(run("roundGrade(5.95, 1, 'half_up')") === 6, '5.95 → 6.0');
-check(run("roundGrade(1.005, 2, 'half_up')") === 1.01, '1.005 → 1.01: en JavaScript 1.005 × 100 = 100.4999…, sin corrección daría 1.00');
-check(run("roundGrade(5.5, 0, 'half_up')") === 6 && run("roundGrade(5.95, 0, 'down')") === 5);
-check(run("roundGrade(8.449, 2, 'half_up')") === 8.45);
-const rules = { decimals: 0, rounding: 'half_up', passing: 6, failingAs: 5 };
-check(JSON.stringify(run(`finalGrade(5.45, ${JSON.stringify(rules)})`)) === '{"value":5,"passed":false}', 'No aprueba: se asienta 5');
-check(JSON.stringify(run(`finalGrade(5.5, ${JSON.stringify(rules)})`)) === '{"value":6,"passed":true}', '5.5 redondea a 6 y aprueba');
-check(JSON.stringify(run(`finalGrade(3.2, ${JSON.stringify({ ...rules, failingAs: null })})`)) === '{"value":3,"passed":false}', 'Sin regla de 5, se asienta la calculada');
-check(JSON.stringify(run(`finalGrade(5.99, ${JSON.stringify({ ...rules, decimals: 1, rounding: 'down', failingAs: null })})`)) === '{"value":5.9,"passed":false}', 'Truncar: 5.99 → 5.9');
+const rules = { decimals: 0, rounding: 'down', passing: 6, failingAs: null };
+check(JSON.stringify(run(`finalGrade(5.9, ${JSON.stringify(rules)})`)) === '{"value":5,"passed":false}', 'Reprobatoria: 5.9 → 5');
+check(JSON.stringify(run(`finalGrade(4.9, ${JSON.stringify(rules)})`)) === '{"value":4,"passed":false}', 'Reprobatoria: 4.9 → 4');
+check(JSON.stringify(run(`finalGrade(6.6, ${JSON.stringify(rules)})`)) === '{"value":7,"passed":true}', 'Aprobatoria desde .60: 6.6 → 7');
+check(JSON.stringify(run(`finalGrade(6.59, ${JSON.stringify(rules)})`)) === '{"value":6,"passed":true}', 'Aprobatoria hasta .59: 6.59 → 6');
+check(JSON.stringify(run(`finalGrade(9.6, ${JSON.stringify(rules)})`)) === '{"value":10,"passed":true}' && JSON.stringify(run(`finalGrade(10, ${JSON.stringify(rules)})`)) === '{"value":10,"passed":true}', 'La final nunca supera 10');
 check(run(`finalGrade(null, ${JSON.stringify(rules)})`) === null);
 
 // ---- Curso de prueba: rúbrica, equipos y categorías ----
@@ -99,7 +98,7 @@ run(`
       { id: 's2', kind: 'submission', revision: 1, data: { task: 'e1', member: 'm-sofia', submitted: '', manual: true, grade: 4, published: true } },
       { id: 'grading:c', kind: 'grading', revision: 3, data: { scheme: 'categories',
         categories: [{ id: 'E', name: 'Exámenes', weight: 50, source: 'tasks' }, { id: 'T', name: 'Prácticas', weight: 50, source: 'tasks' }],
-        final: { decimals: 0, rounding: 'half_up', passing: 6, failingAs: 5, missingAsZero: false } } },
+        final: { decimals: 0, rounding: 'down', passing: 6, failingAs: null, missingAsZero: false } } },
     ],
   };
   section = 'review'; detail = 'p1'; reviewMember = 'm-ana';
@@ -125,15 +124,109 @@ run(`reviewMember = 'm-sofia'; renderReview();`);
 check(!run("$('#main').innerHTML").includes('name="team"'), 'Sofía no tiene equipo: no aparece la opción');
 
 // ---- Tabla de calificaciones: final y categorías ----
+let categoryCell = run("categoryGradeCellHtml({ id: 'E', name: 'Exámenes', weight: 50, source: 'tasks', automaticValue: 4 }, current.members[2], 4)");
+check(categoryCell.includes('class="category-grade-input"') && categoryCell.includes('value=""') && categoryCell.includes('placeholder="4.00"') && !categoryCell.includes('Doble clic'), 'Los rubros muestran una casilla editable directa con el cálculo automático como referencia');
+run("current.records.push({ id: 'cg', kind: 'category-grade', revision: 1, data: { category: 'E', member: 'm-sofia', grade: 6.6 } })");
+categoryCell = run("categoryGradeCellHtml({ id: 'E', name: 'Exámenes', weight: 50, source: 'tasks', automaticValue: 4 }, current.members[2], 6.6)");
+check(categoryCell.includes('manual-grade-tag') && categoryCell.includes('value="6.6"') && categoryCell.includes('automático: 4.00'), 'La celda distingue una captura manual y conserva la referencia automática');
+run("current.records.pop()");
 run(`section = 'grades'; gradeTab = 'entry'; renderGrades();`);
 page = run("$('#main').innerHTML");
 check(page.includes('<th>Calificación final</th>') && page.includes('Exámenes<div class="muted">50 %</div>'), 'Columnas de final y de categorías');
-check(/final-grade grade-low">5<\/td>/.test(page), 'Sofía: 4 en Exámenes → se asienta 5, no aprueba');
+check((page.match(/class="category-grade-input"/g) || []).length === 6, 'El libro completo muestra una casilla directa por alumno en cada rubro editable');
+check(page.includes('<small class="gb-task-placement">Exámenes</small>Examen') && page.includes('<small class="gb-task-placement">Prácticas</small>Práctica'), 'Cada actividad muestra arriba el rubro o parcial al que pertenece');
+check(/final-grade grade-low">2<\/td>/.test(page), 'Sofía: Exámenes 4×50 % y Prácticas vacío → la final queda en 2');
 check(page.includes('Promedio parcial por categorías'));
 run("download = (name, text) => downloads.push(text); exportGrades();");
 const csv = downloads[0].replace(/^\uFEFF/, '').split('\r\n');
 check(csv[0].includes('"Calificación final","Exámenes (50 %)","Prácticas (50 %)"'), 'La exportación incluye final y categorías');
-check(csv.find((row) => row.includes('Sofía')).includes('"4.00","5","4.00",""'), 'Sofía: parcial 4.00, final 5, Exámenes 4.00, Prácticas vacía');
+check(csv.find((row) => row.includes('Sofía')).includes('"2.00","2","4.00",""'), 'Sofía: promedio y final 2; Exámenes 4.00×50 % y Prácticas vacía');
+await run(`
+  request = async (path, body) => ({ id: 'cg-direct', kind: 'category-grade', revision: 1, data: { category: body.category, member: body.member, grade: body.grade } });
+  saveCategoryGradeInput({ dataset: { cgCategory: 'E', cgMember: 'm-sofia' }, value: '8.25', classList: { add() {}, remove() {} }, focus() {} });
+`);
+check(run("categoryGradeOf('m-sofia', 'E')?.data.grade") === 8.25, 'Escribir directamente en la casilla guarda la calificación manual del rubro');
+
+// ---- Calificación directa y masiva dentro de una tarea ----
+const taskRoster = run(`
+  var originalQuerySelector = document.querySelector;
+  var originalQuerySelectorAll = document.querySelectorAll;
+  var originalGetElementById = document.getElementById;
+  var taskRows = current.members.filter((member) => member.role === 'student').map((member) => ({
+    dataset: {}, hidden: false, textContent: member.name,
+    cells: [{ innerHTML: '', textContent: '' }, { innerHTML: '', textContent: '' }, { innerHTML: '', textContent: '' }, { innerHTML: '', textContent: '' }],
+  }));
+  var taskWrap = {
+    toolbar: '',
+    querySelectorAll: (selector) => selector === 'tbody tr' ? taskRows : [],
+    insertAdjacentHTML(_position, html) { this.toolbar = html; },
+  };
+  var taskSearch = { value: '' };
+  var taskFilter = { value: 'all' };
+  var taskBulk = { disabled: false };
+  var taskCount = { textContent: '' };
+  document.querySelector = (selector) => selector === '#main .table-wrap' ? taskWrap
+    : selector === '[data-task-roster-search]' ? taskSearch
+    : selector === '[data-task-roster-filter]' ? taskFilter
+    : selector === '[data-action="bulk-grade-visible"]' ? taskBulk
+    : originalQuerySelector(selector);
+  document.querySelectorAll = (selector) => selector === '[data-task-submission-row]' ? taskRows : originalQuerySelectorAll(selector);
+  document.getElementById = (id) => id === 'taskRosterCount' ? taskCount : originalGetElementById(id);
+  enhanceTaskGradeRoster(find('p1'), records('submission').filter((submission) => submission.data.task === 'p1'));
+  var initial = {
+    toolbar: taskWrap.toolbar,
+    rows: taskRows.map((row) => ({ dataset: { ...row.dataset }, grade: row.cells[2].innerHTML, status: row.cells[1].textContent })),
+    count: taskCount.textContent,
+  };
+  taskFilter.value = 'submitted';
+  filterTaskGradeRoster();
+  var submittedHidden = taskRows.map((row) => row.hidden);
+  var submittedCount = taskCount.textContent;
+  taskFilter.value = 'missing';
+  filterTaskGradeRoster();
+  var missingHidden = taskRows.map((row) => row.hidden);
+  var missingCount = taskCount.textContent;
+  taskFilter.value = 'all';
+  taskSearch.value = 'sofía';
+  filterTaskGradeRoster();
+  var searchHidden = taskRows.map((row) => row.hidden);
+  var searchCount = taskCount.textContent;
+  document.querySelector = originalQuerySelector;
+  document.querySelectorAll = originalQuerySelectorAll;
+  document.getElementById = originalGetElementById;
+  ({ initial, submittedHidden, submittedCount, missingHidden, missingCount, searchHidden, searchCount });
+`);
+check(taskRoster.initial.toolbar.includes('Sí entregaron') && taskRoster.initial.toolbar.includes('No entregaron') && taskRoster.initial.toolbar.includes('Aplicar calificación a los mostrados'), 'La tarea ofrece filtros de entrega y calificación masiva');
+check(taskRoster.initial.rows.every((row) => row.grade.includes('task-grade-input')), 'Cada alumno tiene captura directa de calificación dentro de la tarea');
+check(taskRoster.initial.rows[0].dataset.submitted === 'yes' && taskRoster.initial.rows[0].status === 'Entregado', 'Una entrega real se identifica como entregada');
+check(taskRoster.initial.rows[1].dataset.submitted === 'no' && taskRoster.initial.rows[1].status === 'Sin entrega', 'Un alumno sin envío se identifica como no entregado');
+check(JSON.stringify(taskRoster.submittedHidden) === '[false,true,true]' && taskRoster.submittedCount === '1 alumno mostrado', 'El filtro Sí entregaron deja solo las entregas reales');
+check(JSON.stringify(taskRoster.missingHidden) === '[true,false,false]' && taskRoster.missingCount === '2 alumnos mostrados', 'El filtro No entregaron deja solo los alumnos pendientes');
+check(JSON.stringify(taskRoster.searchHidden) === '[true,true,false]' && taskRoster.searchCount === '1 alumno mostrado', 'La búsqueda por alumno se combina con los filtros');
+const bulkGradeRequest = await run(`(async () => {
+  var bulkOriginalQuerySelectorAll = document.querySelectorAll;
+  var bulkOriginalModal = modal;
+  var bulkOriginalRequest = request;
+  taskRows.forEach((row, index) => row.hidden = index === 0);
+  document.querySelectorAll = (selector) => selector === '[data-task-submission-row]' ? taskRows : bulkOriginalQuerySelectorAll(selector);
+  var sentBulkRequest = null;
+  var bulkSubmitPromise = null;
+  modal = (_title, _html, submit) => {
+    bulkSubmitPromise = submit(new Map([['grade', '8.5'], ['publish', 'on']]));
+  };
+  request = async (path, body) => {
+    sentBulkRequest = { path, body };
+    return { grades: body.activities[0].grades.length };
+  };
+  bulkGradeVisibleModal('p1');
+  await bulkSubmitPromise;
+  document.querySelectorAll = bulkOriginalQuerySelectorAll;
+  modal = bulkOriginalModal;
+  request = bulkOriginalRequest;
+  return sentBulkRequest;
+})()`);
+check(bulkGradeRequest.path === '/api/grades/import' && bulkGradeRequest.body.activities[0].grades.length === 2, 'La calificación masiva utiliza únicamente los alumnos mostrados');
+check(bulkGradeRequest.body.activities[0].grades.every((item) => item.grade === 8.5) && bulkGradeRequest.body.publish === true, 'La calificación y publicación elegidas se aplican a todo el filtro');
 
 // ---- El alumno ve su equipo ----
 run(`me = { id: 'u-luis', role: 'student' };`);

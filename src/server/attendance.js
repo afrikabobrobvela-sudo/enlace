@@ -516,6 +516,7 @@ export const attendanceRoutes = {
     );
     if (!session) fail(NO_CODE, 404);
     if (!isOpen(session)) fail(CLOSED, 410);
+    await access(db, user, session.course);
     const device = validDevice(body.device);
     const member = await one(db, "SELECT id, section FROM aula_members WHERE course=? AND user_id=? AND role='student'", session.course, user.id);
     if (!member) fail('No estás inscrito como alumno en este curso.', 403);
@@ -600,6 +601,7 @@ export const attendanceRoutes = {
     const session = await checkinSession(db, 'checkin_code', code);
     if (!isOpen(session)) fail(CLOSED, 410);
     if (session.checkin_mode === 'code') fail('Código QR no válido.');
+    await access(db, user, session.course);
     const window = parseInt(windowText, 36);
     const current = Math.floor(Date.now() / WINDOW_MS);
     if (!Number.isSafeInteger(window) || current - window > 2 || window - current > 1) fail(EXPIRED, 410);
@@ -627,6 +629,7 @@ export const attendanceRoutes = {
     if (!claim || claim.k !== 'checkin' || claim.u !== user.id) fail('Tu registro expiró. Vuelve a escanear el código QR.', 410);
     const session = await checkinSession(db, 'id', claim.s);
     if (!isOpen(session)) fail(CLOSED, 410);
+    await access(db, user, session.course);
     const tries = await one(db, 'SELECT failures FROM aula_checkins WHERE session=? AND member=?', session.id, claim.m);
     const failures = tries?.failures || 0;
     if (failures >= MAX_PIN_FAILURES) fail(BLOCKED, 429);

@@ -173,7 +173,101 @@ function renderTask() {
     const ext = extensionOf(t.id, m.id);
     return `<tr><td><span class="person">${avatarHtml(m)}<span>${esc(m.name)}</span></span>${ext ? `<div class="table-subtext special-note">Acceso especial: ${esc(specialSummary({ start: ext.data.start, due: ext.data.due, end: ext.data.end }))}</div>` : ''}</td>${courseSections().length ? `<td>${esc(sectionName(m.section) || '—')}</td>` : ''}<td>${s ? s.data.manual ? 'Captura manual' : s.data.late ? 'Entrega tardía' : 'Entregado' : 'Sin entrega'}</td><td>${s?.data.grade ?? '—'}</td><td><button class="table-link" data-action="review" data-id="${t.id}" data-member="${m.id}">Evaluar →</button> <button type="button" class="text-btn" data-special-access="task" data-id="${esc(t.id)}" data-member="${esc(m.id)}">${ext ? 'Cambiar acceso' : 'Acceso especial'}</button></td></tr>`;
   }).join('') || '<tr><td colspan="4">Inscribe alumnos para revisar sus entregas.</td></tr>'}</tbody></table></div>` : `${own ? `<section class="panel"><h2>Tu entrega</h2><p class="deadline">${fmt(own.data.submitted)}${own.data.submitted ? ` <button type="button" class="text-btn" data-receipt="${esc(own.id)}">Comprobante</button>` : ''}</p>${richText(own.data.body)}${fileLinks(own.data.fileIds)}<p>Calificación: <b>${own.data.grade ?? 'Pendiente'}</b></p>${richText(own.data.feedback)}${rubricResultHtml(own.data.rubricScores)}</section>` : ''}${t.data.forum ? '' : `<div class="toolbar">${button(own ? 'Actualizar entrega' : 'Realizar entrega', 'submit', t.id)}</div>`}`}`;
+  if (teaches()) enhanceTaskGradeRoster(t, subs);
 }
+
+/** Convierte la lista de una tarea en captura masiva: filtro por entrega y calificación directa. */
+function enhanceTaskGradeRoster(task, submissions) {
+  const wrap = document.querySelector('#main .table-wrap');
+  const roster = studentsInView().filter((m) => itemApplies(task, m));
+  if (!wrap || !roster.length) return;
+  const rows = [...wrap.querySelectorAll('tbody tr')];
+  const hasSections = courseSections().length > 0;
+  roster.forEach((member, index) => {
+    const row = rows[index];
+    if (!row) return;
+    const submission = submissions.find((s) => s.data.member === member.id);
+    const delivered = Boolean(submission && !submission.data.manual && (submission.data.submitted || submission.data.body || submission.data.fileIds?.length));
+    row.dataset.taskSubmissionRow = '';
+    row.dataset.member = member.id;
+    row.dataset.submitted = delivered ? 'yes' : 'no';
+    row.dataset.graded = submission?.data.grade === null || submission?.data.grade === undefined ? 'no' : 'yes';
+    const statusCell = row.cells[hasSections ? 2 : 1];
+    const gradeCell = row.cells[hasSections ? 3 : 2];
+    if (statusCell) statusCell.textContent = delivered ? (submission.data.late ? 'Entrega tardía' : 'Entregado') : row.dataset.graded === 'yes' ? 'Sin entrega · calificado' : 'Sin entrega';
+    if (gradeCell) {
+      gradeCell.innerHTML = `<input class="gb-input task-grade-input" type="number" min="0" max="10" step="0.01" inputmode="decimal"
+        value="${esc(submission?.data.grade ?? '')}" placeholder="—" data-gb-task="${esc(task.id)}" data-gb-member="${esc(member.id)}"
+        aria-label="Calificación de ${esc(member.name)} en ${esc(task.data.title)}">${submission?.data.published === false ? '<span class="draft-tag">borrador</span>' : ''}`;
+    }
+  });
+  wrap.insertAdjacentHTML(
+    'beforebegin',
+    `<div class="workspace-filterbar task-grade-filterbar">
+       <input type="search" data-task-roster-search placeholder="Buscar alumno…" aria-label="Buscar alumno">
+       <label class="filter-control">Mostrar<select data-task-roster-filter>
+         <option value="all">Todos</option><option value="submitted">Sí entregaron</option><option value="missing">No entregaron</option>
+         <option value="ungraded">Sin calificar</option><option value="graded">Calificados</option>
+       </select></label>
+       ${button('Aplicar calificación a los mostrados', 'bulk-grade-visible', task.id, 'secondary')}
+       <span class="muted" id="taskRosterCount"></span>
+     </div><p class="grade-note">Escribe cada calificación directamente y presiona Enter para bajar al siguiente alumno. El filtro también determina a quiénes se aplica la calificación masiva.</p>`,
+  );
+  filterTaskGradeRoster();
+}
+
+function filterTaskGradeRoster() {
+  const query = (document.querySelector('[data-task-roster-search]')?.value || '').toLowerCase();
+  const filter = document.querySelector('[data-task-roster-filter]')?.value || 'all';
+  let count = 0;
+  document.querySelectorAll('[data-task-submission-row]').forEach((row) => {
+    const matchesState =
+      filter === 'all' ||
+      (filter === 'submitted' && row.dataset.submitted === 'yes') ||
+      (filter === 'missing' && row.dataset.submitted === 'no') ||
+      (filter === 'graded' && row.dataset.graded === 'yes') ||
+      (filter === 'ungraded' && row.dataset.graded === 'no');
+    row.hidden = !matchesState || !row.textContent.toLowerCase().includes(query);
+    if (!row.hidden) count++;
+  });
+  const label = document.getElementById('taskRosterCount');
+  if (label) label.textContent = `${count} ${count === 1 ? 'alumno mostrado' : 'alumnos mostrados'}`;
+  const bulk = document.querySelector('[data-action="bulk-grade-visible"]');
+  if (bulk) bulk.disabled = count === 0;
+}
+
+function bulkGradeVisibleModal(taskId) {
+  const task = find(taskId);
+  const members = [...document.querySelectorAll('[data-task-submission-row]')].filter((row) => !row.hidden).map((row) => row.dataset.member);
+  if (!task || !members.length) return toast('No hay alumnos visibles para calificar.');
+  modal(
+    'Calificar alumnos mostrados',
+    `<p>Se aplicará la misma calificación a <strong>${members.length} ${members.length === 1 ? 'alumno' : 'alumnos'}</strong> del filtro actual en <strong>${esc(task.data.title)}</strong>.</p>
+     ${field('Calificación', 'grade', '', 'number', 'required min="0" max="10" step="0.01" autofocus')}
+     <label class="check-label"><input type="checkbox" name="publish" checked> Publicarla para los alumnos</label>
+     <p class="muted">Las entregas, archivos y comentarios existentes se conservan. Las calificaciones anteriores de los alumnos mostrados se reemplazan.</p>`,
+    async (form) => {
+      const grade = Number(String(form.get('grade')).replace(',', '.'));
+      if (!Number.isFinite(grade) || grade < 0 || grade > 10) throw new Error('La calificación va de 0 a 10.');
+      const result = await request('/api/grades/import', {
+        course: current.course.id,
+        publish: form.get('publish') === 'on',
+        overwrite: true,
+        activities: [{ task: task.id, grades: members.map((member) => ({ member, grade })) }],
+      });
+      return `${result.grades} ${result.grades === 1 ? 'calificación aplicada' : 'calificaciones aplicadas'}.`;
+    },
+    'Aplicar calificación',
+  );
+}
+
+document.addEventListener('input', (event) => {
+  if (event.target.matches?.('[data-task-roster-search]')) filterTaskGradeRoster();
+});
+document.addEventListener('change', (event) => {
+  if (event.target.matches?.('[data-task-roster-filter]')) filterTaskGradeRoster();
+});
+
 function noticeCards() {
   // Una noticia programada lleva la fecha en que se publica (así la ven los alumnos) y, para el docente, la marca.
   const shownAt = n => (n.data.publishAt && n.data.publishAt > n.created ? n.data.publishAt : n.created);
@@ -192,7 +286,7 @@ function average(member) {
   return studentGrade(member).value;
 }
 function renderGrades() {
-  const ts = records('task'), members = teaches() ? studentsInView() : [myMember()].filter(Boolean), w = records('weights')[0];
+  const ts = orderedTasks(), members = teaches() ? studentsInView() : [myMember()].filter(Boolean), w = records('weights')[0];
   // Columnas: con el filtro de secciones, solo las actividades que les tocan a esos alumnos.
   const cols = teaches() ? ts.filter(t => !t.data.sections?.length || members.some(m => itemApplies(t, m))) : ts;
   const grading = gradingSettings(), cats = grading.scheme === 'categories' ? grading.categories : [];
@@ -201,13 +295,16 @@ function renderGrades() {
     $('#main').innerHTML = myGradesHtml();
     return;
   }
-  $('#main').innerHTML = `<div class="home-tabs"><button data-grade-tab="entry" class="${gradeTab === 'entry' ? 'active' : ''}">${teaches() ? 'Ingresar calificaciones' : 'Mis calificaciones'}</button>${teaches() ? `<button data-grade-tab="manage" class="${gradeTab === 'manage' ? 'active' : ''}">Administrar calificaciones</button>` : ''}</div>${gradeTab === 'manage' && teaches() ? gradingManageHtml(`<h2 class="grading-subtitle">Pesos por actividad</h2><p class="real-status">Los pesos de todas las actividades deben sumar 100 %. Si agregas una nueva actividad, se usará el promedio simple hasta que vuelvas a guardar los pesos.</p><form id="weights" class="real-form"><div class="table-wrap"><table><thead><tr><th>Actividad</th><th>Peso (%)</th></tr></thead><tbody>${ts.map((t, i) => `<tr><td>${esc(t.data.title)}</td><td><input type="number" name="w_${t.id}" required min="0" max="100" step="0.01" class="grade-input" value="${w?.data.weights[t.id] ?? (i === ts.length - 1 ? 100 - Math.floor(10000 / ts.length) / 100 * (ts.length - 1) : Math.floor(10000 / ts.length) / 100).toFixed(2)}" aria-label="Peso de ${esc(t.data.title)}"></td></tr>`).join('')}</tbody></table></div><p class="form-error error" hidden></p>${ts.length ? '<div class="form-actions"><button class="primary">Guardar ponderaciones</button></div>' : '<p>Primero crea actividades.</p>'}</form>`) : `<div class="toolbar">${teaches() ? button('Exportar calificaciones', 'export-grades', '', 'secondary') + button('Importar calificaciones', 'import-grades', '', 'secondary') : ''}<input data-search type="search" placeholder="Buscar alumno…" aria-label="Buscar alumno">${sectionFilterHtml()}</div><p class="grade-note">${cats.length ? 'Promedio parcial por categorías' : `Promedio parcial ${w && ts.every(t => Number.isFinite(w.data.weights[t.id])) ? 'ponderado' : 'simple'}`}, de 0 a 10.${teaches() ? ` La calificación final aplica las reglas del curso (mínima aprobatoria ${grading.final.passing}).` : ''} Se excluyen las actividades sin calificar y se normalizan los pesos restantes.${countedQuizzes().length ? ` Incluye ${countedQuizzes().length === 1 ? 'una evaluación' : countedQuizzes().length + ' evaluaciones'} en línea dentro de su categoría.` : ' Las evaluaciones en línea y los foros cuentan cuando se les asigna una categoría (en Administrar calificaciones o al editarlos).'}</p><p class="grade-note">Escribe la calificación directamente en la tabla (Enter pasa al siguiente alumno). El ícono de documento abre la entrega del alumno; ⌄ junto a cada actividad tiene más opciones.</p><div class="table-wrap gradebook"><table><thead><tr><th class="sticky-name">Estudiante</th><th>Promedio parcial</th>${teaches() ? '<th>Calificación final</th><th>Asistencia</th>' : ''}${(grading.terms || []).filter(() => cats.length).map(t => `<th class="category-col term-col">${esc(t.name)}<div class="muted">${t.weight} % de la final</div></th>`).join('')}${cats.map(c => `<th class="category-col">${esc(categoryLabel(c, grading))}<div class="muted">${c.weight} %${c.term ? ' del parcial' : ''}</div></th>`).join('')}${cols.map(t => {
+  $('#main').innerHTML = `<div class="home-tabs"><button data-grade-tab="entry" class="${gradeTab === 'entry' ? 'active' : ''}">${teaches() ? 'Ingresar calificaciones' : 'Mis calificaciones'}</button>${teaches() ? `<button data-grade-tab="manage" class="${gradeTab === 'manage' ? 'active' : ''}">Administrar calificaciones</button>` : ''}</div>${gradeTab === 'manage' && teaches() ? gradingManageHtml(`<h2 class="grading-subtitle">Pesos por actividad</h2><p class="real-status">Los pesos de todas las actividades deben sumar 100 %. Si agregas una nueva actividad, se usará el promedio simple hasta que vuelvas a guardar los pesos.</p><form id="weights" class="real-form"><div class="table-wrap"><table><thead><tr><th>Actividad</th><th>Peso (%)</th></tr></thead><tbody>${ts.map((t, i) => `<tr><td>${esc(t.data.title)}</td><td><input type="number" name="w_${t.id}" required min="0" max="100" step="0.01" class="grade-input" value="${w?.data.weights[t.id] ?? (i === ts.length - 1 ? 100 - Math.floor(10000 / ts.length) / 100 * (ts.length - 1) : Math.floor(10000 / ts.length) / 100).toFixed(2)}" aria-label="Peso de ${esc(t.data.title)}"></td></tr>`).join('')}</tbody></table></div><p class="form-error error" hidden></p>${ts.length ? '<div class="form-actions"><button class="primary">Guardar ponderaciones</button></div>' : '<p>Primero crea actividades.</p>'}</form>`) : `<div class="toolbar">${teaches() ? button('Exportar calificaciones', 'export-grades', '', 'secondary') + button('Importar calificaciones', 'import-grades', '', 'secondary') : ''}<input data-search type="search" placeholder="Buscar alumno…" aria-label="Buscar alumno">${sectionFilterHtml()}</div><p class="grade-note">${cats.length ? 'Promedio parcial por categorías' : `Promedio parcial ${w && ts.every(t => Number.isFinite(w.data.weights[t.id])) ? 'ponderado' : 'simple'}`}, de 0 a 10.${teaches() ? ` La calificación final de la materia y la final de cada parcial aplican la regla institucional (mínima aprobatoria ${grading.final.passing}).` : ''} Un rubro sin calificación conserva su peso y aporta 0; su porcentaje no se reparte entre los demás. El promedio parcial excluye parciales completamente vacíos, mientras que la calificación final conserva el peso de todos los parciales.${countedQuizzes().length ? ` Incluye ${countedQuizzes().length === 1 ? 'una evaluación' : countedQuizzes().length + ' evaluaciones'} en línea dentro de su categoría.` : ' Las evaluaciones en línea y los foros cuentan cuando se les asigna una categoría (en Administrar calificaciones o al editarlos).'}</p><p class="grade-note">Escribe las calificaciones directamente en las casillas de la tabla (Enter pasa al siguiente alumno). En los rubros como Exámenes o Tareas, el valor tenue es el cálculo automático; escribe para sustituirlo manualmente o borra la casilla para volver a usarlo. El ícono de documento abre la entrega del alumno; ⌄ junto a cada actividad tiene más opciones.</p><div class="table-wrap gradebook"><table><thead><tr><th class="sticky-name">Estudiante</th><th>Promedio parcial</th>${teaches() ? '<th>Calificación final</th><th>Asistencia</th>' : ''}${(grading.terms || []).filter(() => cats.length).map(t => `<th class="category-col term-col">${esc(t.name)}<div class="muted">${t.weight} % de la final</div></th>`).join('')}${cats.map(c => `<th class="category-col">${esc(categoryLabel(c, grading))}<div class="muted">${c.weight} %${c.term ? ' del parcial' : ''}</div></th>`).join('')}${cols.map((t, i) => {
     const drafts = teaches() ? records('submission').filter(r => r.data.task === t.id && r.data.published === false).length : 0;
-    return `<th class="gb-task-col"><div class="gb-col-head"><span>${esc(t.data.title)}${sectionTag(t)}</span>${gradebookColumnMenu(t)}</div>${drafts ? `<button class="table-link" data-action="publish-task" data-id="${t.id}">Publicar ${drafts} ${drafts === 1 ? 'borrador' : 'borradores'}</button>` : ''}</th>`;
+    const category = cats.find(c => c.id === t.data.category);
+    const placement = cats.length ? (category ? categoryLabel(category, grading) : 'Sin rubro') : '';
+    // Se arrastra el encabezado para cambiar la columna de lugar (12.30).
+    return `<th class="gb-task-col" draggable="true" data-gb-col="${esc(t.id)}" title="Arrastra para cambiar de lugar la columna"><div class="gb-col-head"><span>${placement ? `<small class="gb-task-placement">${esc(placement)}</small>` : ''}${esc(t.data.title)}${sectionTag(t)}</span>${gradebookColumnMenu(t, cols[i - 1], cols[i + 1])}</div>${drafts ? `<button class="table-link" data-action="publish-task" data-id="${t.id}">Publicar ${drafts} ${drafts === 1 ? 'borrador' : 'borradores'}</button>` : ''}</th>`;
   }).join('')}</tr></thead><tbody>${members.map(m => {
-    const result = studentGrade(m.id), avg = result.value, fin = teaches() ? finalGrade(studentGrade(m.id, { final: true }).value, grading.final) : null;
+    const result = studentGrade(m.id), avg = result.value, fin = teaches() ? courseFinalGrade(studentGrade(m.id, { final: true }), grading.final) : null;
     const pct = teaches() ? attendancePercentFor(m.id) : null;
-    return `<tr data-search-row><td class="sticky-name"><span class="person">${avatarHtml(m)}<span>${esc(m.name)}<div class="muted">${esc(m.matricula || '')}</div></span></span></td><td class="${avg === null ? '' : avg >= grading.final.passing ? 'grade-pass' : 'grade-low'}">${avg === null ? '—' : avg.toFixed(2)}</td>${teaches() ? `<td class="final-grade ${fin === null ? '' : fin.passed ? 'grade-pass' : 'grade-low'}">${fin === null ? '—' : formatGrade(fin.value, grading.final.decimals)}</td><td class="gb-attendance ${pct === null ? '' : pct < (attendanceData?.settings?.min_percent ?? 0) ? 'grade-low' : 'grade-pass'}">${pct === null ? '—' : pct.toFixed(1) + ' %'}</td>` : ''}${(result.terms || []).map(t => `<td class="category-col term-col">${formatGrade(t.value)}</td>`).join('')}${result.categories.map(c => `<td class="category-col">${formatGrade(c.value)}</td>`).join('')}${cols.map(t => {
+    return `<tr data-search-row><td class="sticky-name"><span class="person">${avatarHtml(m)}<span>${esc(m.name)}<div class="muted">${esc(m.matricula || '')}</div></span></span></td><td class="${avg === null ? '' : avg >= grading.final.passing ? 'grade-pass' : 'grade-low'}">${avg === null ? '—' : avg.toFixed(2)}</td>${teaches() ? `<td class="final-grade ${fin === null ? '' : fin.passed ? 'grade-pass' : 'grade-low'}">${fin === null ? '—' : formatGrade(fin.value, 0)}</td><td class="gb-attendance ${pct === null ? '' : pct < (attendanceData?.settings?.min_percent ?? 0) ? 'grade-low' : 'grade-pass'}">${pct === null ? '—' : pct.toFixed(1) + ' %'}</td>` : ''}${(result.terms || []).map(t => `<td class="category-col term-col">${formatGrade(finalGrade(t.value, grading.final)?.value ?? null, 0)}</td>`).join('')}${result.categories.map(c => categoryGradeCellHtml(c, m, c.value)).join('')}${cols.map(t => {
       const s = gradeOf(m.id, t.id);
       if (!itemApplies(t, m))
         return '<td class="grade-na" title="No es para su sección">—</td>';
@@ -338,6 +435,7 @@ function renderGroups() {
 }
 function renderMembers() {
   $('#main').innerHTML = `<h1>Listado de alumnos</h1><div class="toolbar">${teaches() ? button('Inscribir alumno', 'new-member') + button('Importar lista', 'bulk-members', '', 'secondary') + button(courseSections().length ? 'Secciones' : 'Crear secciones', 'sections', '', 'secondary') + '<button class="secondary" type="button" data-section="access">Accesos</button>' : ''}<input data-search type="search" placeholder="Buscar…" aria-label="Buscar alumno">${sectionFilterHtml()}</div>${teaches() ? '<p class="real-status">La inscripción vincula el curso al correo del alumno: verá el curso cuando entre con ese mismo correo (su cuenta de Microsoft o de Google). No se envían invitaciones. «Ver lo que ve» muestra el curso exactamente como lo ve ese alumno (solo lectura; la consulta queda registrada).</p>' : ''}${coTeachersPanel()}<div class="table-wrap"><table><thead><tr><th>Nombre</th>${teaches() ? `<th>Matrícula</th>${courseSections().length ? '<th>Sección</th>' : ''}<th>Correo</th><th>Estado</th><th>Acción</th>` : courseSections().length ? '<th>Sección</th>' : ''}</tr></thead><tbody>${(teaches() ? studentsInView() : current.members.filter(m => m.role === 'student')).map(m => `<tr data-search-row><td>${teaches() ? `<span class="person">${avatarHtml(m)}<span>${esc(m.name)}</span></span>` : esc(m.name)}</td>${!teaches() && courseSections().length ? `<td>${esc(sectionName(m.section) || '—')}</td>` : ''}${teaches() ? `<td>${esc(m.matricula)}</td>${courseSections().length ? `<td>${memberSectionSelect(m)}</td>` : ''}<td>${esc(m.email)}</td><td>${m.user_id ? 'Cuenta vinculada' : 'Pendiente de ingreso'}</td><td><div class="row-actions">${button('Editar', 'edit-member', m.id, 'text-btn')}${button('Ver lo que ve', 'view-member', m.id, 'text-btn')}${button('Retirar', 'remove-member', m.id, 'text-btn')}${m.photo ? `<button type="button" class="text-btn" data-member-photo-delete="${esc(m.id)}">Quitar foto</button>` : ''}</div></td>` : ''}</tr>`).join('') || '<tr><td>No hay alumnos inscritos.</td></tr>'}</tbody></table></div>`;
+  if (teaches()) $('#main .toolbar')?.insertAdjacentHTML('afterbegin', button('Traer de otro curso', 'copy-members', '', 'secondary'));
 }
 // ---- Accesos (12.20): inicios de sesión durante el curso e ingresos al curso de alumnos y docentes ----
 let accessData = null;
@@ -403,6 +501,12 @@ document.addEventListener('click', e => {
 });
 function renderAdmin() {
   $('#main').innerHTML = `<h1>Administración del curso</h1><section class="admin-section"><h2>Configuración</h2><div class="admin-links">${button('Información del curso', 'edit-course', '', 'table-link')}${button('Copiar a un nuevo periodo', 'copy-course', '', 'table-link')}${current.canDelete ? button(current.course.archived_at ? 'Desarchivar curso' : 'Archivar curso', 'archive-course', '', 'table-link') : ''}${button('Exportar respaldo del curso', 'backup', '', 'table-link')}${current.canDelete ? button('Eliminar curso / grupo', 'delete-course', current.course.id, 'danger-link') : ''}</div></section><section class="admin-section"><h2>Administración de estudiantes</h2><div class="admin-links"><button class="table-link" data-section="members">Listado de alumnos</button><button class="table-link" data-section="groups">Equipos de trabajo</button><button class="table-link" data-section="progress">Progreso de la clase</button><button class="table-link" data-section="access">Accesos de alumnos y docentes</button></div></section><section class="admin-section"><h2>Evaluación</h2><div class="admin-links"><button class="table-link" data-section="tasks">Actividades</button><button class="table-link" data-section="grades">Calificaciones</button><button class="table-link" data-section="quizzes">Evaluaciones</button></div></section><section class="admin-section"><h2>Papelera</h2><div class="admin-links"><button class="table-link" data-section="trash">Elementos eliminados</button></div><p class="muted">Lo que eliminas del curso se puede restaurar desde aquí con todo su contenido, entregas y calificaciones.</p></section><p class="real-status">El respaldo exporta registros y metadatos en JSON. Descarga los archivos adjuntos por separado. Conserva copias periódicas fuera de la plataforma.</p>`;
+  if (teaches()) {
+    document.querySelector('.admin-section .admin-links')?.insertAdjacentHTML(
+      'beforeend',
+      button(current.course.student_visible === 0 ? 'Mostrar curso a los alumnos' : 'Ocultar curso a los alumnos', 'toggle-course-visible', current.course.id, 'table-link'),
+    );
+  }
 }
 async function save(kind, data, old) {
   // «¿Para qué secciones?» del editor abierto (si el curso tiene secciones).
@@ -596,7 +700,8 @@ function courseModal(edit = false) {
       group: f.get('group'),
       period: f.get('period'),
       intro: f.get('intro'),
-      theme: Number(f.get('theme') || 0)
+      theme: Number(f.get('theme') || 0),
+      studentVisible: f.get('studentVisible') === 'on'
     });
     const courseId = edit ? c.id : result.id;
     const file = f.get('coverFile');
@@ -606,6 +711,10 @@ function courseModal(edit = false) {
     for (const name of names) await request('/api/sections', { course: courseId, name });
     return names.length ? `Curso creado con ${names.length} ${names.length === 1 ? 'sección' : 'secciones'}.` : edit ? 'Curso actualizado.' : undefined;
   });
+  $('#fields .cover-picker')?.insertAdjacentHTML(
+    'beforebegin',
+    `<fieldset><legend>Acceso de alumnos</legend><label class="check-label"><input type="checkbox" name="studentVisible" ${c?.student_visible === 0 ? '' : 'checked'}> Curso visible para los alumnos</label><p class="muted">Si lo ocultas, deja de aparecerles y no pueden abrirlo. Se conservan alumnos, contenido, entregas, asistencia y calificaciones.</p></fieldset>`,
+  );
 }
 /** Color del curso: el que eligió el docente o uno automático por su id. */
 const courseThemeOf = (c) => c?.theme || courseTheme(c?.id);
@@ -677,13 +786,13 @@ function download(name, text, type) {
 }
 function exportGrades() {
   const grading = gradingSettings(), cats = grading.scheme === 'categories' ? grading.categories : [];
-  const ts = records('task'), quote = v => {
+  const ts = orderedTasks(), quote = v => {
     let s = String(v ?? '');
     if (/^[=+@\-]/.test(s))
       s = "'" + s;
     return '"' + s.replace(/"/g, '""') + '"';
   };
-  const rows = [['Matrícula', 'Alumno', ...(courseSections().length ? ['Sección'] : []), 'Promedio parcial', 'Calificación final', ...(cats.length ? grading.terms || [] : []).map(t => `${t.name} (${t.weight} %)`), ...cats.map(c => `${categoryLabel(c, grading)} (${c.weight} %)`), ...ts.map(t => t.data.title)], ...studentsInView().map(m => { const result = studentGrade(m.id); return [m.matricula, m.name, ...(courseSections().length ? [sectionName(m.section)] : []), result.value?.toFixed(2) || '', finalGrade(studentGrade(m.id, { final: true }).value, grading.final)?.value.toFixed(grading.final.decimals) ?? '', ...[...(result.terms || []), ...result.categories].map(c => c.value === null ? '' : c.value.toFixed(2)), ...ts.map(t => itemApplies(t, m) ? gradeOf(m.id, t.id)?.data.grade ?? '' : 'n/a')]; })];
+  const rows = [['Matrícula', 'Alumno', ...(courseSections().length ? ['Sección'] : []), 'Promedio parcial', 'Calificación final', ...(cats.length ? grading.terms || [] : []).map(t => `${t.name} (${t.weight} %)`), ...cats.map(c => `${categoryLabel(c, grading)} (${c.weight} %)`), ...ts.map(t => t.data.title)], ...studentsInView().map(m => { const result = studentGrade(m.id); return [m.matricula, m.name, ...(courseSections().length ? [sectionName(m.section)] : []), result.value?.toFixed(2) || '', courseFinalGrade(studentGrade(m.id, { final: true }), grading.final)?.value.toFixed(0) ?? '', ...(result.terms || []).map(t => finalGrade(t.value, grading.final)?.value.toFixed(0) ?? ''), ...result.categories.map(c => c.value === null ? '' : c.value.toFixed(2)), ...ts.map(t => itemApplies(t, m) ? gradeOf(m.id, t.id)?.data.grade ?? '' : 'n/a')]; })];
   download('calificaciones.csv', '\uFEFF' + rows.map(r => r.map(quote).join(',')).join('\r\n'), 'text/csv;charset=utf-8');
 }
 document.addEventListener('click', async (e) => {
@@ -785,6 +894,19 @@ document.addEventListener('click', async (e) => {
       case 'copy-course':
         copyCourseModal();
         break;
+      case 'toggle-course-visible': {
+        const course = courses.find((x) => x.id === id) || (current?.course.id === id ? current.course : null);
+        const visible = course?.student_visible === 0;
+        if (!visible && !confirm('¿Ocultar este curso a los alumnos? Dejará de aparecerles, pero se conservarán todos sus datos.')) return;
+        await request('/api/course/visibility', { course: id, visible });
+        if (current?.course.id === id) await reload();
+        else {
+          courses = await request('/api/courses');
+          render();
+        }
+        toast(visible ? 'El curso vuelve a ser visible para los alumnos.' : 'Curso oculto para los alumnos.');
+        break;
+      }
       case 'archive-course':
         await toggleArchive();
         break;
@@ -917,11 +1039,17 @@ document.addEventListener('click', async (e) => {
       case 'bulk-members':
         bulkMembersModal();
         break;
+      case 'copy-members':
+        await copyMembersModal();
+        break;
       case 'sections':
         sectionsModal();
         break;
       case 'bulk-teams':
         bulkTeamsModal();
+        break;
+      case 'bulk-grade-visible':
+        bulkGradeVisibleModal(id);
         break;
       case 'zip-task':
         await downloadTaskZip(id);

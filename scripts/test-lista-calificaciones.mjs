@@ -126,7 +126,7 @@ r = await imp({
     { title: 'Reporte práctica 1', grades: [{ member: id('ana'), grade: 10 }, { member: id('carla'), grade: 8.5 }] },
   ],
 });
-assert.deepEqual(r, { created: 1, grades: 4 });
+assert.deepEqual(r, { created: 1, grades: 4, widened: 0 });
 let curso = await call('docente', '/api/course?id=' + c);
 const nota = (task, n) => curso.records.find((x) => x.kind === 'submission' && x.data.task === task && x.data.member === id(n));
 const nueva = curso.records.find((x) => x.kind === 'task' && x.data.title === 'Reporte práctica 1');

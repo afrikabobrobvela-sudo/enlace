@@ -21,8 +21,12 @@ const RECIPIENTS = `rcpt AS (
   mine AS (
     SELECT r.uid, m.id AS member, m.course, m.section, r.since FROM rcpt r
     JOIN aula_members m ON m.user_id=r.uid AND m.role='student'
-    JOIN aula_courses c ON c.id=m.course AND c.archived_at IS NULL
+    JOIN aula_courses c ON c.id=m.course AND c.archived_at IS NULL AND c.student_visible=1
     WHERE NOT EXISTS (SELECT 1 FROM aula_deleted_courses d WHERE d.course=c.id))`;
+
+/** Cursos activos donde enseña cada destinatario (alias `r`): propios o como co-docente, por índice (12.30). */
+const TEACHES = (r) => `CROSS JOIN aula_courses c ON (c.owner=${r}.uid OR c.id IN (SELECT t.course FROM aula_members t WHERE t.user_id=${r}.uid AND t.role='teacher'))
+         AND c.archived_at IS NULL AND NOT EXISTS (SELECT 1 FROM aula_deleted_courses d WHERE d.course=c.id)`;
 
 /** Arma los mensajes del resumen (uno por persona con algo nuevo). */
 export async function digestMessages(db, env, now = new Date()) {
@@ -91,29 +95,27 @@ export async function digestMessages(db, env, now = new Date()) {
       ...params,
       soon,
     ),
-    // Docentes: entregas nuevas por calificar en sus cursos.
+    // Docentes: entregas nuevas por calificar en sus cursos (12.30: por índice, sin recorrer todas las entregas).
     all(
       db,
       `WITH ${RECIPIENTS}
        SELECT r.uid, c.name AS course_name, count(*) AS n FROM rcpt r
-       JOIN aula_courses c ON c.archived_at IS NULL AND NOT EXISTS (SELECT 1 FROM aula_deleted_courses d WHERE d.course=c.id)
-         AND (c.owner=r.uid OR EXISTS (SELECT 1 FROM aula_members t WHERE t.course=c.id AND t.user_id=r.uid AND t.role='teacher'))
-       JOIN aula_submissions s ON s.course=c.id AND s.submitted>r.since AND s.manual=0 AND s.grade IS NULL
+       ${TEACHES('r')}
+       CROSS JOIN aula_submissions s ON s.course=c.id AND s.manual=0 AND s.submitted>r.since AND s.grade IS NULL
        JOIN aula_tasks t ON t.id=s.task AND t.deleted_at IS NULL
        GROUP BY r.uid, c.id LIMIT 5000`,
       ...params,
     ),
     // Foros (12.23): publicaciones nuevas en lo que sigue cada quien y respuestas a sus hilos, por hilo.
+    // 12.30: solo las publicaciones recientes de sus cursos, por índice (antes se recorrían todos los registros).
     all(
       db,
       `WITH ${RECIPIENTS}, place AS (
          SELECT uid, course, section, member, 0 AS teach, since FROM mine
          UNION ALL
-         SELECT r.uid, c.id, '', NULL, 1, r.since FROM rcpt r JOIN aula_courses c ON c.archived_at IS NULL
-           AND NOT EXISTS (SELECT 1 FROM aula_deleted_courses d WHERE d.course=c.id)
-           AND (c.owner=r.uid OR EXISTS (SELECT 1 FROM aula_members t WHERE t.course=c.id AND t.user_id=r.uid AND t.role='teacher')))
+         SELECT r.uid, c.id, '', NULL, 1, r.since FROM rcpt r ${TEACHES('r')})
        SELECT place.uid, c.name AS course_name, ${threadTitleSql} AS title, count(*) AS n
-       FROM place JOIN aula_records p ON p.course=place.course AND p.created>place.since AND p.created<=?1
+       FROM place CROSS JOIN aula_records p ON p.course=place.course AND p.kind='post' AND p.deleted_at IS NULL AND p.created>place.since AND p.created<=?1
        JOIN aula_records f ON f.id=json_extract(p.data,'$.forum') AND f.deleted_at IS NULL
        JOIN aula_courses c ON c.id=p.course
        WHERE ${forumActivitySql('place.uid', 'place', '?1')}

@@ -152,7 +152,15 @@ store.raw().prepare("INSERT INTO aula_files (id,course,owner,scope,name,size,mim
 assert.equal(await uploadAs('luis', 100), 413, 'Sobre la cuota del alumno');
 assert.equal(await uploadAs('ana', 100), 201, 'Otro alumno no se ve afectado');
 assert.equal(await uploadAs('docente', 100, 'material'), 201);
+// Las subidas mantienen el total en aula_storage (12.30); un cambio hecho por fuera se cuenta en el recuento de cada
+// hora: aquí se adelanta borrando el total guardado.
+assert.equal(
+  store.raw().prepare('SELECT bytes FROM aula_storage').get().bytes,
+  store.raw().prepare("SELECT sum(size) AS n FROM aula_files WHERE id<>'lleno'").get().n,
+  'Cada subida suma lo suyo al total guardado (el archivo «lleno» se agregó por fuera de Enlace)',
+);
 store.raw().prepare("UPDATE aula_files SET size=? WHERE id='lleno'").run(9 * 1024 * 1024 * 1024);
+store.raw().prepare('DELETE FROM aula_storage').run();
 assert.equal(await uploadAs('docente', 100, 'material'), 507, 'Plataforma casi llena');
 store.raw().prepare("DELETE FROM aula_files WHERE id='lleno'").run();
 checks += 4;
