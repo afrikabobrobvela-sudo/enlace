@@ -108,8 +108,22 @@ const after = await call('docente', `/api/attendance/session?course=${c}&id=${se
 assert.equal(after.checkin, null);
 assert.deepEqual(
   after.records.map((r) => [r.member, r.status, r.note]).sort(),
-  [[id('ana'), 'present', 'Registro con QR'], [id('luis'), 'present', 'Registro con QR'], [id('rosa'), 'late', 'Registro con QR']].sort(),
+  [[id('ana'), 'present', 'Registro con QR'], [id('luis'), 'present', 'Registro con QR'], [id('rosa'), 'late', 'Registro con QR'], [id('sofia'), 'absent', 'No se registró']].sort(),
+  'Al cerrar, quien no se registró queda como falta',
 );
+// Un registro que vence sin cerrarse también completa las faltas al consultar la asistencia (una sola vez).
+const otra = (await call('docente', '/api/attendance/session', { course: c, date: '2026-03-02', start_time: '08:00', topic: 'Vencida' }, 201)).id;
+await call('docente', '/api/attendance/checkin/open', { course: c, session: otra, minutes: 5 });
+await call('docente', '/api/attendance/mark', { course: c, session: otra, marks: [{ member: id('ana'), status: 'present' }] });
+store.raw().prepare('UPDATE aula_sessions SET checkin_until=? WHERE id=?').run(new Date(Date.now() - 60_000).toISOString(), otra);
+const listed = await call('docente', `/api/attendance?course=${c}`);
+const ofOtra = listed.records.filter((r) => r.session === otra);
+assert.equal(ofOtra.find((r) => r.member === id('ana')).status, 'present');
+assert.equal(ofOtra.filter((r) => r.status === 'absent').length, ofOtra.length - 1);
+await call('docente', '/api/attendance/mark', { course: c, session: otra, marks: [{ member: id('luis'), status: 'excused' }] });
+await call('docente', `/api/attendance?course=${c}`);
+assert.equal(store.raw().prepare("SELECT status FROM aula_attendance WHERE session=? AND member=?").get(otra, id('luis')).status, 'excused', 'No se vuelve a llenar');
+await call('docente', '/api/attendance/session', { course: c, id: otra }, 200, 'DELETE');
 // Un código reabierto es otro: el QR anterior ya no sirve.
 const reopened = await call('docente', '/api/attendance/checkin/open', { course: c, session, minutes: 5 });
 assert.notEqual(reopened.code, open.code);

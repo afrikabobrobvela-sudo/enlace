@@ -146,6 +146,29 @@ async function reconcileLocationFlags(db, session, userId) {
   return clear.length;
 }
 
+/**
+ * Al terminar un registro (cerrado por el docente o vencido), quien no se registró queda como falta. La marca de
+ * «registro por cerrar» es checkin_secret: se abre con el registro y se borra aquí, así cada registro se completa una
+ * sola vez y no se tocan los registros que ya existen (los que el docente capturó a mano o los del propio registro).
+ */
+async function fillAbsences(db, course, sessionId = null) {
+  const now = nowIso();
+  await db.batch([
+    db
+      .prepare(
+        `INSERT INTO aula_attendance (session,member,status,note,updated_by,updated)
+         SELECT s.id, m.id, 'absent', 'No se registró', 'sistema', ?2
+         FROM aula_sessions s JOIN aula_members m ON m.course=s.course AND m.role='student' AND (s.section='' OR m.section=s.section)
+         WHERE s.course=?1 AND s.checkin_secret IS NOT NULL AND (s.id=?3 OR (?3 IS NULL AND s.checkin_until<?2))
+         ON CONFLICT(session,member) DO NOTHING`,
+      )
+      .bind(course, now, sessionId),
+    db
+      .prepare('UPDATE aula_sessions SET checkin_secret=NULL WHERE course=?1 AND checkin_secret IS NOT NULL AND (id=?3 OR (?3 IS NULL AND checkin_until<?2))')
+      .bind(course, now, sessionId),
+  ]);
+}
+
 async function qrSignature(secret, code, window) {
   const key = await crypto.subtle.importKey('raw', fromBase64url(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
   const signature = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(`${code}.${window}`));
@@ -235,6 +258,8 @@ export const attendanceRoutes = {
     const settings =
       (await one(db, 'SELECT min_percent, lates_per_absence, excused_counts FROM aula_attendance_settings WHERE course=?', course)) ||
       DEFAULT_SETTINGS;
+    // Registros que vencieron sin que el docente los cerrara: quien no se registró queda como falta.
+    if (!a.course?.archived_at) await fillAbsences(db, course);
     // El alumno solo ve las clases de todo el curso y las de su sección.
     const sessions = await all(
       db,
@@ -555,6 +580,7 @@ export const attendanceRoutes = {
     requireTeacher(await access(db, user, body.course));
     const session = await sessionOf(db, body.session, body.course);
     await reconcileLocationFlags(db, session, user.id);
+    await fillAbsences(db, body.course, session.id);
     // La ubicación del salón solo se necesita mientras el registro está abierto.
     await run(
       db,

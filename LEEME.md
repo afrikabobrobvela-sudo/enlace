@@ -1,9 +1,15 @@
-# Enlace · versión 12.47
+# Enlace · versión 12.48
 
 Plataforma académica independiente para docentes y alumnos de cualquier academia (nació en la Academia de Física de la BUAP), con interfaz inspirada en Brightspace.
 No es el código de D2L Brightspace ni una plataforma oficial de la BUAP.
 
 Esta versión se despliega en **tu propia cuenta de Cloudflare** (Workers + D1 + R2, plan gratuito) y ya no depende de ChatGPT Sites.
+
+## Novedades de la versión 12.48 (faltas automáticas)
+
+- Al cerrar el registro de asistencia (QR o código), los alumnos de la clase que no se registraron quedan como **falta** con la nota «No se registró». Si el registro vence sin cerrarlo, las faltas se completan la próxima vez que alguien abre la asistencia del curso.
+- Cada registro se completa una sola vez: si después cambias una falta a justificada o asistencia, no se vuelve a poner. Las marcas que ya capturaste a mano no se tocan.
+- Los registros que ya cerraste antes de esta versión también se completan al abrir la asistencia (sin migración).
 
 ## Novedades de la versión 12.47 (importar con fecha)
 
