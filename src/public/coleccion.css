@@ -433,6 +433,14 @@ footer a { padding-block: 4px; }
 .gradebook .gb-task-due { display: block; font-weight: 400; font-size: 12px; color: var(--ink-faint); }
 
 /* 12.50: bloques por rubro en el libro (como T1, T2 de Brightspace). */
-.gradebook th.gb-group { text-align: left; white-space: nowrap; border-left: 2px solid var(--line, #c9d3dc); background: var(--tomo-papel, #f4f6f8); }
+.gradebook th.gb-group { text-align: center; white-space: nowrap; border-left: 2px solid var(--line, #c9d3dc); background: var(--tomo-papel, #f4f6f8); }
 .gradebook .gb-group-toggle { font: inherit; font-weight: 700; background: none; border: 0; padding: 4px 6px; min-height: 24px; cursor: pointer; color: inherit; }
 .gradebook .gb-subtotal { border-right: 2px solid var(--line, #c9d3dc); }
+
+/* 12.55: con bloques por rubro el encabezado tiene dos filas; la segunda se fija debajo de la primera
+   (--gb-row1 lo mide syncGradebookHead()) y todo el encabezado queda por encima de las casillas al bajar. */
+.gradebook thead th { position: sticky; top: 0; z-index: 3; }
+.gradebook thead tr + tr th { top: calc(var(--gb-row1, 0px) - 3px); }
+.gradebook thead th.sticky-name { z-index: 5; }
+/* La tinta del curso puede ser translúcida: sobre fondo blanco, para que no se vean las casillas al bajar. */
+.gradebook thead th.gb-group { background: linear-gradient(var(--tomo-papel, #f4f6f8), var(--tomo-papel, #f4f6f8)), #fff !important; }
