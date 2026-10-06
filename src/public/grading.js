@@ -77,15 +77,21 @@ function computeGrade({ tasks, grades, settings, weights, attendancePercent = nu
       }
       return list.some((item) => item.value !== null) && total ? sum / total : null;
     };
-    const termList = (settings.terms || []).map((term) => ({
-      id: term.id,
-      name: term.name,
-      weight: term.weight,
-      value: weighted(categories.filter((c) => c.term === term.id), true),
-    }));
+    // Un parcial está «completo» cuando todos sus rubros tienen calificación (la asistencia sin clases no lo detiene).
+    // En el promedio parcial (no en la final) solo cuentan los parciales completos: uno en curso, por ejemplo sin su
+    // examen, no se promedia como si sus rubros vacíos valieran 0 (12.44). `partial` es lo que lleva de lo calificado.
+    const termList = (settings.terms || []).map((term) => {
+      const own = categories.filter((c) => c.term === term.id);
+      const complete = own.length > 0 && own.every((c) => c.value !== null || c.source === 'attendance');
+      const full = weighted(own, true);
+      return { id: term.id, name: term.name, weight: term.weight, value: final || complete ? full : null, partial: full, complete };
+    });
     const known = new Set(termList.map((t) => t.id));
-    const top = [...termList, ...categories.filter((c) => !c.term || !known.has(c.term))];
-    return { value: weighted(top, final || !termList.length), categories, terms: termList };
+    const general = categories.filter((c) => !c.term || !known.has(c.term));
+    // Si aún no hay ningún parcial completo, el promedio parcial usa lo que llevan (para no quedar vacío al empezar).
+    const anyComplete = termList.some((t) => t.complete);
+    const topTerms = final || anyComplete ? termList : termList.map((t) => ({ ...t, value: t.partial }));
+    return { value: weighted([...topTerms, ...general], final || !termList.length), categories, terms: termList };
   }
   const valid = weights && tasks.every((t) => Number.isFinite(weights[t.id]));
   for (const task of tasks) {
@@ -338,7 +344,7 @@ function myGradesHtml() {
   return `<h1>Mis calificaciones</h1>
     <section class="my-grade-summary">
       <p class="my-grade-big ${tone(avg)}">${formatGrade(avg)}</p>
-      <div><h2>Promedio parcial</h2><p class="muted">Promedio ${scheme}, de 0 a 10, de lo ya calificado.</p></div>
+      <div><h2>Promedio parcial</h2><p class="muted">Promedio ${scheme}, de 0 a 10, de lo ya calificado${result.terms?.some((t) => t.complete) && result.terms.some((t) => !t.complete) ? ` (solo ${result.terms.filter((t) => t.complete).map((t) => esc(t.name)).join(", ")}; lo demás sigue en curso)` : ""}.</p></div>
       ${myAttendanceSummaryHtml(member)}
     </section>
     ${
@@ -348,7 +354,9 @@ function myGradesHtml() {
               ? `<section class="panel"><h2>Por parcial</h2><ul class="my-grade-list">${result.terms
                   .map((t) => {
                     const grade = finalGrade(t.value, grading.final);
-                    return `<li class="my-grade-item"><div class="my-grade-row is-static"><span class="my-grade-title">${esc(t.name)}<small>${t.weight} % de la calificación final</small></span><span class="my-grade-value ${grade === null ? 'is-pending' : tone(grade.value)}">${grade === null ? 'Sin calificar' : formatGrade(grade.value, 0)}</span></div></li>`;
+                    // Parcial en curso (12.44): le faltan rubros por calificar; no tiene calificación de parcial todavía.
+                    const label = grade !== null ? formatGrade(grade.value, 0) : t.partial !== null && t.partial !== undefined ? 'En curso' : 'Sin calificar';
+                    return `<li class="my-grade-item"><div class="my-grade-row is-static"><span class="my-grade-title">${esc(t.name)}<small>${t.weight} % de la calificación final</small></span><span class="my-grade-value ${grade === null ? 'is-pending' : tone(grade.value)}">${label}</span></div></li>`;
                   })
                   .join('')}</ul></section>`
               : ''
