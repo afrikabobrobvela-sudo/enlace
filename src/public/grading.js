@@ -881,11 +881,16 @@ function needsReview(s) {
   return grade === null || grade === undefined || grade === '' || Boolean(s.data.gradedAt && s.data.submitted && s.data.submitted > s.data.gradedAt);
 }
 
+/** Calificación máxima de la columna (12.51): se captura «6 de 9» y se guarda sobre 10 (6.67). */
+const taskMax = (t) => Number(t?.data?.maxScore) > 0 ? Number(t.data.maxScore) : 10;
+const toPoints = (t, grade) => grade === null || grade === undefined || grade === '' ? '' : Math.round(Number(grade) * taskMax(t) / 10 * 100) / 100;
+
 function gradebookCellHtml(t, m, s) {
   const sent = hasSubmission(s);
   const pending = needsReview(s);
   const title = sent ? `${pending ? 'Sin revisar: ' : ''}ver la entrega de ${m.name}${s.data.late ? ' (tardía)' : ''}` : `Calificar a ${m.name} con comentarios o rúbrica`;
-  return `<div class="gb-cell-row${pending ? ' needs-review' : ''}"><input class="gb-input" type="number" min="0" max="10" step="0.01" inputmode="decimal" value="${esc(s?.data.grade ?? '')}" placeholder="—"
+  return `<div class="gb-cell-row${pending ? ' needs-review' : ''}"><input class="gb-input" type="number" min="0" max="${taskMax(t)}" step="0.01" inputmode="decimal" value="${esc(toPoints(t, s?.data.grade))}" placeholder="—"
+      title="${taskMax(t) !== 10 && s?.data.grade != null ? `${toPoints(t, s.data.grade)} de ${taskMax(t)} = ${Number(s.data.grade).toFixed(2)} sobre 10` : ''}"
       data-gb-task="${esc(t.id)}" data-gb-member="${esc(m.id)}" aria-label="Calificación de ${esc(m.name)} en ${esc(t.data.title)}">
     <button type="button" class="gb-open ${sent ? 'has-file' : ''} ${pending ? 'needs-review' : ''}" data-action="review" data-id="${esc(t.id)}" data-member="${esc(m.id)}" title="${esc(title)}" aria-label="${esc(title)}">${sent ? DOC_ICON : '›'}</button></div>${
     pending ? '<span class="review-tag">sin revisar</span>' : ''
@@ -899,12 +904,28 @@ function gradebookColumnMenu(t, prev = null, next = null) {
     <button type="button" data-action="edit-task" data-id="${esc(t.id)}">Editar actividad</button>
     <button type="button" data-gb-enter="${esc(t.id)}">Ingresar calificaciones</button>
     <button type="button" data-gb-bulk="${esc(t.id)}">Calificar en bloque</button>
+    <button type="button" data-gb-max="${esc(t.id)}">Calificación máxima (${taskMax(t)})…</button>
     <button type="button" data-gb-stats="${esc(t.id)}">Ver las estadísticas</button>
     <button type="button" data-gb-move="${esc(t.id)}" data-gb-target="${esc(prev?.id || '')}" ${prev ? '' : 'disabled'}>← Mover a la izquierda</button>
     <button type="button" data-gb-move="${esc(t.id)}" data-gb-target="${esc(next?.id || '')}" data-gb-after="1" ${next ? '' : 'disabled'}>Mover a la derecha →</button>
     <button type="button" class="gb-danger" data-action="trash" data-kind="task" data-id="${esc(t.id)}">Eliminar actividad</button>
   </div></details>`;
 }
+
+document.addEventListener('click', async (e) => {
+  const button = e.target.closest?.('[data-gb-max]');
+  if (!button) return;
+  const t = records('task').find((x) => x.id === button.dataset.gbMax);
+  if (!t) return;
+  modal(`Calificación máxima · ${t.data.title}`, `<form id="gbMax" class="real-form">
+    <p class="muted">Captura sobre este valor y Enlace lo convierte a 10, como en Brightspace: 6 de 9 = 6.67. Las calificaciones ya capturadas conservan sus puntos (6 de 9 pasa a 6 de 8 = 7.5).</p>
+    <label>Calificación máxima<input name="max" type="number" min="0.01" max="1000" step="0.01" required value="${taskMax(t)}"></label>
+    <p class="form-error error" hidden></p><div class="form-actions"><button class="primary">Guardar</button></div></form>`);
+  bindForm('#gbMax', async (f) => {
+    const r = await request('/api/task/max', { course: current.course.id, id: t.id, max: Number(f.get('max')) });
+    return r.changed ? `Calificación máxima guardada; se recalcularon ${r.changed} calificaciones.` : 'Calificación máxima guardada.';
+  });
+});
 
 /** Mueve la columna `id` antes (o después) de la columna `target` y guarda el orden para todos los docentes del curso. */
 async function moveGradebookColumn(id, target, after = false) {
@@ -979,13 +1000,17 @@ document.addEventListener('dragend', () => {
 async function saveGradebookCell(input) {
   const { gbTask: task, gbMember: member } = input.dataset;
   const raw = input.value.trim().replace(',', '.');
-  const grade = raw === '' ? null : Number(raw);
+  const t = records('task').find((x) => x.id === task), max = taskMax(t);
+  const points = raw === '' ? null : Number(raw);
   input.classList.remove('is-error');
-  if (grade !== null && (!Number.isFinite(grade) || grade < 0 || grade > 10)) {
+  if (points !== null && (!Number.isFinite(points) || points < 0 || points > max)) {
     input.classList.add('is-error');
-    toast('La calificación va de 0 a 10.');
+    toast(`La calificación va de 0 a ${max}.`);
     return false;
   }
+  // Se guarda sobre 10 (6 de 9 = 6.6667); si la casilla no cambió, no se vuelve a guardar.
+  if (points !== null && points === toPoints(t, gradeOf(member, task)?.data.grade)) return true;
+  const grade = points === null ? null : Math.round(points * 10 / max * 10000) / 10000;
   const s = gradeOf(member, task);
   if ((s?.data.grade ?? null) === grade) return true;
   const key = `${task}:${member}`;

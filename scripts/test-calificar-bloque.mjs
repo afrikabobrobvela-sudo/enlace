@@ -56,6 +56,28 @@ await call('ana', '/api/record', { course: c, kind: 'submission', data: { task: 
 data = await course();
 await call('docente', '/api/grade', { course: c, task: task.id, member: luis, grade: 6, feedback: 'Bien', publish: true });
 
+// 12.51: calificación máxima. Luis tiene 6 sobre 10; con máximo 9 sus 6 puntos valen 6.67, y con 12, 5.
+data = await course();
+const antes = gradeOf(luis).grade;
+await call('docente', '/api/task/max', { course: c, id: task.id, max: 0 }, 400);
+await call('ana', '/api/task/max', { course: c, id: task.id, max: 9 }, 403);
+await call('docente', '/api/task/max', { course: c, id: task.id, max: 9 });
+await call('docente', '/api/task/max', { course: c, id: task.id, max: 10 });
+data = await course();
+assert.equal(gradeOf(luis).grade, antes, 'Ida y vuelta conserva la calificación');
+await call('docente', '/api/task/max', { course: c, id: task.id, max: 9 });
+data = await course();
+assert.equal(data.records.find((r) => r.id === task.id).data.maxScore, 9);
+assert.equal(gradeOf(luis).grade, 6.6667, 'El 6 capturado pasa a 6 de 9 = 6.67');
+await call('docente', '/api/task/max', { course: c, id: task.id, max: 12 });
+data = await course();
+assert.equal(Math.round(gradeOf(luis).grade * 100) / 100, 5, '6 de 9 pasa a 6 de 12 = 5');
+assert(store.raw().prepare("SELECT count(*) AS n FROM aula_grade_history WHERE reason='calificación máxima'").get().n >= 1);
+await call('docente', '/api/task/max', { course: c, id: task.id, max: 10 });
+data = await course();
+assert.equal(gradeOf(luis).grade, 6);
+checks += 6;
+
 // Permisos y validación.
 await call('ana', '/api/grades/bulk', { course: c, task: task.id, members: [ana], grade: 10 }, 403);
 await call('docente', '/api/grades/bulk', { course: c, task: task.id, members: [ana], grade: 11 }, 400);
@@ -182,6 +204,7 @@ await call('docente', '/api/grades/copy-scheme', { course: pa, targets: [pb] });
 const pbWeights = (await call('docente', '/api/course?id=' + pb)).records.find((r) => r.kind === 'weights');
 assert.equal(pbWeights.data.weights[pb1.id], 30);
 checks += 13;
+
 
 assert.deepEqual(store.raw().prepare('PRAGMA foreign_key_check').all(), []);
 console.log(`PASS: ${checks} verificaciones de la 12.32 — calificar en bloque (grupo o elegidos, sin reemplazar salvo que se pida, comentario opcional, borrador o publicada, historial y curso archivado) y aplicar la configuración de calificaciones a otros grupos (parciales, categorías, reglas y actividades por nombre).`);

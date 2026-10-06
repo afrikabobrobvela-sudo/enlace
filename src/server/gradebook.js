@@ -36,6 +36,7 @@ export function taskRecord(row) {
       end: row.end_at,
       category: row.category ?? null,
       points: row.points ?? 1,
+      maxScore: row.max_score ?? 10,
       rubric: row.rubric ?? null,
       groupCategory: row.group_category || '',
       sections: taskSections(row.sections),
