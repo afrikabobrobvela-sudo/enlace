@@ -196,8 +196,10 @@ assert.equal(toasts.at(-1), 'Este curso está archivado.');
 assert.equal(run("trashConfirmText('task', 'a')"), '¿Eliminar «Tarea 1»? Tiene 2 calificaciones. Sus entregas y calificaciones se conservan en la papelera y vuelven si la restauras.');
 checks += 5;
 
-// Archivo de 5BV: las columnas van a las actividades existentes aunque traigan la sección en el nombre; quien es de
-// otra sección se omite (sus calificaciones no se tocan) y «Tarea 11» no se confunde con «Tarea 1».
+// Archivo de 5BV: cada grupo tiene sus propias actividades (12.45). Una columna solo se une sola a una actividad que
+// sea exactamente de 5BV («Examen final»); «Tarea 1» y «Tarea 2» son de todo el curso, así que se proponen como nuevas
+// para 5BV (antes se compartían y eliminarlas desde un grupo las quitaba del otro). Quien es de otra sección se omite
+// y «Tarea 11» no se confunde con «Tarea 1».
 const students = run('current.members');
 const tasks = run("records('task')");
 const archivo = [
@@ -208,8 +210,8 @@ const archivo = [
 const plano = (x) => JSON.parse(JSON.stringify(x));
 const deB = plano(run('parseGradesImport')(archivo, students, tasks, { section: 'sb', sectionNames: ['5AV', '5BV'] }));
 assert.deepEqual(deB.columns.map((x) => [x.title, x.task, x.cells.map((y) => y.member.id).join()]), [
-  ['Tarea 1 (Sección 5BV)', 'a', 'm-carla'],
-  ['Tarea 2 5BV', 'b', 'm-carla'],
+  ['Tarea 1 (Sección 5BV)', '', 'm-carla'],
+  ['Tarea 2 5BV', '', 'm-carla'],
   ['Tarea 11', '', 'm-carla'],
   ['Examen final', 'x', 'm-carla'],
 ]);

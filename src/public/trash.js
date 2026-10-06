@@ -29,6 +29,25 @@ function trashConfirmText(kind, id) {
 }
 
 async function trashItem(kind, id) {
+  // Actividad compartida con otras secciones y el libro filtrado a una sola (12.45): primero se ofrece quitarla
+  // solo de esa sección, para no borrar la de los demás grupos.
+  if (kind === 'task') {
+    const only = typeof selectedSection === 'function' ? selectedSection() : '';
+    const task = find(id);
+    const all = courseSections().map((x) => x.id);
+    const mine = task?.data.sections?.length ? task.data.sections : all;
+    if (only && mine.includes(only) && mine.length > 1) {
+      const others = mine.filter((x) => x !== only).map(sectionName).join(', ');
+      if (confirm(`«${task.data.title}» también es de: ${others}.\n\n¿Quitarla solo de ${sectionName(only)}? Las otras secciones la conservan con sus entregas y calificaciones.\n\n(Cancelar = ver la opción de eliminarla para todas)`)) {
+        await request('/api/task/unshare', { course: current.course.id, id, section: only });
+        toast(`Se quitó de ${sectionName(only)}; sigue en ${others}.`);
+        return 'unshared';
+      }
+      if (!confirm(`¿Eliminar «${task.data.title}» para TODAS sus secciones (${mine.map(sectionName).join(', ')})? Va a la papelera.`)) return false;
+      await request('/api/record', { course: current.course.id, kind, id }, 'DELETE');
+      return true;
+    }
+  }
   if (!confirm(trashConfirmText(kind, id))) return false;
   await request('/api/record', { course: current.course.id, kind, id }, 'DELETE');
   return true;

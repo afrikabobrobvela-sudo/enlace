@@ -229,7 +229,10 @@ function parseGradesImport(rows, students, tasks, { section = '', sectionNames =
     const cells = body.map((r, k) => ({ member: matches[k], cell: gradeCell(r[i]) })).filter((x) => x.member && x.cell && inSection(x.member));
     if (!cells.length) return;
     const top = Math.max(...cells.map((x) => x.cell.value));
-    const task = byTitle.get(taskTitleKey(title, sectionNames));
+    const found = byTitle.get(taskTitleKey(title, sectionNames));
+    // Con una sección, cada grupo tiene sus propias actividades (12.45): solo se propone una que sea exactamente de
+    // esa sección; si no, se crea una nueva para ella (antes se compartía la del otro grupo y borrarla afectaba a ambos).
+    const task = !section || (found?.data.sections?.length === 1 && found.data.sections[0] === section) ? found : null;
     columns.push({ index: i, title, task: task?.id || '', max: max ?? (top > 10 ? (top <= 20 ? 20 : 100) : 10), cells, include: true });
   });
   if (!columns.length)

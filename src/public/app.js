@@ -1125,8 +1125,14 @@ document.addEventListener('click', async (e) => {
       }
       case 'trash': {
         const kind = b.dataset.kind;
-        if (!(await trashItem(kind, id)))
+        const outcome = await trashItem(kind, id);
+        if (!outcome)
           return;
+        if (outcome === 'unshared') {
+          if ($('#modal').open) $('#modal').close();
+          await reload();
+          break;
+        }
         if ($('#modal').open)
           $('#modal').close();
         // Si se eliminó lo que estaba abierto, vuelve a la lista correspondiente.

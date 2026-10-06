@@ -11,7 +11,7 @@ import { reportRoutes } from './reports.js';
 import { demoRoutes } from './demo.js';
 import { backupRoutes } from './backup.js';
 import { userRoutes } from './users.js';
-import { forSection, isPublished, publishAtField, publishedSql, SCHEDULABLE_KINDS, sectionSql, specialRecordSql, specialTaskSql } from './published.js';
+import { forSection, isPublished, publishAtField, publishedSql, SCHEDULABLE_KINDS, sectionSql, specialRecordSql, specialTaskSql, taskSections } from './published.js';
 import {
   MAX_EXAM_EVENTS,
   MAX_PASSWORD_FAILURES,
@@ -1407,6 +1407,24 @@ const routes = {
   // ---- Papelera ----
   // Eliminar no borra nada: el elemento deja de mostrarse y cualquier docente del curso puede restaurarlo.
   // Las entregas, calificaciones e intentos de una actividad o evaluación eliminada se conservan.
+
+  // Quitar una actividad compartida de UNA sección (12.45): las demás la conservan con sus entregas y calificaciones.
+  // Antes, eliminarla desde el grupo 5BV la quitaba también de 5CV (la importación por sección la había compartido).
+  'POST /api/task/unshare': async ({ db, user, request }) => {
+    const body = await readJson(request);
+    requireTeacher(await access(db, user, body.course));
+    const task = await loadTask(db, body.id, body.course);
+    const section = String(body.section || '');
+    const courseSecs = (await all(db, 'SELECT id FROM aula_sections WHERE course=?', body.course)).map((r) => r.id);
+    if (!courseSecs.includes(section)) fail('Sección no encontrada.', 404);
+    const current = taskSections(task.sections);
+    const now = current.length ? current : courseSecs; // '' = todas las secciones
+    if (!now.includes(section)) fail('La actividad no es de esa sección.', 409);
+    const rest = now.filter((x) => x !== section);
+    if (!rest.length) fail('Es la única sección de la actividad: elimínala.', 409);
+    await run(db, 'UPDATE aula_tasks SET sections=?, revision=revision+1 WHERE id=? AND course=?', JSON.stringify(rest.sort()), task.id, body.course);
+    return json({ ok: true, sections: rest });
+  },
 
   'DELETE /api/record': async ({ db, user, request }) => {
     const body = await readJson(request);
