@@ -769,6 +769,31 @@ function gradeToneClass(value) {
   return grade >= gradingSettings().final.passing ? 'gb-pass' : 'gb-fail';
 }
 
+/**
+ * Color de la casilla de una actividad (12.43, como en Brightspace): 10 es verde intenso y, al bajar la calificación,
+ * el verde se aclara y pasa por amarillo hasta el rojo. Sin calificación ni entrega y ya vencida: rojo («sin entregar»).
+ * Entregada sin calificar o aún sin vencer: sin color. Devuelve los atributos para el <td>.
+ */
+function gradeHeatAttr(task, member, submission) {
+  const raw = submission?.data.grade;
+  const grade = raw === null || raw === undefined || raw === '' ? null : Number(raw);
+  if (grade !== null && Number.isFinite(grade)) {
+    // Desde la mínima aprobatoria hasta 10: de verde amarillento y claro a verde intenso. Por debajo: de naranja a rojo.
+    const passing = gradingSettings().final.passing || 6;
+    const g = Math.max(0, Math.min(10, grade));
+    const up = g >= passing ? (passing >= 10 ? 1 : (g - passing) / (10 - passing)) : 0;
+    const down = g < passing ? g / passing : 0;
+    const hue = g >= passing ? Math.round(75 + 60 * up) : Math.round(2 + 26 * down);
+    const sat = g >= passing ? Math.round(45 + 25 * up) : 72;
+    const light = g >= passing ? Math.round(90 - 14 * up) : Math.round(84 + 4 * down);
+    return ` style="--gb-heat: hsl(${hue} ${sat}% ${light}%)" data-heat="grade"`;
+  }
+  if (task.data.forum || hasSubmission(submission)) return '';
+  const due = dueFor(task, member.id);
+  if (!due || Date.parse(due) > Date.now()) return '';
+  return ' style="--gb-heat: hsl(2 72% 84%)" data-heat="missing" title="Sin entregar (venció)"';
+}
+
 function categoryGradeCellHtml(category, member, value) {
   if (category.source !== 'tasks' || !teaches()) return `<td class="category-col ${gradeToneClass(value)}">${formatGrade(value)}</td>`;
   const manual = categoryGradeOf(member.id, category.id);

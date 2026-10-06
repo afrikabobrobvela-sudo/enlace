@@ -422,3 +422,9 @@ footer a { padding-block: 4px; }
   .gb-cell-row { gap: 6px; }
 }
 #main h1[tabindex="-1"]:focus:not(:focus-visible) { outline: none; }
+
+/* Libro (12.43): cada casilla de actividad lleva su color según la calificación (gradeHeatAttr): verde en 10 que se
+   aclara y pasa a rojo al bajar; rojo si no se entregó y ya venció. La cifra sigue en texto oscuro. */
+.gradebook td[data-heat] { background: var(--gb-heat) !important; color: #1b1f24; }
+.gradebook td[data-heat] .gb-input { background: rgba(255, 255, 255, 0.72); }
+.gradebook td[data-heat="missing"] .gb-input::placeholder { color: #8f1c12; }
