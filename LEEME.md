@@ -1,9 +1,14 @@
-# Enlace · versión 12.45
+# Enlace · versión 12.46
 
 Plataforma académica independiente para docentes y alumnos de cualquier academia (nació en la Academia de Física de la BUAP), con interfaz inspirada en Brightspace.
 No es el código de D2L Brightspace ni una plataforma oficial de la BUAP.
 
 Esta versión se despliega en **tu propia cuenta de Cloudflare** (Workers + D1 + R2, plan gratuito) y ya no depende de ChatGPT Sites.
+
+## Novedades de la versión 12.46
+
+- **Administrar calificaciones → «Qué cuenta en cada categoría»:** ahora tiene el filtro de grupos. Con un grupo elegido solo se ven sus actividades, evaluaciones y foros, y los de todo el curso. Lo que no se ve conserva su categoría al guardar.
+- **Importar calificaciones:** cada actividad nueva que se crea al importar lleva como fecha el día y la hora de la importación. Antes quedaba sin fecha.
 
 ## Novedades de la versión 12.45 (cada grupo con sus propias actividades)
 

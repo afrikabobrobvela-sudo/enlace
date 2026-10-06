@@ -133,6 +133,8 @@ const nueva = curso.records.find((x) => x.kind === 'task' && x.data.title === 'R
 // Ana conserva su entrega y ahora tiene 7; a Beto no se le reemplazó su 5.
 assert.deepEqual([nota(tarea.id, 'ana').data.grade, nota(tarea.id, 'ana').data.body, nota(tarea.id, 'beto').data.grade], [7, 'Mi reporte', 5]);
 assert.deepEqual([nota(nueva.id, 'ana').data.grade, nota(nueva.id, 'carla').data.grade], [10, 8.5]);
+// 12.46: la actividad creada al importar lleva la fecha de la importación.
+assert(nueva.data.due && Math.abs(Date.parse(nueva.data.due) - Date.now()) < 60_000, 'La actividad importada lleva la fecha de hoy');
 // Con reemplazo y sin publicar: Beto pasa a 9 en borrador (su alumno no la ve) y queda en el historial.
 await imp({ publish: false, activities: [{ task: tarea.id, grades: [{ member: id('beto'), grade: 9 }] }] });
 curso = await call('docente', '/api/course?id=' + c);
