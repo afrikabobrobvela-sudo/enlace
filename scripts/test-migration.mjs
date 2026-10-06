@@ -121,7 +121,7 @@ const legacyTasks = pick(before.records, 'task').map((t) => ({
     visible: true, fileIds: [], submissionMode: 'both', maxFiles: 5, extensions: [], allowResubmit: true, due: '', start: '', end: '',
     ...t.data,
     // Fase 2B: sin categoría, valor 1, sin rúbrica y entrega individual.
-    category: null, points: 1, rubric: null, groupCategory: '',
+    category: null, points: 1, maxScore: 10, rubric: null, groupCategory: '',
     // 12.18: para todas las secciones.
     sections: [],
     specialOnly: false,

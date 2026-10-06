@@ -1,9 +1,27 @@
-# Enlace · versión 12.49
+# Enlace · versión 12.52
 
 Plataforma académica independiente para docentes y alumnos de cualquier academia (nació en la Academia de Física de la BUAP), con interfaz inspirada en Brightspace.
 No es el código de D2L Brightspace ni una plataforma oficial de la BUAP.
 
 Esta versión se despliega en **tu propia cuenta de Cloudflare** (Workers + D1 + R2, plan gratuito) y ya no depende de ChatGPT Sites.
+
+## Novedades de la versión 12.52 (recalcular solo si tú lo decides)
+
+- Al cambiar la calificación máxima de una columna, las calificaciones ya capturadas **no cambian** salvo que marques «Recalcular las calificaciones ya capturadas» en la misma ventana. Con la casilla marcada se comporta como en 12.51 (un 6 pasa a 6 de 9 = 6.67).
+
+## Novedades de la versión 12.51 (calificación máxima por columna)
+
+- **Requiere migración** (0037, solo agrega la columna `max_score` a `aula_tasks`; `npm run configurar` la aplica con respaldo previo).
+- En el libro, el menú ⌄ de cada actividad tiene «Calificación máxima…». Si un examen fue sobre 9, pones 9 y capturas los puntos tal cual: 6 de 9 se guarda como 6.67 sobre 10, igual que en Brightspace. El encabezado dice «sobre 9».
+- Las calificaciones ya capturadas conservan sus puntos y se recalculan: un 6 que ya estaba pasa a 6 de 9 = 6.67. Si después cambias el máximo a 12, queda 6 de 12 = 5. Cada cambio queda en el historial de calificaciones («calificación máxima»).
+- El promedio, los rubros, los colores y lo que ve el alumno usan el valor sobre 10.
+
+## Novedades de la versión 12.50 (bloques por rubro en el libro)
+
+- En el libro de calificaciones, las actividades se agrupan por rubro, como en Brightspace (T1, T2…): por ejemplo «Parcial 1 · Tareas» y «Parcial 1 · Laboratorio» tienen cada uno su bloque, con sus actividades juntas y una columna **Subtotal** al final del bloque (es la misma casilla de rubro de antes: puedes capturarla a mano).
+- Con el botón ⊟ / ⊞ del encabezado se contrae un bloque para ver solo su subtotal; se recuerda por curso en tu navegador.
+- Las actividades sin rubro quedan en un bloque «Sin rubro» al final.
+- «Actividad no encontrada o repetida» ya no aparece: si una actividad se eliminó con la pantalla abierta, se ignora al guardar, y si algo está repetido, el mensaje dice cuál (actividad, evaluación o foro).
 
 ## Novedades de la versión 12.49 (fecha en el libro)
 

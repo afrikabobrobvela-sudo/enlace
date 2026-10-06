@@ -431,3 +431,8 @@ footer a { padding-block: 4px; }
 
 /* 12.49: fecha de la actividad bajo su nombre en el libro. */
 .gradebook .gb-task-due { display: block; font-weight: 400; font-size: 12px; color: var(--ink-faint); }
+
+/* 12.50: bloques por rubro en el libro (como T1, T2 de Brightspace). */
+.gradebook th.gb-group { text-align: left; white-space: nowrap; border-left: 2px solid var(--line, #c9d3dc); background: var(--tomo-papel, #f4f6f8); }
+.gradebook .gb-group-toggle { font: inherit; font-weight: 700; background: none; border: 0; padding: 4px 6px; min-height: 24px; cursor: pointer; color: inherit; }
+.gradebook .gb-subtotal { border-right: 2px solid var(--line, #c9d3dc); }
