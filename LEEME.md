@@ -1,9 +1,13 @@
-# Enlace · versión 12.54
+# Enlace · versión 12.55
 
 Plataforma académica independiente para docentes y alumnos de cualquier academia (nació en la Academia de Física de la BUAP), con interfaz inspirada en Brightspace.
 No es el código de D2L Brightspace ni una plataforma oficial de la BUAP.
 
 Esta versión se despliega en **tu propia cuenta de Cloudflare** (Workers + D1 + R2, plan gratuito) y ya no depende de ChatGPT Sites.
+
+## Novedades de la versión 12.55
+
+- En el libro, al bajar por la tabla el encabezado completo (bloques de rubro y nombres de actividades) se queda fijo arriba; ya no se mueve ni deja ver las casillas debajo.
 
 ## Novedades de la versión 12.54
 

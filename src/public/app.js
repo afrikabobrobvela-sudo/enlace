@@ -304,6 +304,14 @@ document.addEventListener(
   true,
 );
 
+/** Encabezado de dos filas fijo (12.55): la segunda fila se pega debajo de la primera, no encima. */
+function syncGradebookHead() {
+  const table = document.querySelector('.gradebook table'), first = table?.querySelector('thead tr');
+  if (!first) return;
+  const tall = Math.min(...[...first.children].filter((th) => !th.rowSpan || th.rowSpan === 1).map((th) => th.getBoundingClientRect().height));
+  table.style.setProperty('--gb-row1', `${Number.isFinite(tall) ? tall : 0}px`);
+}
+
 /** Rubros contraídos en el libro (12.50), por curso. */
 function gradebookCollapsed() {
   try {
@@ -367,6 +375,7 @@ function renderGrades() {
     });
   if (gradeTab === 'manage' && teaches())
     bindGradingManage();
+  syncGradebookHead();
 }
 let reviewMember = null;
 let reviewOnlyPending = false;
