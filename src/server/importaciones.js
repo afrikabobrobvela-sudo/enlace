@@ -6,17 +6,12 @@
 // otra), las actividades nuevas son solo para esa sección y una actividad existente dirigida a otras secciones
 // también queda para esta (si no, sus alumnos no verían la calificación importada).
 import { access, requireTeacher } from './access.js';
-import { all, fail, json, nowIso, one, readJson, text } from './http.js';
+import { all, fail, isoDate, json, nowIso, one, readJson, text } from './http.js';
 import { taskSections } from './published.js';
 import { validSection } from './sections.js';
 
 const MAX_ACTIVITIES = 60;
 
-/**
- * Fecha de una actividad creada al importar (12.46): el momento de la importación, para que el libro y el calendario
- * muestren cuándo se generó (antes quedaba sin fecha). Las fechas se guardan en ISO como las demás.
- */
-const importDue = (iso) => iso;
 const MAX_GRADES = 15000;
 
 export const importRoutes = {
@@ -45,14 +40,17 @@ export const importRoutes = {
     );
     const newTasks = [];
     const widened = [];
+    const dated = [];
     const grades = new Map();
     for (const a of activities) {
       let task = a?.task ? String(a.task) : '';
       if (task && !existing.has(task)) fail('Una de las actividades ya no existe o no admite calificaciones importadas. Recarga la página.', 404);
       if (!task) {
         task = crypto.randomUUID();
-        newTasks.push({ id: task, title: text(a?.title, 200), sections: section ? JSON.stringify([section]) : '' });
+        newTasks.push({ id: task, title: text(a?.title, 200), sections: section ? JSON.stringify([section]) : '', due: a?.due ? isoDate(a.due) : '' });
       } else {
+        // Una actividad que ya existe sin fecha toma la del archivo (12.47); si ya tiene fecha, no se toca.
+        if (a?.due) dated.push({ id: task, due: isoDate(a.due) });
         const sections = existing.get(task);
         if (section && sections.length && !sections.includes(section) && !widened.some((w) => w.id === task))
           widened.push({ id: task, sections: JSON.stringify([...sections, section].sort()) });
@@ -81,15 +79,26 @@ export const importRoutes = {
     const list = JSON.stringify(rows);
     const statements = [];
     if (newTasks.length) {
-      // Actividades nuevas: visibles, con entrega de texto (el docente puede cambiarlas después en el editor).
+      // Actividades nuevas: visibles, con entrega de texto (el docente puede cambiarlas después en el editor). Su fecha es
+      // la de la fila «Fecha» del archivo o, sin ella, el momento de la importación (12.46–12.47).
       statements.push(
         db
           .prepare(
             `INSERT INTO aula_tasks (id,course,author,title,body,visible,submission_mode,max_files,extensions,file_ids,allow_resubmit,due,start_at,end_at,sections,revision,created,updated)
-             SELECT json_extract(value,'$.id'), ?1, ?2, json_extract(value,'$.title'), '', 1, 'both', 5, '[]', '[]', 1, ?5, '', '',
+             SELECT json_extract(value,'$.id'), ?1, ?2, json_extract(value,'$.title'), '', 1, 'both', 5, '[]', '[]', 1, coalesce(nullif(json_extract(value,'$.due'),''), ?3), '', '',
                     json_extract(value,'$.sections'), 1, ?3, ?3 FROM json_each(?4)`,
           )
-          .bind(body.course, user.id, now, JSON.stringify(newTasks), importDue(now)),
+          .bind(body.course, user.id, now, JSON.stringify(newTasks)),
+      );
+    }
+    if (dated.length) {
+      statements.push(
+        db
+          .prepare(
+            `UPDATE aula_tasks SET due=(SELECT json_extract(value,'$.due') FROM json_each(?1) WHERE json_extract(value,'$.id')=aula_tasks.id), revision=revision+1
+             WHERE course=?2 AND coalesce(due,'')='' AND id IN (SELECT json_extract(value,'$.id') FROM json_each(?1))`,
+          )
+          .bind(JSON.stringify(dated), body.course),
       );
     }
     if (widened.length) {

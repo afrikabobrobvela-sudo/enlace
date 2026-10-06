@@ -211,7 +211,11 @@ function parseGradesImport(rows, students, tasks, { section = '', sectionNames =
   const { headerRow, header, cols } = studentColumns(rows);
   const studentCols = new Set(Object.values(cols).filter((i) => i >= 0));
   const find = studentFinder(students);
-  const body = rows.slice(headerRow + 1).filter((r) => r.some((c) => String(c ?? '').trim()));
+  let body = rows.slice(headerRow + 1).filter((r) => r.some((c) => String(c ?? '').trim()));
+  // Fila «Fecha» (12.47): la fecha de cada actividad, debajo de los encabezados; no es un alumno.
+  const nameCol = [cols.name, cols.last, cols.first, cols.id].find((i) => i >= 0);
+  const dateRow = body.find((r) => /^fechas?$/.test(importNormal(r[nameCol])));
+  if (dateRow) body = body.filter((r) => r !== dateRow);
   const matches = body.map((r) => find(r, cols));
   const inSection = (m) => !section || m.section === section;
   // Si dos actividades se llaman igual, va a la que es para esa sección.
@@ -233,7 +237,8 @@ function parseGradesImport(rows, students, tasks, { section = '', sectionNames =
     // Con una sección, cada grupo tiene sus propias actividades (12.45): solo se propone una que sea exactamente de
     // esa sección; si no, se crea una nueva para ella (antes se compartía la del otro grupo y borrarla afectaba a ambos).
     const task = !section || (found?.data.sections?.length === 1 && found.data.sections[0] === section) ? found : null;
-    columns.push({ index: i, title, task: task?.id || '', max: max ?? (top > 10 ? (top <= 20 ? 20 : 100) : 10), cells, include: true });
+    const when = dateRow ? headerDate(dateRow[i]) : null;
+    columns.push({ index: i, title, task: task?.id || '', due: when ? `${when.date}T${when.time || '23:59'}` : '', max: max ?? (top > 10 ? (top <= 20 ? 20 : 100) : 10), cells, include: true });
   });
   if (!columns.length)
     throw new Error(
@@ -281,8 +286,11 @@ function importGradesModal() {
           const task = row.querySelector('[data-col-task]').value;
           const title = row.querySelector('[data-col-title]').value.trim();
           if (!task && !title) throw new Error('Escribe el nombre de cada actividad nueva.');
+          // Fecha de la columna (fila «Fecha»), en hora local; sin ella, la actividad nueva toma la de la importación.
+          const due = col.due ? new Date(col.due).toISOString() : '';
           return {
             ...(task ? { task } : { title }),
+            ...(due ? { due } : {}),
             grades: col.cells.map((x) => ({ member: x.member.id, grade: Math.min(10, Math.max(0, Math.round(((x.cell.value / (x.cell.max || max)) * 10) * 100) / 100)) })),
           };
         });
@@ -338,7 +346,7 @@ function gradesPreviewHtml(x, section = '') {
       .map(
         (c, i) => `<div class="grade-import-row" data-grade-col="${i}"><label class="check-label"><input type="checkbox" data-col-include checked> <b>${esc(c.title)}</b> <span class="muted">· ${c.cells.length} calificaciones</span></label>
         <div class="grade-import-fields"><label>Va a<select data-col-task><option value="">Actividad nueva</option>${tasks.map((t) => `<option value="${esc(t.id)}" ${t.id === c.task ? 'selected' : ''}>${esc(t.data.title)}</option>`).join('')}</select></label>
-        <label>Nombre (si es nueva)<input data-col-title value="${esc(c.title)}" maxlength="200"></label>
+        <label>Nombre (si es nueva)<input data-col-title value="${esc(c.title)}" maxlength="200"></label>${c.due ? `<span class="muted">Fecha: ${esc(new Date(c.due).toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' }))}</span>` : ''}
         <label>Sobre<input data-col-max type="number" min="0.1" step="0.1" value="${c.max}"> puntos</label></div>
         <p class="grade-import-note" data-col-note>${gradeColumnNote(c, c.task, section)}</p></div>`,
       )

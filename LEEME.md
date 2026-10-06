@@ -1,9 +1,18 @@
-# Enlace · versión 12.46
+# Enlace · versión 12.47
 
 Plataforma académica independiente para docentes y alumnos de cualquier academia (nació en la Academia de Física de la BUAP), con interfaz inspirada en Brightspace.
 No es el código de D2L Brightspace ni una plataforma oficial de la BUAP.
 
 Esta versión se despliega en **tu propia cuenta de Cloudflare** (Workers + D1 + R2, plan gratuito) y ya no depende de ChatGPT Sites.
+
+## Novedades de la versión 12.47 (importar con fecha)
+
+- El archivo de calificaciones puede traer una fila **«Fecha»** debajo de los encabezados (en la columna de los alumnos dice «Fecha» y en cada actividad su fecha, por ejemplo 2026-09-03). Esa fila no se toma como alumno.
+- La fecha llega a las 23:59 de ese día:
+  - las actividades nuevas la toman como su fecha;
+  - una actividad que ya existía **sin fecha** también la recibe;
+  - si ya tenía fecha, no se cambia.
+- En la vista previa de la importación se ve la fecha de cada columna. Si una columna no trae fecha, toma la de la importación.
 
 ## Novedades de la versión 12.46
 
