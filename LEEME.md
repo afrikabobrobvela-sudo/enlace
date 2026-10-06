@@ -1,9 +1,16 @@
-# Enlace · versión 12.49
+# Enlace · versión 12.50
 
 Plataforma académica independiente para docentes y alumnos de cualquier academia (nació en la Academia de Física de la BUAP), con interfaz inspirada en Brightspace.
 No es el código de D2L Brightspace ni una plataforma oficial de la BUAP.
 
 Esta versión se despliega en **tu propia cuenta de Cloudflare** (Workers + D1 + R2, plan gratuito) y ya no depende de ChatGPT Sites.
+
+## Novedades de la versión 12.50 (bloques por rubro en el libro)
+
+- En el libro de calificaciones, las actividades se agrupan por rubro, como en Brightspace (T1, T2…): por ejemplo «Parcial 1 · Tareas» y «Parcial 1 · Laboratorio» tienen cada uno su bloque, con sus actividades juntas y una columna **Subtotal** al final del bloque (es la misma casilla de rubro de antes: puedes capturarla a mano).
+- Con el botón ⊟ / ⊞ del encabezado se contrae un bloque para ver solo su subtotal; se recuerda por curso en tu navegador.
+- Las actividades sin rubro quedan en un bloque «Sin rubro» al final.
+- «Actividad no encontrada o repetida» ya no aparece: si una actividad se eliminó con la pantalla abierta, se ignora al guardar, y si algo está repetido, el mensaje dice cuál (actividad, evaluación o foro).
 
 ## Novedades de la versión 12.49 (fecha en el libro)
 

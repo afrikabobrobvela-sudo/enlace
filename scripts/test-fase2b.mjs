@@ -64,10 +64,11 @@ await call('docente', '/api/grades/scheme', scheme({ categories: [{ key: 'e', na
 await call('docente', '/api/grades/scheme', scheme({ categories: [{ key: 'e', name: 'Exámenes', weight: 50 }, { key: 'x', name: 'exámenes', weight: 50 }] }), 400);
 await call('docente', '/api/grades/scheme', scheme({ categories: [{ key: 'a', name: 'A1', weight: 50, source: 'attendance' }, { key: 'b', name: 'A2', weight: 50, source: 'attendance' }] }), 400);
 await call('docente', '/api/grades/scheme', scheme({ assignments: [{ task: examen.id, category: 'a' }] }), 400); // asistencia sin actividades
-await call('docente', '/api/grades/scheme', scheme({ assignments: [{ task: 'otra', category: 'e' }] }), 400);
 await call('docente', '/api/grades/scheme', scheme({ assignments: [{ task: examen.id, category: 'e', points: 0 }] }), 400);
 await call('docente', '/api/grades/scheme', scheme());
 await call('docente', '/api/grades/scheme', scheme(), 409); // revisión vieja
+// 12.50: una actividad que ya no existe (eliminada con la pantalla abierta) se ignora en vez de fallar.
+await call('docente', '/api/grades/scheme', { ...scheme({ assignments: [...scheme().assignments, { task: 'otra', category: 'e' }] }), revision: (await grading()).revision });
 g = await grading();
 assert.equal(g.data.scheme, 'categories');
 assert.deepEqual(g.data.categories.map((x) => [x.name, x.weight, x.source]), [['Exámenes', 60, 'tasks'], ['Tareas', 30, 'tasks'], ['Asistencia', 10, 'attendance']]);
