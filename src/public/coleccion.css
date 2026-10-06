@@ -428,3 +428,6 @@ footer a { padding-block: 4px; }
 .gradebook td[data-heat] { background: var(--gb-heat) !important; color: #1b1f24; }
 .gradebook td[data-heat] .gb-input { background: rgba(255, 255, 255, 0.72); }
 .gradebook td[data-heat="missing"] .gb-input::placeholder { color: #8f1c12; }
+
+/* 12.49: fecha de la actividad bajo su nombre en el libro. */
+.gradebook .gb-task-due { display: block; font-weight: 400; font-size: 12px; color: var(--ink-faint); }

@@ -96,7 +96,7 @@ export const importRoutes = {
         db
           .prepare(
             `UPDATE aula_tasks SET due=(SELECT json_extract(value,'$.due') FROM json_each(?1) WHERE json_extract(value,'$.id')=aula_tasks.id), revision=revision+1
-             WHERE course=?2 AND coalesce(due,'')='' AND id IN (SELECT json_extract(value,'$.id') FROM json_each(?1))`,
+             WHERE course=?2 AND coalesce(due,'')<>(SELECT json_extract(value,'$.due') FROM json_each(?1) WHERE json_extract(value,'$.id')=aula_tasks.id) AND id IN (SELECT json_extract(value,'$.id') FROM json_each(?1))`,
           )
           .bind(JSON.stringify(dated), body.course),
       );
