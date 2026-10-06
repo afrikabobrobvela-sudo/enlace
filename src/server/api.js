@@ -1435,7 +1435,7 @@ const routes = {
     const max = Number(body.max);
     if (!(max > 0 && max <= 1000)) fail('La calificación máxima debe ser mayor que 0 y hasta 1000.');
     const old = task.max_score ?? 10;
-    if (old === max) return json({ ok: true, max, changed: 0 });
+    if (old === max) return json({ ok: true, max, changed: 0, same: body.rescale === true, old });
     const update = db.prepare('UPDATE aula_tasks SET max_score=?, revision=revision+1 WHERE id=? AND course=?').bind(max, task.id, body.course);
     // Solo si el docente lo pide se recalculan las ya capturadas; si no, conservan su valor sobre 10.
     if (body.rescale !== true) {

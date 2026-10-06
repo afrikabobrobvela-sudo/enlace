@@ -1,9 +1,13 @@
-# Enlace · versión 12.58
+# Enlace · versión 12.59
 
 Plataforma académica independiente para docentes y alumnos de cualquier academia (nació en la Academia de Física de la BUAP), con interfaz inspirada en Brightspace.
 No es el código de D2L Brightspace ni una plataforma oficial de la BUAP.
 
 Esta versión se despliega en **tu propia cuenta de Cloudflare** (Workers + D1 + R2, plan gratuito) y ya no depende de ChatGPT Sites.
+
+## Novedades de la versión 12.59
+
+- Al guardar la calificación máxima con «Recalcular» marcado, si el máximo **ya era** ese valor ahora se avisa en lugar de no hacer nada en silencio. Para convertir calificaciones capturadas sobre 10 a puntos sobre 8: guarda 10 sin marcar y luego 8 marcando «Recalcular» (2.5 → 2.5 de 8 = 3.13).
 
 ## Novedades de la versión 12.58
 

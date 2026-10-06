@@ -535,7 +535,7 @@ export const gradingRoutes = {
     const update = db.prepare('UPDATE aula_grade_categories SET max_score=? WHERE id=? AND course=?').bind(max, category.id, body.course);
     if (body.rescale !== true || old === max) {
       await update.run();
-      return json({ ok: true, max, changed: 0 });
+      return json({ ok: true, max, changed: 0, same: body.rescale === true && old === max, old });
     }
     const results = await db.batch([
       update,
