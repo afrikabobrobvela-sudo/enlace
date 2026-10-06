@@ -333,7 +333,7 @@ function renderGrades() {
       const s = gradeOf(m.id, t.id);
       if (!itemApplies(t, m))
         return '<td class="grade-na" title="No es para su sección">—</td>';
-      return `<td class="gb-cell ${gradeToneClass(s?.data.grade)}">${teaches() ? gradebookCellHtml(t, m, s) : `${s?.data.grade ?? 'Pendiente'}${s?.data.feedback ? `<p class="grade-feedback">${esc(s.data.feedback)}</p>` : ''}`}</td>`;
+      return `<td class="gb-cell ${gradeToneClass(s?.data.grade)}"${gradeHeatAttr(t, m, s)}>${teaches() ? gradebookCellHtml(t, m, s) : `${s?.data.grade ?? 'Pendiente'}${s?.data.feedback ? `<p class="grade-feedback">${esc(s.data.feedback)}</p>` : ''}`}</td>`;
     }).join('')}</tr>`;
   }).join('') || '<tr><td>No hay alumnos inscritos.</td></tr>'}</tbody></table></div>`}`;
   if ($('#weights'))

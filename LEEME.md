@@ -1,9 +1,17 @@
-# Enlace · versión 12.42
+# Enlace · versión 12.43
 
 Plataforma académica independiente para docentes y alumnos de cualquier academia (nació en la Academia de Física de la BUAP), con interfaz inspirada en Brightspace.
 No es el código de D2L Brightspace ni una plataforma oficial de la BUAP.
 
 Esta versión se despliega en **tu propia cuenta de Cloudflare** (Workers + D1 + R2, plan gratuito) y ya no depende de ChatGPT Sites.
+
+## Novedades de la versión 12.43 (colores de las actividades en el libro)
+
+- Cada casilla de actividad se colorea según la calificación, como en Brightspace:
+  - un 10 sale en verde intenso, y el verde se aclara conforme baja la calificación hasta la mínima aprobatoria;
+  - debajo de la mínima, la casilla pasa a naranja y luego a rojo;
+  - si el alumno no entregó y la fecha ya venció (con su prórroga o la de su sección), la casilla sale en rojo («Sin entregar»).
+- Quedan sin color lo entregado sin calificar y lo que aún no vence. La cifra reprobatoria sigue subrayada, así que no depende solo del color.
 
 ## Novedades de la versión 12.42
 
