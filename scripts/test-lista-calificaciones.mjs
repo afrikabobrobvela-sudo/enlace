@@ -135,11 +135,11 @@ assert.deepEqual([nota(tarea.id, 'ana').data.grade, nota(tarea.id, 'ana').data.b
 assert.deepEqual([nota(nueva.id, 'ana').data.grade, nota(nueva.id, 'carla').data.grade], [10, 8.5]);
 // 12.46: la actividad creada al importar lleva la fecha de la importación.
 assert(nueva.data.due && Math.abs(Date.parse(nueva.data.due) - Date.now()) < 60_000, 'La actividad importada lleva la fecha de hoy');
-// 12.47: con fecha en el archivo, la actividad nueva la toma, y una existente sin fecha también (con fecha, no se toca).
+// 12.47: con fecha en el archivo, la actividad nueva la toma, y desde 12.49 también una existente aunque ya tuviera fecha (la del archivo manda).
 r = await imp({ activities: [{ title: 'Con fecha', due: '2026-09-03T23:59:00.000Z', grades: [{ member: id('ana'), grade: 9 }] }, { task: nueva.id, due: '2026-01-01T00:00:00.000Z', grades: [] }] });
 curso = await call('docente', '/api/course?id=' + c);
 assert.equal(curso.records.find((x) => x.kind === 'task' && x.data.title === 'Con fecha').data.due, '2026-09-03T23:59:00.000Z');
-assert.notEqual(curso.records.find((x) => x.id === nueva.id).data.due, '2026-01-01T00:00:00.000Z', 'La que ya tenía fecha no cambia');
+assert.equal(curso.records.find((x) => x.id === nueva.id).data.due, '2026-01-01T00:00:00.000Z', 'La fecha del archivo reemplaza la anterior');
 // Con reemplazo y sin publicar: Beto pasa a 9 en borrador (su alumno no la ve) y queda en el historial.
 await imp({ publish: false, activities: [{ task: tarea.id, grades: [{ member: id('beto'), grade: 9 }] }] });
 curso = await call('docente', '/api/course?id=' + c);
