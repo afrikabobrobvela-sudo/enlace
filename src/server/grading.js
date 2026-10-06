@@ -521,6 +521,34 @@ export const gradingRoutes = {
 
   // Captura directa de un rubro por alumno. Una calificación manual sustituye el cálculo del rubro;
   // `grade: null` la borra y devuelve el rubro a su cálculo automático.
+  // Calificación máxima de la captura directa de un rubro (12.56), como la de una columna (12.51): se guarda sobre 10 y,
+  // solo si el docente lo pide (`rescale`), las ya capturadas conservan sus puntos y se recalculan.
+  'POST /api/grades/category/max': async ({ db, user, request }) => {
+    const body = await readJson(request);
+    requireTeacher(await access(db, user, body.course));
+    const category = await one(db, 'SELECT id, source, max_score FROM aula_grade_categories WHERE id=? AND course=?', body.category, body.course);
+    if (!category) fail('Rubro no encontrado.', 404);
+    if (category.source !== 'tasks') fail('Este rubro se calcula desde asistencia y no admite captura manual.');
+    const max = Number(body.max);
+    if (!(max > 0 && max <= 1000)) fail('La calificación máxima debe ser mayor que 0 y hasta 1000.');
+    const old = category.max_score ?? 10;
+    const update = db.prepare('UPDATE aula_grade_categories SET max_score=? WHERE id=? AND course=?').bind(max, category.id, body.course);
+    if (body.rescale !== true || old === max) {
+      await update.run();
+      return json({ ok: true, max, changed: 0 });
+    }
+    const results = await db.batch([
+      update,
+      db
+        .prepare(
+          `UPDATE aula_records SET data=json_set(data,'$.grade',min(10, round(json_extract(data,'$.grade') * ?1 / ?2, 4))), revision=revision+1, updated=?3
+           WHERE course=?4 AND kind='category-grade' AND json_extract(data,'$.category')=?5 AND json_extract(data,'$.grade') IS NOT NULL`,
+        )
+        .bind(old, max, nowIso(), body.course, category.id),
+    ]);
+    return json({ ok: true, max, changed: results[1].meta?.changes ?? 0 });
+  },
+
   'POST /api/grades/category': async ({ db, user, request }) => {
     const body = await readJson(request);
     requireTeacher(await access(db, user, body.course));
