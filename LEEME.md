@@ -1,9 +1,22 @@
-# Enlace · versión 12.52
+# Enlace · versión 12.53
 
 Plataforma académica independiente para docentes y alumnos de cualquier academia (nació en la Academia de Física de la BUAP), con interfaz inspirada en Brightspace.
 No es el código de D2L Brightspace ni una plataforma oficial de la BUAP.
 
 Esta versión se despliega en **tu propia cuenta de Cloudflare** (Workers + D1 + R2, plan gratuito) y ya no depende de ChatGPT Sites.
+
+## Novedades de la versión 12.53 (desplegar desde GitHub)
+
+Nuevo flujo «Desplegar» (`.github/workflows/desplegar.yml`): al fusionar un pull request en la rama principal, GitHub corre las pruebas, guarda un respaldo comprobado de la base en R2 privado (`enlace-respaldos/antes-de-desplegar-…`), aplica las migraciones y publica. También se lanza a mano: pestaña **Actions → Desplegar → Run workflow**. Si un paso falla, se detiene ahí (sin respaldo no migra; con pruebas en rojo no publica). Puedes seguir usando `npm run configurar` cuando quieras: hacen lo mismo.
+
+**Configuración, una sola vez** (GitHub → Settings → Secrets and variables → Actions → New repository secret):
+
+1. `CLOUDFLARE_API_TOKEN`: si ya lo tienes por el respaldo semanal, en Cloudflare (My Profile → API Tokens → editar) agrégale **Workers Scripts: Edit**; debe tener también **D1: Edit** y **Workers R2 Storage: Edit**. Si no lo tienes: Create Token → plantilla «Edit Cloudflare Workers» y agrega D1 y R2.
+2. `CLOUDFLARE_ACCOUNT_ID` y `D1_DATABASE_ID`: los mismos del respaldo semanal (si ya existen, no los toques).
+3. `AULA_OWNER_EMAIL`: tu correo de la cuenta principal.
+4. El bucket privado `enlace-respaldos` debe existir (lo creaste para el respaldo semanal; si no: `npx wrangler r2 bucket create enlace-respaldos`).
+
+**Qué no se pierde**: los secretos (Google, Microsoft, correo de avisos, `SESSION_SECRET`, `ENLACE_URL`) viven en Cloudflare y publicar no los toca; la base solo cambia por migraciones no destructivas, con respaldo antes. **Cuidado**: los valores de `[vars]` y el horario del resumen salen del `wrangler.toml` del repositorio. Si alguna vez cambias uno (por ejemplo `FOTO_OBLIGATORIA` o `MICROSOFT_TENANT_ID`) desde el panel de Cloudflare o solo en tu computadora, la siguiente publicación lo regresa a lo que diga el repositorio: cámbialos en el repositorio.
 
 ## Novedades de la versión 12.52 (recalcular solo si tú lo decides)
 
