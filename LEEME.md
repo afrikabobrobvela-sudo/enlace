@@ -1,9 +1,13 @@
-# Enlace · versión 12.56
+# Enlace · versión 12.57
 
 Plataforma académica independiente para docentes y alumnos de cualquier academia (nació en la Academia de Física de la BUAP), con interfaz inspirada en Brightspace.
 No es el código de D2L Brightspace ni una plataforma oficial de la BUAP.
 
 Esta versión se despliega en **tu propia cuenta de Cloudflare** (Workers + D1 + R2, plan gratuito) y ya no depende de ChatGPT Sites.
+
+## Novedades de la versión 12.57
+
+- Corregido: «Guardar» en la ventana de «Calificación máxima» (de una columna o de un subtotal) no hacía nada; ahora guarda el máximo y, si marcas la casilla, recalcula las calificaciones ya capturadas.
 
 ## Novedades de la versión 12.56 (calificación máxima del subtotal)
 
