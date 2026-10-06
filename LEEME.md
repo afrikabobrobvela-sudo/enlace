@@ -1,9 +1,18 @@
-# Enlace · versión 12.43
+# Enlace · versión 12.44
 
 Plataforma académica independiente para docentes y alumnos de cualquier academia (nació en la Academia de Física de la BUAP), con interfaz inspirada en Brightspace.
 No es el código de D2L Brightspace ni una plataforma oficial de la BUAP.
 
 Esta versión se despliega en **tu propia cuenta de Cloudflare** (Workers + D1 + R2, plan gratuito) y ya no depende de ChatGPT Sites.
+
+## Novedades de la versión 12.44 (parcial en curso)
+
+- Un parcial cuenta en el **promedio parcial** solo cuando todos sus rubros tienen calificación. Por ejemplo, el Parcial 2 con tareas pero sin examen aún no se promedia: ya no aparece como un 5 que baja el promedio. Mientras falten rubros:
+  - el alumno lo ve como «En curso» en «Por parcial»;
+  - en el libro de calificaciones también dice «En curso» (al pasar el cursor se ve lo que lleva);
+  - el promedio parcial sale solo de los parciales completos.
+- Si todavía ningún parcial está completo (al empezar el semestre), el promedio usa lo que lleva cada uno, como antes.
+- La **calificación final** no cambia: cada parcial conserva su peso y los rubros vacíos cuentan 0.
 
 ## Novedades de la versión 12.43 (colores de las actividades en el libro)
 

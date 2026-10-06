@@ -193,8 +193,14 @@ let r = run(`computeGrade({ tasks, grades, settings, quizzes, quizGrades: new Ma
 assert(close(r.categories[1].value, 9), 'Tareas del parcial 1: se descarta la más baja y pesan igual');
 assert(close(r.terms[0].value, 7 * 0.6 + 9 * 0.4), 'Parcial 1 = 7×60 % + 9×40 %');
 // Parcial 2: las tareas valen 40 %; Exámenes vacío conserva su 60 % y aporta 0.
-assert(close(r.terms[1].value, 2.8), 'Parcial 2: Tareas 7×40 % = 2.8; el rubro vacío no redistribuye su peso');
-assert(close(r.value, ((7 * 0.6 + 9 * 0.4) * 40 + 2.8 * 40 + 9 * 20) / 100), 'Final = parciales y Laboratorio con sus pesos completos');
+// 12.44: sin su examen, el parcial 2 está en curso: no cuenta en el promedio parcial; lleva 2.8 (el rubro vacío no
+// redistribuye su peso) y en la calificación final sí conserva su peso completo.
+assert(r.terms[1].value === null && !r.terms[1].complete && r.terms[0].complete, 'Parcial 2 en curso (falta Exámenes)');
+assert(close(r.terms[1].partial, 2.8), 'Lo que lleva el parcial 2: 7×40 % (Exámenes vacío conserva su peso)');
+assert(close(r.value, ((7 * 0.6 + 9 * 0.4) * 40 + 9 * 20) / 60), 'Promedio parcial = parcial 1 completo y Laboratorio');
+let rf = run(`computeGrade({ tasks, grades, settings, quizzes, quizGrades: new Map([['q', 7]]), final: true })`);
+assert(close(rf.terms[1].value, 2.8), 'En la final, el parcial 2 vale 7×40 % = 2.8');
+assert(close(rf.value, ((7 * 0.6 + 9 * 0.4) * 40 + 2.8 * 40 + 9 * 20) / 100), 'Final = parciales y Laboratorio con sus pesos completos');
 // Sin nada calificado en el parcial 2, la final se normaliza entre el parcial 1 y Laboratorio.
 r = run(`computeGrade({ tasks: tasks.filter((t) => !['d', 'e'].includes(t.id)), grades, settings, quizzes, quizGrades: new Map([['q', 7]]) })`);
 assert(r.terms[1].value === null && close(r.value, ((7 * 0.6 + 9 * 0.4) * 40 + 9 * 20) / 60));
@@ -226,7 +232,7 @@ run(`
 `);
 const incompletePartial = run('computeGrade({ tasks: incompleteTasks, grades: incompleteGrades, settings: incomplete })');
 const incompleteFinal = run('computeGrade({ tasks: incompleteTasks, grades: incompleteGrades, settings: incomplete, final: true })');
-assert(close(incompletePartial.terms[0].value, 4.416) && close(incompletePartial.value, 4.416), '6.29×40 % + 9.5×20 % = 4.416');
+assert(close(incompletePartial.terms[0].partial, 4.416) && incompletePartial.terms[0].value === null && close(incompletePartial.value, 4.416), '6.29×40 % + 9.5×20 % = 4.416 (en curso: sin parcial completo, el promedio usa lo que lleva)');
 assert(incompletePartial.terms[1].value === null && close(incompleteFinal.value, 2.208), 'La final conserva los dos parciales de 50 %');
 assert.equal(run(`courseFinalGrade(${JSON.stringify(incompleteFinal)}, incomplete.final).value`), 2, 'Final: promedio de Parcial 1 asentado en 4 y Parcial 2 vacío en 0');
 assert.equal(
