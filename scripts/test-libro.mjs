@@ -216,6 +216,10 @@ assert.deepEqual(deB.columns.map((x) => [x.title, x.task, x.cells.map((y) => y.m
   ['Examen final', 'x', 'm-carla'],
 ]);
 assert.deepEqual([deB.matched, deB.outside], [1, ['Ana · 1']]);
+// 12.47: una fila «Fecha» debajo de los encabezados da la fecha de cada columna y no se toma por alumno.
+const conFecha = plano(run('parseGradesImport')([['Alumno', 'Tarea 1', 'Tarea 9'], ['Fecha', '2026-09-03', ''], ['Carla', '8', '7']], students, tasks));
+assert.deepEqual([conFecha.columns.map((x) => x.due), conFecha.unmatched], [['2026-09-03T23:59', ''], []]);
+checks += 1;
 // Sin sección, todos cuentan (como antes).
 const todos = plano(run('parseGradesImport')(archivo, students, tasks));
 assert.deepEqual([todos.matched, todos.outside, todos.columns[0].cells.length], [2, [], 2]);
