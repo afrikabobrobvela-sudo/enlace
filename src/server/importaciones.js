@@ -11,6 +11,12 @@ import { taskSections } from './published.js';
 import { validSection } from './sections.js';
 
 const MAX_ACTIVITIES = 60;
+
+/**
+ * Fecha de una actividad creada al importar (12.46): el momento de la importación, para que el libro y el calendario
+ * muestren cuándo se generó (antes quedaba sin fecha). Las fechas se guardan en ISO como las demás.
+ */
+const importDue = (iso) => iso;
 const MAX_GRADES = 15000;
 
 export const importRoutes = {
@@ -80,10 +86,10 @@ export const importRoutes = {
         db
           .prepare(
             `INSERT INTO aula_tasks (id,course,author,title,body,visible,submission_mode,max_files,extensions,file_ids,allow_resubmit,due,start_at,end_at,sections,revision,created,updated)
-             SELECT json_extract(value,'$.id'), ?1, ?2, json_extract(value,'$.title'), '', 1, 'both', 5, '[]', '[]', 1, '', '', '',
+             SELECT json_extract(value,'$.id'), ?1, ?2, json_extract(value,'$.title'), '', 1, 'both', 5, '[]', '[]', 1, ?5, '', '',
                     json_extract(value,'$.sections'), 1, ?3, ?3 FROM json_each(?4)`,
           )
-          .bind(body.course, user.id, now, JSON.stringify(newTasks)),
+          .bind(body.course, user.id, now, JSON.stringify(newTasks), importDue(now)),
       );
     }
     if (widened.length) {

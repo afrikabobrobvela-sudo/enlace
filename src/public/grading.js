@@ -550,8 +550,13 @@ function categoriesFormHtml(tasks) {
   const itemRow = (kind, id, title, type, value, extra = '') => `<tr><td>${esc(title)}</td><td><span class="item-kind kind-${kind}">${type}</span></td>
       <td><select data-${kind}-category="${esc(id)}" aria-label="Categoría de ${esc(title)}">${options(value.category || '')}</select></td>
       <td><input data-${kind}-points="${esc(id)}" type="number" min="0.01" max="1000" step="0.01" value="${esc(value.points)}" class="grade-input" aria-label="Valor de ${esc(title)}"></td><td>${extra}</td></tr>`;
-  const quizList = records('quiz');
-  const forumList = records('forum').filter((f) => draft.forums[f.id]);
+  // Con el filtro de secciones del curso, solo lo de esos grupos (12.46): las actividades de otro grupo no se
+  // muestran aquí. Lo que no se ve conserva su categoría al guardar (el borrador no se toca).
+  const chosen = typeof selectedSections === 'function' ? selectedSections().filter((x) => x !== SECTION_NONE) : [];
+  const inView = (r) => !chosen.length || !r.data.sections?.length || r.data.sections.some((x) => chosen.includes(x));
+  tasks = tasks.filter(inView);
+  const quizList = records('quiz').filter(inView);
+  const forumList = records('forum').filter((f) => draft.forums[f.id] && inView(f));
   const items =
     tasks.map((t) => itemRow('task', t.id, t.data.title, forumTask.get(t.id) ? 'Foro' : 'Actividad', draft.tasks[t.id] || { points: 1 })).join('') +
     quizList
@@ -581,6 +586,7 @@ function categoriesFormHtml(tasks) {
     </tbody></table></div>
     <p class="grading-totals" id="categoryTotal">${draftTotalsHtml(draft)}</p>
     <h2 class="grading-subtitle">Qué cuenta en cada categoría</h2>
+    ${typeof sectionFilterHtml === 'function' && courseSections().length ? `<div class="toolbar">${sectionFilterHtml()}</div>` : ''}
     <p class="muted">Enlaza aquí actividades, evaluaciones y foros. El valor indica cuánto pesa cada elemento dentro de su categoría (con 2 cuenta el doble que con 1).${loose ? ` ${loose === 1 ? 'Un elemento sin categoría no cuenta' : `${loose} elementos sin categoría no cuentan`} en la calificación.` : ''} Una evaluación sin intentos de un alumno no cuenta como cero.</p>
     <div class="table-wrap"><table class="grading-table items-table"><thead><tr><th>Elemento</th><th>Tipo</th><th>Categoría</th><th>Valor</th><th aria-label="Opciones"></th></tr></thead><tbody>
     ${items || '<tr><td colspan="5">Todavía no hay actividades, evaluaciones ni foros.</td></tr>'}
