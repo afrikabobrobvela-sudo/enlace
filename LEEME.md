@@ -1,9 +1,14 @@
-# Enlace · versión 12.57
+# Enlace · versión 12.58
 
 Plataforma académica independiente para docentes y alumnos de cualquier academia (nació en la Academia de Física de la BUAP), con interfaz inspirada en Brightspace.
 No es el código de D2L Brightspace ni una plataforma oficial de la BUAP.
 
 Esta versión se despliega en **tu propia cuenta de Cloudflare** (Workers + D1 + R2, plan gratuito) y ya no depende de ChatGPT Sites.
+
+## Novedades de la versión 12.58
+
+- Con calificación máxima distinta de 10, la casilla (columna o subtotal) muestra en grande la **calificación sobre 10** («7.50 /10») debajo de los puntos que capturaste («6 de 8»). Antes solo se veían los puntos, que parecían una calificación menor.
+- Recuerda: para que lo que ya estaba capturado se tome como puntos (6 → 6 de 8 = 7.5), marca «Recalcular las calificaciones ya capturadas». Sin marcarla, lo capturado conserva su valor sobre 10 y en puntos se ve más bajo (6 sobre 10 = 4.8 de 8).
 
 ## Novedades de la versión 12.57
 
