@@ -444,3 +444,7 @@ footer a { padding-block: 4px; }
 .gradebook thead th.sticky-name { z-index: 5; }
 /* La tinta del curso puede ser translúcida: sobre fondo blanco, para que no se vean las casillas al bajar. */
 .gradebook thead th.gb-group { background: linear-gradient(var(--tomo-papel, #f4f6f8), var(--tomo-papel, #f4f6f8)), #fff !important; }
+
+/* 12.58: con calificación máxima distinta de 10 la casilla muestra, bajo los puntos capturados, la calificación sobre 10. */
+.gradebook .gb-scaled { display: block; margin-top: 4px; font-size: 15px; font-weight: 800; color: var(--tinta, #111a2e); }
+.gradebook .gb-scaled small { font-size: 12px; font-weight: 500; color: var(--ink-faint); }

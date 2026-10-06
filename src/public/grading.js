@@ -826,7 +826,8 @@ function categoryGradeCellHtml(category, member, value) {
       value="${esc(categoryPoints(category.id, manual?.data.grade))}" placeholder="${esc(max === 10 ? automaticText : automatic === null ? '—' : categoryPoints(category.id, automatic))}" data-category-grade
       data-cg-category="${esc(category.id)}" data-cg-member="${esc(member.id)}"
       aria-label="Calificación manual de ${esc(categoryLabel(category))} para ${esc(member.name)}" title="Escribe una calificación manual; deja vacío para usar el cálculo automático">
-    <small class="${manual ? 'manual-grade-tag' : 'category-grade-hint'}">${max !== 10 && manual ? `${categoryPoints(category.id, manual.data.grade)} de ${max} = ${formatGrade(manual.data.grade)} · ` : ''}${manual ? `Manual${automatic === null ? '' : ` · automático: ${automaticText}`}` : `Automático: ${automaticText}`}</small></td>`;
+    ${max !== 10 && manual ? `<strong class="gb-scaled" title="${esc(`${categoryPoints(category.id, manual.data.grade)} de ${max}`)}">${formatGrade(manual.data.grade)} <small>/10</small></strong>` : ''}
+    <small class="${manual ? 'manual-grade-tag' : 'category-grade-hint'}">${max !== 10 && manual ? `${categoryPoints(category.id, manual.data.grade)} de ${max} · ` : ''}${manual ? `Manual${automatic === null ? '' : ` · automático: ${automaticText}`}` : `Automático: ${automaticText}`}</small></td>`;
 }
 
 /** Guarda una captura manual de rubro. Eliminar su contenido reactiva el valor automático. */
@@ -904,7 +905,7 @@ function gradebookCellHtml(t, m, s) {
       data-gb-task="${esc(t.id)}" data-gb-member="${esc(m.id)}" aria-label="Calificación de ${esc(m.name)} en ${esc(t.data.title)}">
     <button type="button" class="gb-open ${sent ? 'has-file' : ''} ${pending ? 'needs-review' : ''}" data-action="review" data-id="${esc(t.id)}" data-member="${esc(m.id)}" title="${esc(title)}" aria-label="${esc(title)}">${sent ? DOC_ICON : '›'}</button></div>${
     pending ? '<span class="review-tag">sin revisar</span>' : ''
-  }${s && s.data.published === false ? '<span class="draft-tag">borrador</span>' : ''}${sent && s.data.late ? '<span class="late-tag">tardía</span>' : ''}`;
+  }${taskMax(t) !== 10 && s?.data.grade != null ? `<strong class="gb-scaled" title="${esc(`${toPoints(t, s.data.grade)} de ${taskMax(t)}`)}">${Number(s.data.grade).toFixed(2)} <small>/10</small></strong>` : ''}${s && s.data.published === false ? '<span class="draft-tag">borrador</span>' : ''}${sent && s.data.late ? '<span class="late-tag">tardía</span>' : ''}`;
 }
 
 /** Menú ⌄ de cada columna (como en Brightspace). `prev`/`next`: columnas visibles a los lados, para moverla. */
