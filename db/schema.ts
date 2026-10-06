@@ -400,6 +400,8 @@ export const gradeCategories = sqliteTable(
     // Migración 0031: calificaciones más bajas / más altas que no cuentan (por alumno).
     dropLow: integer('drop_low').notNull().default(0),
     dropHigh: integer('drop_high').notNull().default(0),
+    // Migración 0038 (12.56): sobre cuánto se captura el subtotal del rubro (se guarda sobre 10).
+    maxScore: real('max_score').notNull().default(10),
     updated: text('updated').notNull(),
   },
   (t) => [

@@ -1,9 +1,15 @@
-# Enlace · versión 12.55
+# Enlace · versión 12.56
 
 Plataforma académica independiente para docentes y alumnos de cualquier academia (nació en la Academia de Física de la BUAP), con interfaz inspirada en Brightspace.
 No es el código de D2L Brightspace ni una plataforma oficial de la BUAP.
 
 Esta versión se despliega en **tu propia cuenta de Cloudflare** (Workers + D1 + R2, plan gratuito) y ya no depende de ChatGPT Sites.
+
+## Novedades de la versión 12.56 (calificación máxima del subtotal)
+
+- **Requiere migración** (0038, solo agrega `max_score` a `aula_grade_categories`).
+- En el libro, bajo cada **Subtotal** hay un botón «Calificación máxima…». Si el examen fue sobre 9, pones 9 y escribes en el subtotal los puntos tal cual: 6 se guarda como 6.67 sobre 10. El botón dice entonces «sobre 9 · cambiar…» y la casilla muestra «6 de 9 = 6.67».
+- Igual que en las columnas: las calificaciones ya capturadas solo se recalculan si marcas «Recalcular las calificaciones ya capturadas».
 
 ## Novedades de la versión 12.55
 
