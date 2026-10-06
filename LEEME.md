@@ -1,9 +1,16 @@
-# Enlace · versión 12.44
+# Enlace · versión 12.45
 
 Plataforma académica independiente para docentes y alumnos de cualquier academia (nació en la Academia de Física de la BUAP), con interfaz inspirada en Brightspace.
 No es el código de D2L Brightspace ni una plataforma oficial de la BUAP.
 
 Esta versión se despliega en **tu propia cuenta de Cloudflare** (Workers + D1 + R2, plan gratuito) y ya no depende de ChatGPT Sites.
+
+## Novedades de la versión 12.45 (cada grupo con sus propias actividades)
+
+- **Qué pasaba:** al importar calificaciones eligiendo una sección (por ejemplo 5CV), cada columna se unía sola a la actividad del mismo nombre que ya existía en otra sección (5BV), y esa actividad quedaba compartida por los dos grupos. Por eso, al eliminarla desde un grupo, desaparecía también del otro.
+- **Importar:** con una sección elegida, solo se une una columna a una actividad que sea exactamente de esa sección. Si no hay ninguna, se propone una actividad nueva solo para ese grupo. En «Va a» todavía puedes elegir a mano otra actividad.
+- **Eliminar una actividad compartida** con el libro filtrado a un grupo: primero pregunta si quieres quitarla **solo de ese grupo**. Las demás secciones la conservan con sus entregas y calificaciones. Si cancelas, ofrece eliminarla para todas.
+- **Recuperar lo eliminado:** nada se borra. Ve a Administración del curso → Papelera → «Restaurar» en cada actividad. Vuelven con sus entregas y calificaciones y con sus secciones de antes.
 
 ## Novedades de la versión 12.44 (parcial en curso)
 

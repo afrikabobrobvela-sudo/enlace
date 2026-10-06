@@ -261,5 +261,14 @@ const settingsCarla = (await call('dani', '/api/course?id=' + c)).records.find((
 assert.deepEqual([settingsCarla.exam.needsPassword, 'password' in settingsCarla.exam, 'startCode' in settingsCarla], [true, false, false]);
 checks += 2;
 
+// 12.45: una actividad de dos grupos se quita solo de uno; la otra sección la conserva. Sin sección o la única, no.
+const compartida = await rec('task', { title: 'Tarea compartida', due: manana, sections: [av, bv] });
+await call('docente', '/api/task/unshare', { course: c, id: compartida.id, section: 'otra' }, 404);
+const quitada = await call('docente', '/api/task/unshare', { course: c, id: compartida.id, section: bv });
+assert.deepEqual(quitada.sections, [av]);
+assert.equal(store.raw().prepare('SELECT deleted_at FROM aula_tasks WHERE id=?').get(compartida.id).deleted_at, null, 'Sigue viva para 5AV');
+await call('docente', '/api/task/unshare', { course: c, id: compartida.id, section: av }, 409);
+checks += 2;
+
 assert.deepEqual(store.raw().prepare('PRAGMA foreign_key_check').all(), []);
 console.log(`PASS: ${checks} verificaciones de secciones — un curso para varios grupos, alumnos por sección (lista, a mano o de otro curso), fechas de actividades y exámenes por sección con prórroga encima, asistencia por sección y copia a otro periodo.`);
