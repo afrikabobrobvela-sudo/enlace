@@ -918,11 +918,13 @@ document.addEventListener('click', async (e) => {
   const t = records('task').find((x) => x.id === button.dataset.gbMax);
   if (!t) return;
   modal(`Calificación máxima · ${t.data.title}`, `<form id="gbMax" class="real-form">
-    <p class="muted">Captura sobre este valor y Enlace lo convierte a 10, como en Brightspace: 6 de 9 = 6.67. Las calificaciones ya capturadas conservan sus puntos (6 de 9 pasa a 6 de 8 = 7.5).</p>
+    <p class="muted">Captura sobre este valor y Enlace lo convierte a 10, como en Brightspace: 6 de 9 = 6.67.</p>
     <label>Calificación máxima<input name="max" type="number" min="0.01" max="1000" step="0.01" required value="${taskMax(t)}"></label>
+    <label class="check"><input type="checkbox" name="rescale"> Recalcular las calificaciones ya capturadas (conservan sus puntos: un 6 pasa a 6 de 9 = 6.67)</label>
+    <p class="muted">Sin marcarla, las calificaciones ya capturadas no cambian.</p>
     <p class="form-error error" hidden></p><div class="form-actions"><button class="primary">Guardar</button></div></form>`);
   bindForm('#gbMax', async (f) => {
-    const r = await request('/api/task/max', { course: current.course.id, id: t.id, max: Number(f.get('max')) });
+    const r = await request('/api/task/max', { course: current.course.id, id: t.id, max: Number(f.get('max')), rescale: f.get('rescale') === 'on' });
     return r.changed ? `Calificación máxima guardada; se recalcularon ${r.changed} calificaciones.` : 'Calificación máxima guardada.';
   });
 });

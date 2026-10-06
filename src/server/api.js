@@ -1426,8 +1426,8 @@ const routes = {
     return json({ ok: true, sections: rest });
   },
 
-  // Calificación máxima de la columna (12.51): las calificaciones se guardan sobre 10, así que cambiarla
-  // conserva los puntos ya capturados (6 de 9 → 6 de 8) y recalcula su valor sobre 10.
+  // Calificación máxima de la columna (12.51): las calificaciones se guardan sobre 10. Con `rescale` (12.52, solo si el
+  // docente lo elige) las ya capturadas conservan sus puntos (6 de 10 → 6 de 9 = 6.67) y se recalcula su valor sobre 10.
   'POST /api/task/max': async ({ db, user, request }) => {
     const body = await readJson(request);
     requireTeacher(await access(db, user, body.course));
@@ -1436,9 +1436,15 @@ const routes = {
     if (!(max > 0 && max <= 1000)) fail('La calificación máxima debe ser mayor que 0 y hasta 1000.');
     const old = task.max_score ?? 10;
     if (old === max) return json({ ok: true, max, changed: 0 });
+    const update = db.prepare('UPDATE aula_tasks SET max_score=?, revision=revision+1 WHERE id=? AND course=?').bind(max, task.id, body.course);
+    // Solo si el docente lo pide se recalculan las ya capturadas; si no, conservan su valor sobre 10.
+    if (body.rescale !== true) {
+      await update.run();
+      return json({ ok: true, max, changed: 0 });
+    }
     const now = nowIso();
     const results = await db.batch([
-      db.prepare('UPDATE aula_tasks SET max_score=?, revision=revision+1 WHERE id=? AND course=?').bind(max, task.id, body.course),
+      update,
       db
         .prepare(
           `INSERT INTO aula_grade_history (id, course, task, member, old_grade, new_grade, changed_by, changed_at, reason)
