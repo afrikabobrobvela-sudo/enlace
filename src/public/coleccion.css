@@ -860,8 +860,8 @@ body.in-course .shell > header {
   outline: 2px solid var(--cyan);
   outline-offset: 2px;
 }
-@media (prefers-color-scheme: dark) {
-  :root {
+html[data-color-scheme='dark'] {
+  & {
     --glass-header: rgba(7, 26, 48, 0.78);
     --glass-header-solid: rgba(7, 26, 48, 0.94);
     --glass-border: rgba(137, 219, 227, 0.24);
@@ -1218,7 +1218,7 @@ body:not(.in-course) .course-back-link { visibility: hidden; }
   .bottom-nav button.active { background: rgba(105, 214, 225, 0.2); color: var(--brand-2); box-shadow: inset 0 0 0 1px rgba(8, 123, 135, 0.22); }
   .bottom-nav button.active::before { display: none; }
 }
-@media (prefers-color-scheme: dark) {
+html[data-color-scheme='dark'] {
   .bottom-nav:not([hidden]) { background: rgba(8, 28, 49, 0.82); border-color: rgba(137, 219, 227, 0.24); box-shadow: 0 10px 28px rgba(3, 14, 28, 0.3); }
   .bottom-nav button { color: #dcecf3; }
   .bottom-nav button.active { color: #9ee9ed; background: rgba(105, 214, 225, 0.16); }
@@ -1270,7 +1270,7 @@ body.in-course #courseTitle { display: none; }
   }
 }
 
-@media (prefers-color-scheme: dark) {
+html[data-color-scheme='dark'] {
   .course-main-back {
     color: #f2fcff;
     background: rgba(8, 35, 58, .72);
@@ -1292,4 +1292,278 @@ body.in-course #courseTitle { display: none; }
     border: 0 !important;
     overflow: hidden;
   }
+}
+
+/* Tema oscuro del sistema: tinta azul petróleo, superficies por niveles y acento cian moderado. */
+html[data-color-scheme='dark'] {
+  &,
+  [data-theme],
+  body[data-tomo] {
+    color-scheme: dark;
+    --tomo-papel: #243b4d;
+    --brand: #4f8eae;
+    --brand-2: #8bbfd4;
+    --accent: #59aeb7;
+    --link: #82c4d8;
+  }
+
+  & {
+    --tinta: #d7e5ed;
+    --tinta-2: #b5cbd8;
+    --navy: #0c2033;
+    --navy-light: #173b54;
+    --cyan: #79c7d0;
+    --turquoise: #5db9a7;
+    --ink: #d7e5ed;
+    --ink-soft: #a9bdca;
+    --ink-faint: #8198a8;
+    --line: #294557;
+    --line-strong: #5b7485;
+    --surface: #132b3d;
+    --surface-soft: #19374a;
+    --surface-glass: rgba(19, 43, 61, .88);
+    --glass-surface: rgba(20, 48, 66, .82);
+    --glass-reading: rgba(18, 40, 56, .96);
+    --glass-header: rgba(7, 26, 48, .84);
+    --glass-header-solid: #0b2238;
+    --glass-logo: rgba(231, 244, 248, .94);
+    --glass-border: rgba(137, 219, 227, .24);
+    --glass-highlight: rgba(205, 239, 244, .16);
+    --glass-shadow: 0 10px 28px rgba(3, 14, 28, .34);
+    --canvas: #091827;
+    --brand-soft: #1d3e55;
+    --accent-soft: #183c45;
+    --success: #8fd0b0;
+    --success-bg: #153b34;
+    --warning: #efc873;
+    --warning-bg: #43351e;
+    --danger: #f09aa0;
+    --danger-bg: #43262d;
+    --focus: #8ad8df;
+    --intro-solid: #102b3e;
+    --intro-start: rgba(24, 57, 77, .92);
+    --intro-end: rgba(16, 42, 60, .88);
+    --intro-border: rgba(137, 219, 227, .2);
+    --intro-shadow: 0 8px 24px rgba(3, 14, 28, .24);
+    --shadow-sm: 0 2px 5px rgba(2, 13, 24, .2), 0 8px 24px rgba(2, 13, 24, .2);
+    --shadow: 0 5px 12px rgba(2, 13, 24, .24), 0 16px 34px rgba(2, 13, 24, .28);
+    --shadow-lg: 0 18px 64px rgba(1, 9, 18, .48);
+    scrollbar-color: #587486 transparent;
+  }
+
+  & { background: var(--canvas); }
+  body,
+  body.page-white {
+    background: radial-gradient(ellipse at 95% 0%, rgba(30, 83, 101, .28), transparent 42rem), var(--canvas);
+    color: var(--ink);
+  }
+  ::selection { background: #2b6475; color: #e9f5f8; }
+  a { color: var(--link); }
+
+  .shell > header,
+  body.in-course .shell > header { background: var(--glass-header); border-color: var(--glass-border); }
+  .wordmark,
+  .wordmark .brand-text span,
+  .course-heading,
+  #logoutButton { color: #dceaf1; }
+  #roleLabel { color: #a9c0cc; }
+  .profile-square { background: #b7dfdc; color: #102f40; box-shadow: inset 0 0 0 1px rgba(220, 248, 247, .34); }
+  .header-tools .course-picker[open] > summary { background: rgba(139, 219, 227, .13); color: #e2f0f4; }
+  .wordmark:hover .brand-logo { background: #e8f4f5; }
+
+  #topnav,
+  .workspace-filterbar,
+  .cal-toolbar,
+  .bottom-nav:not([hidden]) {
+    background: var(--glass-surface);
+    border-color: var(--glass-border);
+    box-shadow: var(--glass-shadow);
+  }
+  #topnav > button,
+  #topnav .more-menu > summary { color: var(--ink-soft); }
+  #topnav > button:hover,
+  #topnav .more-menu > summary:hover { background: var(--surface-soft); color: #bfe4e8; }
+  #topnav > button.active { background: var(--brand-soft); color: #b9e2e6; box-shadow: inset 0 -3px var(--accent); }
+  #topnav .view-toggle { background: var(--surface); border-color: var(--line-strong); color: #b9dce5; }
+  #topnav .view-toggle:hover,
+  #topnav .view-toggle.is-on { background: var(--accent-soft); color: #c0e8eb; }
+
+  .panel,
+  .dash-card,
+  .home-dashboard > section,
+  .courses-panel,
+  .home-intro,
+  article.course,
+  .module-card,
+  .stat-tile,
+  .my-grade-summary,
+  .content-tree,
+  .content-detail,
+  .table-wrap,
+  .gradebook,
+  .login-layout,
+  .login-layout .login-panel,
+  .cal-grid,
+  .course-picker-panel,
+  .bell-panel,
+  .menu-panel,
+  .card-menu,
+  .more-actions-panel,
+  .section-filter-panel,
+  .dt-pop,
+  dialog#modal,
+  dialog.sheet,
+  #modal .dialog-actions {
+    background: var(--surface);
+    border-color: var(--glass-border);
+    color: var(--ink);
+    box-shadow: var(--shadow-sm);
+  }
+  .panel,
+  .dash-card,
+  article.course,
+  .module-card { background: var(--glass-surface); }
+  .panel p,
+  .dash-card > .muted,
+  .muted,
+  footer { color: var(--ink-faint); }
+  .panel-head,
+  dialog#modal .dialog-head,
+  .cal-weekday,
+  th,
+  .gradebook thead th { border-color: var(--line); background: var(--surface-soft); color: var(--ink-soft); }
+
+  .primary,
+  button.primary { color: #e9f5f8; background: linear-gradient(115deg, #28658a, #245273); border-color: #6ba9bd; }
+  .primary:hover,
+  button.primary:hover { background: #2b6b8f; box-shadow: 0 5px 14px rgba(4, 18, 31, .3); }
+  .secondary,
+  button.secondary { background: var(--surface); border-color: var(--line-strong); color: var(--ink-soft); }
+  .secondary:hover,
+  button.secondary:hover { background: var(--brand-soft); border-color: var(--brand-2); color: #c1e4e8; }
+  .text-btn,
+  .table-link,
+  .assignment-title { color: var(--link); }
+
+  input:not([type='checkbox']):not([type='radio']):not([type='file']),
+  select,
+  textarea,
+  .dt-display,
+  .progress-toggle {
+    background: #10283a;
+    color: var(--ink);
+    border-color: var(--line-strong);
+  }
+  input::placeholder,
+  textarea::placeholder { color: var(--ink-faint); }
+  input:focus,
+  select:focus,
+  textarea:focus,
+  .dt-display:focus-visible { background: #143247; border-color: var(--focus); }
+
+  .role-pill,
+  .period-pill,
+  .section-pill,
+  .count-pill { background: var(--brand-soft); color: #b9dfe5; }
+  .status-pill.is-due { background: #1b4147; color: #a9dfe0; border-color: #4b858c; }
+  .status-pill.is-late,
+  .warning-note { background: var(--warning-bg); color: #f0cd83; border-color: #8b6c35; }
+  .success-note,
+  .extension-note { background: var(--success-bg); color: #9bd9bb; }
+  .error,
+  .login-alert,
+  .form-error:not(:empty) { background: var(--danger-bg); color: #f3b1b5; border-color: #a85d65; }
+  #toast { background: #1c4458; color: #e5f4f7; }
+  .badge-count { background: #3a8a99; color: #e9f7f8; }
+
+  .course-cover,
+  .hub-banner,
+  .module-card .module-cover { color: #e5f0f5; }
+  .hub-banner h1,
+  .hub-banner .hub-eyebrow,
+  .hub-banner .hub-edit,
+  .module-card .module-cover { color: #e5f0f5; }
+  .hub-banner .hub-eyebrow { background: rgba(4, 19, 31, .34); }
+  .course-guide summary { background: var(--surface-soft); color: var(--ink); }
+  .content-tree .tree-unit button.active,
+  .toc-all.selected { background: #265878 !important; color: #e7f3f5 !important; border-color: #5a9cb2 !important; }
+  .content-tree .tree-unit button.active small,
+  .toc-all.selected span { color: #c0dfe5 !important; }
+
+  .dash-item:hover,
+  .bell-item:hover,
+  .thread-row:hover,
+  .dt-day:hover,
+  .more-actions-panel button:hover { background: var(--surface-soft); }
+  .bell-item.is-new { background: var(--accent-soft); }
+  .bell-kind { color: #9ed8dc; }
+  .notice,
+  .my-grade-item .grade-feedback,
+  .quiz-explanation { background: var(--surface-soft); color: var(--ink); }
+  .unit-progress-bar { background: #294657; }
+
+  .gradebook td.gb-fail,
+  .gradebook td.grade-low { background: #4a292c !important; color: #f2b0ae; }
+  .gradebook td.gb-pass,
+  .gradebook td.grade-pass { background: #214238 !important; color: #a9ddbd; }
+  .gradebook td.grade-na { background: var(--surface-soft) !important; }
+  .gradebook td[data-heat] { color: #d5e4eb; }
+  .gradebook thead th.sticky-name { background: var(--surface-soft) !important; }
+  .gradebook .sticky-name { background: var(--surface) !important; }
+
+  .cal-cell,
+  .cal-day ul,
+  .dt-day,
+  .special-all,
+  .cond-row,
+  .grade-import-row { background: var(--surface); color: var(--ink); }
+  .cal-cell.is-outside,
+  .dt-day.is-other { background: #10283a; color: var(--ink-faint); }
+  .cal-item:hover,
+  .dt-quick button:hover { background: var(--surface-soft); }
+  .cal-tabs button,
+  .dt-nav,
+  .dt-quick button { background: var(--surface); color: var(--ink); border-color: var(--line); }
+  .cal-tabs button.active,
+  .dt-day.is-selected,
+  .dt-quick button.is-selected { background: #2b647d; color: #e8f4f6; border-color: #5c9caf; }
+
+  .course-main-back { color: #e2f1f4; background: rgba(8, 35, 58, .76); border-color: rgba(137, 219, 227, .3); }
+  .course-main-back:hover { background: rgba(28, 78, 96, .84); border-color: rgba(137, 219, 227, .48); }
+  .bottom-nav button { color: #b7ced8; }
+  .bottom-nav button.active { color: #b9e7e8; background: rgba(89, 174, 183, .18); }
+  .bottom-nav button.active::before { background: rgba(137, 219, 227, .2); }
+
+  .login-brand p,
+  .login-brand li { color: #c4d8e2; }
+  .exam-lock-card { background: var(--surface); color: var(--ink); }
+  .quiz-attempt-head { background: #102b40; color: #e1eef3; }
+  .quiz-attempt-head .muted,
+  .quiz-answered,
+  .quiz-save-status,
+  .quiz-clock { color: #d0e3ea !important; }
+  .quiz-hint-box p { background: var(--warning-bg); color: var(--ink); }
+}
+
+.theme-toggle {
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 42px;
+  height: 42px;
+  padding: 0;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-glass);
+  color: var(--brand-2);
+  box-shadow: none;
+  transition: background .2s ease, border-color .2s ease, color .2s ease, transform .2s ease;
+}
+.theme-toggle:hover { background: var(--accent-soft); border-color: var(--brand-2); color: var(--accent); }
+.theme-toggle:active { transform: scale(.96); }
+.theme-toggle:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+body.signed-out .header-tools { display: flex; margin-left: auto; }
+body.signed-out .header-tools > :not(#themeToggle) { display: none; }
+@media (max-width: 720px) {
+  .theme-toggle { width: 42px; height: 42px; }
 }
