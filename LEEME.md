@@ -1,9 +1,16 @@
-# Enlace · versión 12.59
+# Enlace · versión 12.60
 
 Plataforma académica independiente para docentes y alumnos de cualquier academia (nació en la Academia de Física de la BUAP), con interfaz inspirada en Brightspace.
 No es el código de D2L Brightspace ni una plataforma oficial de la BUAP.
 
 Esta versión se despliega en **tu propia cuenta de Cloudflare** (Workers + D1 + R2, plan gratuito) y ya no depende de ChatGPT Sites.
+
+## Novedades de la versión 12.60 (resumen al inicio y máximo del examen en línea)
+
+- **Corregido**: la calificación máxima de un rubro ahora también se aplica a lo que se calcula solo (por ejemplo, el examen en línea). Con máximo 8, un 2.5 vale 3.13, un 5.17 vale 6.46 y un 8 o más vale 10. Antes solo afectaba lo escrito a mano y la casilla mostraba el automático convertido hacia abajo (5.17 → 4.13). Ya tienes 8 puesto en Exámenes: al publicar se recalculan solos Exámenes, el promedio del parcial y la final. Para quitarlo, vuelve a poner 10.
+- En la casilla del rubro con máximo se ven los puntos (6.00 de 8) y en grande lo que vale sobre 10 (7.50), que es lo que entra al promedio.
+- **Resumen al inicio del libro**: después del nombre van la asistencia; por cada parcial, Tareas, Laboratorio y Exámenes (los exámenes siempre al final) y el promedio del parcial; los rubros de toda la materia y la calificación final. Debajo de la final se ve el «Promedio actual» (lo calificado hasta ahora); ya no hay columna aparte de «Promedio parcial».
+- Las actividades siguen a la derecha en bloques por rubro (el subtotal de cada rubro ahora está en el resumen). Un bloque contraído queda como una columna angosta.
 
 ## Novedades de la versión 12.59
 
