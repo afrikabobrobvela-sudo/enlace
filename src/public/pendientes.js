@@ -37,14 +37,31 @@ async function renderHomeDashboard() {
     (t) => `<li><button class="dash-item" ${openItemAttrs(t.course, 'tasks')}><span class="dash-title">${esc(t.course_name)}</span>
       <span class="dash-meta">${t.count} ${t.count === 1 ? 'entrega' : 'entregas'} por calificar</span></button></li>`,
   );
-  const card = (title, items, empty) => `<section class="dash-card"><h2>${title}</h2>${items.length ? `<ul>${items.join('')}</ul>` : `<p class="muted">${empty}</p>`}</section>`;
+  const card = (key, title, items, empty) => `<section class="dash-card" data-dashboard-panel="${key}"><h2>${title}</h2>${items.length ? `<ul>${items.join('')}</ul>` : `<p class="muted">${empty}</p>`}</section>`;
   const cards = [];
-  if (toGrade.length || me.role !== 'student') cards.push(card('Por calificar', toGrade, 'No tienes entregas pendientes de calificar.'));
-  if (pending.length || me.role === 'student') cards.push(card('Por entregar', pending, 'No tienes actividades próximas. ¡Vas al día!'));
-  if (grades.length) cards.push(card('Calificaciones nuevas', grades, ''));
-  box.innerHTML = cards.join('');
+  if (toGrade.length || me.role !== 'student') cards.push(card('to-grade', 'Por calificar', toGrade, 'No tienes entregas pendientes de calificar.'));
+  if (pending.length || me.role === 'student') cards.push(card('pending', 'Por entregar', pending, 'No tienes actividades próximas. ¡Vas al día!'));
+  if (grades.length) cards.push(card('grades', 'Calificaciones nuevas', grades, ''));
+  const hasTabs = toGrade.length > 0 && pending.length > 0;
+  const tabs = hasTabs
+    ? `<div class="pending-tabs" role="tablist" aria-label="Pendientes"><button type="button" role="tab" aria-selected="true" data-pending-tab="to-grade">Por calificar</button><button type="button" role="tab" aria-selected="false" data-pending-tab="pending">Por entregar</button></div>`
+    : '';
+  box.innerHTML = tabs + cards.join('');
+  if (hasTabs) box.querySelector('[data-dashboard-panel="pending"]')?.setAttribute('hidden', '');
   box.hidden = !cards.length;
 }
+
+document.addEventListener('click', e => {
+  const tab = e.target.closest?.('[data-pending-tab]');
+  if (!tab) return;
+  const box = $('#homeDashboard');
+  if (!box) return;
+  const selected = tab.dataset.pendingTab;
+  box.querySelectorAll('[data-pending-tab]').forEach(button => button.setAttribute('aria-selected', String(button === tab)));
+  box.querySelectorAll('[data-dashboard-panel="to-grade"], [data-dashboard-panel="pending"]').forEach(panel => {
+    panel.hidden = panel.dataset.dashboardPanel !== selected;
+  });
+});
 
 // ---- Avisos -------------------------------------------------------------------------------------
 

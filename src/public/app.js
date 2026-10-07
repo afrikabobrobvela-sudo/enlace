@@ -140,6 +140,9 @@ function render() {
     notices: renderNotices
   };
   (routes[section] || renderHub)();
+  if (current) {
+    $('#main').insertAdjacentHTML('afterbegin', '<button type="button" class="course-main-back" data-action="home" aria-label="Regresar a Mis cursos">← Mis cursos</button>');
+  }
 }
 function renderHome() {
   return workspaceHome();

@@ -63,13 +63,13 @@ body[data-tomo='1'] { --tomo: #1f3fd1; --tomo-lomo: #142b96; --tomo-papel: #e8ec
   /* Glass Mobile: base sólida; la transparencia se activa solo con soporte de blur. */
   --glass-surface: rgba(255, 255, 255, 0.88);
   --glass-reading: rgba(255, 255, 255, 0.97);
-  --glass-header: rgba(18, 53, 79, 0.94);
-  --glass-header-solid: #12354f;
-  --glass-logo: rgba(244, 251, 255, 0.96);
-  --glass-border: rgba(99, 142, 167, 0.26);
-  --glass-highlight: rgba(255, 255, 255, 0.38);
-  --glass-blur: 10px;
-  --glass-shadow: 0 6px 22px rgba(16, 36, 59, 0.07);
+  --glass-header: rgba(13, 39, 66, 0.78);
+  --glass-header-solid: rgba(13, 39, 66, 0.94);
+  --glass-logo: rgba(248, 252, 255, 0.94);
+  --glass-border: rgba(137, 219, 227, 0.28);
+  --glass-highlight: rgba(255, 255, 255, 0.22);
+  --glass-blur: 14px;
+  --glass-shadow: 0 8px 24px rgba(8, 28, 49, 0.14);
   --canvas: #f3f7fb;
   --brand-soft: #e9f2fb;
   --accent-soft: #e6f5f4;
@@ -809,8 +809,8 @@ dialog:not(.viewer)::backdrop { background: rgb(12 32 56 / 0.52); backdrop-filte
 @supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
   .shell > header, body.in-course .shell > header {
     background: var(--glass-header);
-    backdrop-filter: blur(var(--glass-blur));
-    -webkit-backdrop-filter: blur(var(--glass-blur));
+    backdrop-filter: blur(var(--glass-blur)) saturate(1.2);
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.2);
   }
   #topnav, .bottom-nav:not([hidden]), .workspace-filterbar, .cal-toolbar {
     background: var(--glass-surface);
@@ -825,6 +825,48 @@ dialog:not(.viewer)::backdrop { background: rgb(12 32 56 / 0.52); backdrop-filte
     background: var(--glass-reading);
     backdrop-filter: blur(var(--glass-blur));
     -webkit-backdrop-filter: blur(var(--glass-blur));
+  }
+}
+
+/* Glassmorphism del encabezado: profundidad ligera, contraste estable y controles táctiles sin cambiar su geometría. */
+.shell > header,
+body.in-course .shell > header {
+  background: var(--glass-header);
+  border: 1px solid var(--glass-border);
+  border-top-color: var(--glass-highlight);
+  border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+  box-shadow: var(--glass-shadow);
+  backdrop-filter: blur(var(--glass-blur)) saturate(1.2);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.2);
+}
+.wordmark:hover .brand-logo { background: #fff; }
+.header-tools .course-picker > summary:hover,
+#bell:hover,
+#profile:hover,
+#logoutButton:hover,
+.course-heading:hover {
+  background: rgba(255, 255, 255, 0.11);
+  color: #fff;
+}
+.header-tools .course-picker > summary:active,
+#bell:active,
+#profile:active,
+#logoutButton:active,
+.course-heading:active {
+  background: rgba(105, 214, 225, 0.18);
+}
+.shell > header button:focus-visible,
+.shell > header summary:focus-visible {
+  outline: 2px solid var(--cyan);
+  outline-offset: 2px;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --glass-header: rgba(7, 26, 48, 0.78);
+    --glass-header-solid: rgba(7, 26, 48, 0.94);
+    --glass-border: rgba(137, 219, 227, 0.24);
+    --glass-highlight: rgba(255, 255, 255, 0.18);
+    --glass-shadow: 0 8px 24px rgba(3, 14, 28, 0.26);
   }
 }
 @media (min-width: 721px) {
@@ -1064,4 +1106,190 @@ dialog#modal .dialog-head h2 { font-family: var(--font-heading); font-weight: 65
 @media (forced-colors: active) {
   .primary, .secondary, .bottom-nav button.active, #topnav > button.active { border: 1px solid ButtonText; }
   button:focus-visible, a:focus-visible, summary:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 3px solid Highlight !important; }
+}
+
+/* Inicio: el contexto primero, los cursos como superficie principal y los pendientes como apoyo. */
+.home-intro {
+  margin-bottom: var(--space-5);
+  padding: var(--space-5) var(--space-6);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius);
+  background: var(--glass-surface);
+  box-shadow: var(--glass-shadow);
+  backdrop-filter: blur(var(--glass-blur)) saturate(1.12);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.12);
+}
+.home-intro .action-row { align-items: center; }
+.courses-panel {
+  padding: var(--space-5);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius);
+  background: var(--glass-surface);
+  box-shadow: var(--shadow-sm);
+  backdrop-filter: blur(var(--glass-blur)) saturate(1.08);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.08);
+}
+.courses-panel-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); margin-bottom: var(--space-4); }
+.courses-panel-title { display: flex; align-items: baseline; gap: var(--space-3); min-width: 0; }
+.courses-panel-title h2 { margin: 0; font-size: 22px; color: var(--ink); }
+.courses-count { color: var(--ink-faint); font-size: 13px; font-variant-numeric: tabular-nums; }
+.course-panel-tools { display: flex; flex: none; gap: 6px; }
+.course-panel-toggle {
+  display: inline-grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--brand-2);
+  background: transparent;
+}
+.course-panel-toggle:hover,
+.course-panel-toggle[aria-expanded='true'] { border-color: var(--glass-border); background: var(--accent-soft); color: var(--brand-2); }
+.course-panel-toggle:active { background: var(--brand-soft); }
+.course-panel-toggle:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.course-filters { margin: 0 0 var(--space-4); padding: var(--space-3); border-radius: var(--radius-sm); background: var(--surface-soft); box-shadow: none; }
+.course-filters[hidden] { display: none; }
+.courses-panel .cards { margin: 0; }
+.home-dashboard { margin-top: var(--space-5); }
+.pending-tabs { display: inline-flex; gap: 3px; margin-bottom: var(--space-3); padding: 3px; border: 1px solid var(--glass-border); border-radius: var(--radius-sm); background: var(--surface-soft); }
+.pending-tabs button { min-height: 36px; padding: 6px 12px; border: 0; border-radius: 6px; color: var(--ink-soft); background: transparent; font-weight: 650; }
+.pending-tabs button:hover { background: var(--accent-soft); color: var(--brand-2); }
+.pending-tabs button[aria-selected='true'] { color: var(--brand-2); background: var(--surface); box-shadow: var(--shadow-sm); }
+.home-dashboard [data-dashboard-panel][hidden] { display: none; }
+@media (max-width: 720px) {
+  .home-intro { margin-bottom: 12px; padding: 14px; }
+  .home-intro .action-row { width: 100%; }
+  .courses-panel { padding: 12px; }
+  .courses-panel-head { margin-bottom: 10px; }
+  .courses-panel-title h2 { font-size: 19px; }
+  .course-filters { grid-template-columns: minmax(0, 1fr); gap: 8px; padding: 10px; }
+  .course-filters .filter-control { grid-template-columns: auto minmax(0, 1fr); }
+  .home-dashboard { margin-top: 12px; }
+  .pending-tabs { display: flex; width: 100%; }
+  .pending-tabs button { flex: 1 1 0; }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .home-intro, .courses-panel { background: var(--surface); backdrop-filter: none; -webkit-backdrop-filter: none; }
+}
+
+/* Dentro del curso, la salida y el resumen tienen jerarquías distintas. */
+.course-back-link {
+  flex: 0 0 auto;
+  padding-left: 0;
+  padding-right: var(--space-4);
+  border-left: 0;
+  border-right: 1px solid var(--glass-highlight);
+  color: #fff;
+  white-space: nowrap;
+}
+.course-back-link:hover { background: rgba(255, 255, 255, 0.11); color: #fff; }
+.course-title-header {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: #fff;
+  font: 700 18px/1.2 var(--font-heading);
+  letter-spacing: -0.01em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+body:not(.in-course) .course-title-header { display: none; }
+body:not(.in-course) .course-back-link { visibility: hidden; }
+@media (max-width: 720px) {
+  .course-back-link { min-height: 44px; padding-right: 10px; font-size: 14px; }
+  .course-title-header { font-size: 14px; }
+  body.has-bottomnav .shell { padding-bottom: calc(92px + env(safe-area-inset-bottom)); }
+  .bottom-nav:not([hidden]) {
+    left: 50%;
+    right: auto;
+    bottom: calc(10px + env(safe-area-inset-bottom));
+    width: min(calc(100% - 24px), 540px);
+    padding: 4px;
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-lg);
+    background: rgba(248, 252, 255, 0.76);
+    backdrop-filter: blur(16px) saturate(1.18);
+    -webkit-backdrop-filter: blur(16px) saturate(1.18);
+    box-shadow: 0 10px 28px rgba(8, 28, 49, 0.16);
+    transform: translateX(-50%);
+  }
+  .bottom-nav button { min-height: 52px; border-radius: var(--radius-sm); }
+  .bottom-nav button.active { background: rgba(105, 214, 225, 0.2); color: var(--brand-2); box-shadow: inset 0 0 0 1px rgba(8, 123, 135, 0.22); }
+  .bottom-nav button.active::before { display: none; }
+}
+@media (prefers-color-scheme: dark) {
+  .bottom-nav:not([hidden]) { background: rgba(8, 28, 49, 0.82); border-color: rgba(137, 219, 227, 0.24); box-shadow: 0 10px 28px rgba(3, 14, 28, 0.3); }
+  .bottom-nav button { color: #dcecf3; }
+  .bottom-nav button.active { color: #9ee9ed; background: rgba(105, 214, 225, 0.16); }
+}
+
+/* Navegación contextual de la vista de curso. */
+body.in-course #crumb,
+body.in-course #courseTitle { display: none; }
+
+.course-main-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  width: fit-content;
+  min-height: 38px;
+  margin: 0 0 var(--space-5);
+  padding: 7px 12px;
+  border: 1px solid rgba(8, 123, 135, .24);
+  border-radius: 12px;
+  background: rgba(226, 247, 249, .72);
+  color: var(--brand-2);
+  font: 700 14px/1 var(--font-body);
+  box-shadow: 0 5px 16px rgba(8, 28, 49, .1);
+  backdrop-filter: blur(10px) saturate(1.12);
+  -webkit-backdrop-filter: blur(10px) saturate(1.12);
+  transition: background .2s ease, border-color .2s ease, box-shadow .2s ease, transform .2s ease;
+}
+
+.course-main-back:hover {
+  background: rgba(207, 241, 244, .88);
+  border-color: rgba(8, 123, 135, .4);
+  box-shadow: 0 7px 18px rgba(8, 28, 49, .14);
+  transform: translateY(-1px);
+}
+
+.course-main-back:active { transform: translateY(0) scale(.98); }
+
+.course-main-back:focus-visible {
+  outline: 3px solid rgba(105, 214, 225, .42);
+  outline-offset: 2px;
+}
+
+@media (max-width: 720px) {
+  .course-main-back {
+    width: fit-content;
+    min-height: 38px;
+    padding-inline: 11px;
+    margin-bottom: 12px;
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  .course-main-back {
+    color: #f2fcff;
+    background: rgba(8, 35, 58, .72);
+    border-color: rgba(137, 219, 227, .28);
+    box-shadow: 0 5px 16px rgba(3, 14, 28, .26);
+  }
+  .course-main-back:hover { background: rgba(20, 70, 88, .82); border-color: rgba(137, 219, 227, .44); }
+}
+
+/* En móvil la cápsula contextual es la única navegación del curso. */
+@media (max-width: 720px) {
+  body.in-course #topnav {
+    display: none !important;
+    width: 0;
+    height: 0;
+    min-height: 0;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+    overflow: hidden;
+  }
 }
