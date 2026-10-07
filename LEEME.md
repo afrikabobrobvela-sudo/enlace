@@ -5,6 +5,14 @@ No es el código de D2L Brightspace ni una plataforma oficial de la BUAP.
 
 Esta versión se despliega en **tu propia cuenta de Cloudflare** (Workers + D1 + R2, plan gratuito) y ya no depende de ChatGPT Sites.
 
+## Rediseño visual local · Enlace Mobile (sobre 12.49)
+
+La capa `src/public/coleccion.css` unifica la interfaz con encabezado azul marino, acentos azul institucional y turquesa, superficies claras, tarjetas y formularios con sombras discretas. Conserva los colores y las portadas elegidos para los cursos, las acciones, los permisos y la navegación existentes.
+
+Incluye ajustes para teléfono y tableta, foco visible, controles táctiles y animaciones de opacidad que se desactivan con «reducir movimiento». No requiere migraciones ni dependencias nuevas. Compila con `npm run build` y revisa en local con `npm run dev`.
+
+El alcance, las pruebas y la revisión visual pendiente están en [el informe del rediseño](docs/rediseno-enlace-mobile.md). Esta nota documenta cambios locales; no implica una publicación.
+
 ## Novedades de la versión 12.49 (fecha en el libro)
 
 - En el libro de calificaciones, cada actividad muestra su fecha debajo del nombre.
