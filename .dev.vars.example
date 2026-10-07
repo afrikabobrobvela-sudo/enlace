@@ -17,3 +17,7 @@ GOOGLE_CLIENT_SECRET=
 # Opcional, solo con un dominio verificado en Resend (sin dominio, Resend solo entrega a tu propio correo).
 # RESEND_API_KEY=
 # EMAIL_FROM=Enlace <aula@tu-dominio.mx>
+
+# Supabase Auth para las rutas móviles de solo lectura (sin secretos en el repositorio).
+SUPABASE_URL=
+SUPABASE_PUBLISHABLE_KEY=
