@@ -808,6 +808,12 @@ function gradeHeatAttr(task, member, submission) {
   return ' style="--gb-heat: hsl(2 72% 84%)" data-heat="missing" title="Sin entregar (venció)"';
 }
 
+/** Mensaje al guardar una calificación máxima (12.59): avisa si no se recalculó porque el máximo ya era ese. */
+function maxSavedMessage(r) {
+  if (r.same) throw new Error(`El máximo ya era ${r.max}, así que no hay nada que recalcular. Si las calificaciones capturadas están sobre 10 y quieres tomarlas como puntos sobre ${r.max}, guarda primero 10 sin marcar la casilla y luego ${r.max} marcándola.`);
+  return r.changed ? `Calificación máxima guardada; se recalcularon ${r.changed} calificaciones.` : 'Calificación máxima guardada.';
+}
+
 /** Calificación máxima de la captura de un rubro (12.56): se escribe «6 de 9» y se guarda sobre 10. */
 const categoryMax = (id) => {
   const max = Number(gradingSettings().categories.find((c) => c.id === id)?.maxScore);
@@ -930,11 +936,11 @@ document.addEventListener('click', async (e) => {
   if (!c) return;
   modal(`Calificación máxima · ${categoryLabel(c, gradingSettings())}`, `<p class="muted">Escribe en el subtotal los puntos sobre este valor y Enlace lo convierte a 10, como en Brightspace: 6 de 9 = 6.67.</p>
     <label>Calificación máxima<input name="max" type="number" min="0.01" max="1000" step="0.01" required value="${categoryMax(c.id)}"></label>
-    <label class="check-label"><input type="checkbox" name="rescale"> Recalcular las calificaciones ya capturadas (conservan sus puntos: un 6 pasa a 6 de 9 = 6.67)</label>
+    <label class="check-label"><input type="checkbox" name="rescale"> Recalcular las calificaciones ya capturadas (se toman como puntos sobre el nuevo máximo: 2.5 de 8 = 3.13)</label>
     <p class="muted">Sin marcarla, las calificaciones ya capturadas no cambian.</p>
     `, async (f) => {
     const r = await request('/api/grades/category/max', { course: current.course.id, category: c.id, max: Number(f.get('max')), rescale: f.get('rescale') === 'on' });
-    return r.changed ? `Calificación máxima guardada; se recalcularon ${r.changed} calificaciones.` : 'Calificación máxima guardada.';
+    return maxSavedMessage(r);
   });
 });
 
@@ -945,11 +951,11 @@ document.addEventListener('click', async (e) => {
   if (!t) return;
   modal(`Calificación máxima · ${t.data.title}`, `    <p class="muted">Captura sobre este valor y Enlace lo convierte a 10, como en Brightspace: 6 de 9 = 6.67.</p>
     <label>Calificación máxima<input name="max" type="number" min="0.01" max="1000" step="0.01" required value="${taskMax(t)}"></label>
-    <label class="check-label"><input type="checkbox" name="rescale"> Recalcular las calificaciones ya capturadas (conservan sus puntos: un 6 pasa a 6 de 9 = 6.67)</label>
+    <label class="check-label"><input type="checkbox" name="rescale"> Recalcular las calificaciones ya capturadas (se toman como puntos sobre el nuevo máximo: 2.5 de 8 = 3.13)</label>
     <p class="muted">Sin marcarla, las calificaciones ya capturadas no cambian.</p>
     `, async (f) => {
     const r = await request('/api/task/max', { course: current.course.id, id: t.id, max: Number(f.get('max')), rescale: f.get('rescale') === 'on' });
-    return r.changed ? `Calificación máxima guardada; se recalcularon ${r.changed} calificaciones.` : 'Calificación máxima guardada.';
+    return maxSavedMessage(r);
   });
 });
 
