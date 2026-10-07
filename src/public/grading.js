@@ -61,9 +61,15 @@ function computeGrade({ tasks, grades, settings, weights, attendancePercent = nu
         const points = items.reduce((n, item) => n + weightOf(item), 0);
         automaticValue = points ? items.reduce((n, item) => n + item.grade * weightOf(item), 0) / points : null;
       }
+      // Calificación máxima del rubro (12.60): el cálculo automático (evaluaciones en línea y actividades) se toma
+      // sobre ese máximo, como en Brightspace: con máximo 8, un 2.5 vale 2.5 × 10 / 8 = 3.13 (tope 10). La captura
+      // manual ya se guarda convertida a 10 (12.56), así que no se vuelve a escalar.
+      const rawAutomatic = automaticValue;
+      const max = Number(category.maxScore) > 0 ? Number(category.maxScore) : 10;
+      if (category.source !== 'attendance' && automaticValue !== null && max !== 10) automaticValue = Math.min(10, (automaticValue * 10) / max);
       // Una captura directa del docente sustituye todo el cálculo automático de este rubro para el alumno.
       const value = categoryGrades.has(category.id) ? Number(categoryGrades.get(category.id)) : automaticValue;
-      return { id: category.id, name: category.name, weight: category.weight, source: category.source, term: category.term || '', value, automaticValue };
+      return { id: category.id, name: category.name, weight: category.weight, source: category.source, term: category.term || '', value, automaticValue, rawAutomatic };
     });
     // Dentro de un parcial, un rubro vacío conserva su peso y aporta 0: no se redistribuye su porcentaje.
     // En el nivel superior, el promedio parcial excluye los parciales completamente vacíos; la calificación
@@ -139,6 +145,20 @@ function taskGradebookHtml(data) {
 function categoryLabel(category, settings = gradingSettings()) {
   const term = category.term && (settings.terms || []).find((t) => t.id === category.term);
   return term ? `${term.name} · ${category.name}` : category.name;
+}
+
+/**
+ * Orden de los rubros en el libro (12.60): por parcial (los de toda la materia al final) y, dentro de cada uno, la
+ * asistencia primero y los exámenes al último, junto al promedio del parcial; los demás, en el orden en que se crearon.
+ */
+function gradebookCategoryOrder(categories, terms = []) {
+  const termIndex = new Map(terms.map((t, i) => [t.id, i]));
+  const group = (c) => (termIndex.has(c.term) ? termIndex.get(c.term) : terms.length);
+  const rank = (c) => (c.source === 'attendance' ? 0 : /ex[aá]men/i.test(c.name) ? 2 : 1);
+  return categories
+    .map((c, i) => ({ c, i }))
+    .sort((a, b) => group(a.c) - group(b.c) || rank(a.c) - rank(b.c) || a.i - b.i)
+    .map((x) => x.c);
 }
 
 /**
@@ -827,13 +847,22 @@ function categoryGradeCellHtml(category, member, value) {
   const automatic = category.automaticValue ?? (manual ? null : value);
   const automaticText = formatGrade(automatic);
   const max = categoryMax(category.id);
-  return `<td class="category-col category-grade-cell ${manual ? 'is-manual' : ''} ${gradeToneClass(value)}">
-    <input class="category-grade-input" type="number" min="0" max="${max}" step="0.01" inputmode="decimal"
-      value="${esc(categoryPoints(category.id, manual?.data.grade))}" placeholder="${esc(max === 10 ? automaticText : automatic === null ? '—' : categoryPoints(category.id, automatic))}" data-category-grade
+  const input = (valueText, placeholder) => `<input class="category-grade-input" type="number" min="0" max="${max}" step="0.01" inputmode="decimal"
+      value="${esc(valueText)}" placeholder="${esc(placeholder)}" data-category-grade
       data-cg-category="${esc(category.id)}" data-cg-member="${esc(member.id)}"
-      aria-label="Calificación manual de ${esc(categoryLabel(category))} para ${esc(member.name)}" title="Escribe una calificación manual; deja vacío para usar el cálculo automático">
-    ${max !== 10 && manual ? `<strong class="gb-scaled" title="${esc(`${categoryPoints(category.id, manual.data.grade)} de ${max}`)}">${formatGrade(manual.data.grade)} <small>/10</small></strong>` : ''}
-    <small class="${manual ? 'manual-grade-tag' : 'category-grade-hint'}">${max !== 10 && manual ? `${categoryPoints(category.id, manual.data.grade)} de ${max} · ` : ''}${manual ? `Manual${automatic === null ? '' : ` · automático: ${automaticText}`}` : `Automático: ${automaticText}`}</small></td>`;
+      aria-label="Calificación manual de ${esc(categoryLabel(category))} para ${esc(member.name)}" title="Escribe una calificación manual; deja vacío para usar el cálculo automático">`;
+  if (max === 10)
+    return `<td class="category-col category-grade-cell ${manual ? 'is-manual' : ''} ${gradeToneClass(value)}">
+    ${input(manual?.data.grade ?? '', automaticText)}
+    <small class="${manual ? 'manual-grade-tag' : 'category-grade-hint'}">${manual ? `Manual${automatic === null ? '' : ` · automático: ${automaticText}`}` : `Automático: ${automaticText}`}</small></td>`;
+  // Con calificación máxima (12.60): la casilla y el automático están en puntos sobre el máximo (lo que sacó el
+  // alumno) y debajo, en grande, lo que vale sobre 10 y lo que entra al promedio.
+  const rawAuto = category.rawAutomatic !== undefined ? category.rawAutomatic : automatic === null ? null : (automatic * max) / 10;
+  const rawText = rawAuto === null ? '—' : formatGrade(rawAuto);
+  return `<td class="category-col category-grade-cell ${manual ? 'is-manual' : ''} ${gradeToneClass(value)}">
+    ${input(categoryPoints(category.id, manual?.data.grade), rawText)}
+    ${value === null || value === undefined ? '' : `<strong class="gb-scaled" title="${esc(`Sobre 10, con calificación máxima ${max}`)}">${formatGrade(value)} <small>/10</small></strong>`}
+    <small class="${manual ? 'manual-grade-tag' : 'category-grade-hint'}">${manual ? `${categoryPoints(category.id, manual.data.grade)} de ${max} · Manual${rawAuto === null ? '' : ` · automático: ${rawText} de ${max}`}` : `Automático: ${rawAuto === null ? '—' : `${rawText} de ${max}`}`}</small></td>`;
 }
 
 /** Guarda una captura manual de rubro. Eliminar su contenido reactiva el valor automático. */
@@ -934,10 +963,10 @@ document.addEventListener('click', async (e) => {
   if (!button) return;
   const c = gradingSettings().categories.find((x) => x.id === button.dataset.cgMax);
   if (!c) return;
-  modal(`Calificación máxima · ${categoryLabel(c, gradingSettings())}`, `<p class="muted">Escribe en el subtotal los puntos sobre este valor y Enlace lo convierte a 10, como en Brightspace: 6 de 9 = 6.67.</p>
+  modal(`Calificación máxima · ${categoryLabel(c, gradingSettings())}`, `<p class="muted">El promedio que se calcula solo (por ejemplo, el examen en línea) y lo que escribas en la casilla se toman sobre este valor y se convierten a 10, como en Brightspace: 2.5 de 8 = 3.13. Para quitarlo, vuelve a poner 10.</p>
     <label>Calificación máxima<input name="max" type="number" min="0.01" max="1000" step="0.01" required value="${categoryMax(c.id)}"></label>
-    <label class="check-label"><input type="checkbox" name="rescale"> Recalcular las calificaciones ya capturadas (se toman como puntos sobre el nuevo máximo: 2.5 de 8 = 3.13)</label>
-    <p class="muted">Sin marcarla, las calificaciones ya capturadas no cambian.</p>
+    <label class="check-label"><input type="checkbox" name="rescale"> Recalcular también lo que escribiste a mano en la casilla (se toma como puntos sobre el nuevo máximo: 2.5 de 8 = 3.13)</label>
+    <p class="muted">Sin marcarla, lo escrito a mano conserva su valor sobre 10. Lo que se calcula solo siempre usa el máximo.</p>
     `, async (f) => {
     const r = await request('/api/grades/category/max', { course: current.course.id, category: c.id, max: Number(f.get('max')), rescale: f.get('rescale') === 'on' });
     return maxSavedMessage(r);
