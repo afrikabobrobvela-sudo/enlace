@@ -24,7 +24,7 @@ bucket_name = "enlace-archivos"
 # Valores públicos (no son secretos). Los secretos van con `npx wrangler secret put NOMBRE`.
 [vars]
 # Correo de Google de la cuenta principal de administración.
-AULA_OWNER_EMAIL = "daroiandri21@gmail.com"
+AULA_OWNER_EMAIL = "tu-correo@gmail.com"
 # Opcional: limita el acceso a correos institucionales, separados por comas.
 # ALLOWED_EMAIL_DOMAINS = "alumno.buap.mx,correo.buap.mx"
 # Correos que pueden solicitar acceso como docente (si no se indica: correo.buap.mx).
@@ -64,5 +64,5 @@ binding = "BUCKET"
 bucket_name = "enlace-pruebas-archivos"
 
 [env.pruebas.vars]
-AULA_OWNER_EMAIL = "daroiandri21@gmail.com"
+AULA_OWNER_EMAIL = "tu-correo@gmail.com"
 FOTO_OBLIGATORIA = "1"
