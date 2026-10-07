@@ -60,6 +60,16 @@ body[data-tomo='1'] { --tomo: #1f3fd1; --tomo-lomo: #142b96; --tomo-papel: #e8ec
   --surface: #ffffff;
   --surface-soft: #f1f6fa;
   --surface-glass: rgba(255, 255, 255, 0.94);
+  /* Glass Mobile: base sólida; la transparencia se activa solo con soporte de blur. */
+  --glass-surface: rgba(255, 255, 255, 0.88);
+  --glass-reading: rgba(255, 255, 255, 0.97);
+  --glass-header: rgba(18, 53, 79, 0.94);
+  --glass-header-solid: #12354f;
+  --glass-logo: rgba(244, 251, 255, 0.96);
+  --glass-border: rgba(99, 142, 167, 0.26);
+  --glass-highlight: rgba(255, 255, 255, 0.38);
+  --glass-blur: 10px;
+  --glass-shadow: 0 6px 22px rgba(16, 36, 59, 0.07);
   --canvas: #f3f7fb;
   --brand-soft: #e9f2fb;
   --accent-soft: #e6f5f4;
@@ -734,6 +744,112 @@ dialog:not(.viewer)::backdrop { background: rgb(12 32 56 / 0.52); backdrop-filte
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+}
+/* Segunda fase Mobile: superficies discretas, sin alterar la estructura ni los estados. */
+.shell > header, body.in-course .shell > header {
+  background: var(--glass-header-solid);
+  border-bottom: 1px solid var(--glass-highlight);
+  box-shadow: var(--glass-shadow);
+}
+.wordmark {
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: 12px;
+  padding: 0;
+  min-height: 44px;
+  border-radius: var(--radius-sm);
+}
+.wordmark .brand-logo {
+  display: flex;
+  align-items: center;
+  width: 144px;
+  flex: none;
+  background: var(--glass-logo);
+  border: 1px solid var(--glass-highlight);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 2px 8px rgba(5, 25, 45, 0.12);
+  overflow: hidden;
+}
+.brand-logo img { display: block; width: 100%; height: auto; object-fit: contain; }
+.wordmark .brand-subtitle {
+  color: #e8f4fb;
+  font: 500 12px/1.4 var(--font-ui);
+  letter-spacing: 0.01em;
+  text-align: left;
+  max-width: 105px;
+}
+.course-heading { min-height: 44px; border-left-color: var(--glass-highlight); }
+.header-tools .course-picker > summary, #bell, .profile-square { min-width: 44px; min-height: 44px; }
+.header-tools .course-picker > summary, #bell { border-radius: var(--radius-sm); }
+.wordmark:hover .brand-logo { background: #fff; }
+.wordmark:focus-visible { outline: 3px solid var(--cyan); outline-offset: 4px; }
+#topnav { background: var(--surface); border-bottom-color: var(--glass-border); box-shadow: var(--glass-shadow); }
+.panel, .dash-card, .home-dashboard > section, .workspace-filterbar, article.course,
+.module-card, .stat-tile, .my-grade-summary, .cal-toolbar {
+  background: var(--surface);
+  border-color: var(--glass-border);
+  box-shadow: var(--glass-shadow);
+}
+/* Lectura prolongada y formularios: superficie casi opaca incluso con un menú abierto. */
+.menu-panel, .course-picker-panel, .bell-panel, .card-menu, .more-actions-panel,
+.section-filter-panel, .dt-pop, dialog#modal, dialog.sheet {
+  background: var(--surface);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--shadow-lg);
+}
+.login-layout { border-color: var(--glass-border); box-shadow: var(--glass-shadow); }
+.table-wrap, .gradebook, .content-detail, .login-layout .login-panel { background: var(--surface); }
+.bottom-nav:not([hidden]), #modal .dialog-actions { background: var(--surface); }
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .shell > header, body.in-course .shell > header {
+    background: var(--glass-header);
+    backdrop-filter: blur(var(--glass-blur));
+    -webkit-backdrop-filter: blur(var(--glass-blur));
+  }
+  #topnav, .bottom-nav:not([hidden]), .workspace-filterbar, .cal-toolbar {
+    background: var(--glass-surface);
+    backdrop-filter: blur(var(--glass-blur));
+    -webkit-backdrop-filter: blur(var(--glass-blur));
+  }
+  /* Las tarjetas reciben luz del fondo sin multiplicar filtros en listas largas. */
+  .panel, .dash-card, .home-dashboard > section, article.course, .module-card,
+  .stat-tile, .my-grade-summary { background: var(--glass-surface); }
+  .menu-panel, .course-picker-panel, .bell-panel, .card-menu, .more-actions-panel,
+  .section-filter-panel, .dt-pop, dialog#modal, dialog.sheet, #modal .dialog-actions {
+    background: var(--glass-reading);
+    backdrop-filter: blur(var(--glass-blur));
+    -webkit-backdrop-filter: blur(var(--glass-blur));
+  }
+}
+@media (min-width: 721px) {
+  #topnav { margin-inline: 20px; border-radius: 0 0 var(--radius) var(--radius); }
+}
+@media (max-width: 1100px) {
+  .wordmark .brand-subtitle { display: none; }
+}
+@media (max-width: 720px) {
+  .wordmark .brand-logo { width: 120px; }
+  .course-heading { font-size: 14px; color: #fff; }
+  .shell > header { gap: 6px; }
+  .header-tools { gap: 2px; }
+  dialog#modal { border: 0; background: var(--surface); backdrop-filter: none; -webkit-backdrop-filter: none; }
+  .menu-panel button, .card-menu button, .more-actions-panel button { min-height: 44px; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .shell > header { animation: enlace-appear var(--duration-normal) var(--ease); }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .shell > header, body.in-course .shell > header { background: var(--glass-header-solid); }
+  #topnav, .bottom-nav:not([hidden]), .panel, .dash-card, .home-dashboard > section,
+  article.course, .module-card, .stat-tile, .my-grade-summary, .workspace-filterbar,
+  .cal-toolbar, .menu-panel, .course-picker-panel, .bell-panel, .card-menu,
+  .more-actions-panel, .section-filter-panel, .dt-pop, dialog#modal, dialog.sheet,
+  #modal .dialog-actions { background: var(--surface); }
+  .shell > header, #topnav, .bottom-nav, .workspace-filterbar, .cal-toolbar,
+  .menu-panel, .course-picker-panel, .bell-panel, .card-menu, .more-actions-panel,
+  .section-filter-panel, .dt-pop, dialog, #modal .dialog-actions {
+    backdrop-filter: none !important; -webkit-backdrop-filter: none !important;
+  }
 }
 @media (forced-colors: active) {
   .primary, .secondary, .bottom-nav button.active, #topnav > button.active { border: 1px solid ButtonText; }
