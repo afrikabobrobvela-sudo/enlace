@@ -1,0 +1,28 @@
+- generic [active] [ref=e1]:
+  - link "Ir al contenido" [ref=e2] [cursor=pointer]:
+    - /url: "#main"
+  - generic [ref=e3]:
+    - banner [ref=e4]:
+      - button "Enlace Aula virtual · BUAP" [ref=e5] [cursor=pointer]:
+        - img "Enlace" [ref=e7]
+        - generic [ref=e8]: Aula virtual · BUAP
+    - main [ref=e9]:
+      - generic [ref=e10]:
+        - generic [ref=e11]:
+          - generic [ref=e12]:
+            - heading "Tu aula virtual" [level=2] [ref=e18]
+            - paragraph [ref=e19]: "Para docentes y alumnos de cualquier academia: materiales, actividades, calificaciones y asistencia en un solo lugar."
+          - list [ref=e20]:
+            - listitem [ref=e21]: Materiales, fórmulas e imágenes en cada unidad
+            - listitem [ref=e22]: Entregas desde tu celular
+            - listitem [ref=e23]: Calificaciones y asistencia al día
+        - region [ref=e24]:
+          - heading "Entra a tu aula" [level=1] [ref=e25]
+          - paragraph [ref=e26]: Usa el mismo correo con el que tu docente te inscribió. Si eres docente, usa el correo que registró la coordinación.
+          - link "Continuar con Google" [ref=e28] [cursor=pointer]:
+            - /url: /auth/google/start?return_to=%2F
+          - paragraph [ref=e29]: Enlace no guarda contraseñas. Al terminar, regresarás a la página donde estabas.
+    - contentinfo [ref=e30]:
+      - text: Espacio docente independiente para grupos BUAP · No es una plataforma institucional oficial. ·
+      - link "Aviso de privacidad" [ref=e31] [cursor=pointer]:
+        - /url: /privacidad
