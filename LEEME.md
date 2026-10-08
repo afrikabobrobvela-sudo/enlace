@@ -1,17 +1,15 @@
-# Enlace · versión 12.61
+# Enlace · versión 12.62
 
 Plataforma académica independiente para docentes y alumnos de cualquier academia (nació en la Academia de Física de la BUAP), con interfaz inspirada en Brightspace.
 No es el código de D2L Brightspace ni una plataforma oficial de la BUAP.
 
 Esta versión se despliega en **tu propia cuenta de Cloudflare** (Workers + D1 + R2, plan gratuito) y ya no depende de ChatGPT Sites.
 
-## Rediseño visual local · Enlace Mobile (sobre 12.49)
+## Novedades de la versión 12.62 (se deshace el PR #29)
 
-La capa `src/public/coleccion.css` unifica la interfaz con encabezado azul marino, acentos azul institucional y turquesa, superficies claras, tarjetas y formularios con sombras discretas. Conserva los colores y las portadas elegidos para los cursos, las acciones, los permisos y la navegación existentes.
+- Se retira por completo el cambio del PR #29 (rediseño «glassmorphism», tema oscuro, logotipo nuevo, nuevo inicio de «Mis cursos» y rutas móviles `/api/mobile/v1/*` con Supabase), que se fusionó y publicó sin revisión. El código queda **idéntico a la 12.61**. Ese cambio no tocó migraciones ni la base de datos: los datos en D1 no se modificaron; antes de publicarlo, «Desplegar» guardó un respaldo en R2 (`enlace-respaldos/antes-de-desplegar-…`).
+- Recomendación: en GitHub, protege la rama principal para que solo se fusione con tu aprobación (Settings → Branches) y revisa quién tiene acceso (Settings → Collaborators).
 
-Incluye ajustes para teléfono y tableta, foco visible, controles táctiles y animaciones de opacidad que se desactivan con «reducir movimiento». No requiere migraciones ni dependencias nuevas. Compila con `npm run build` y revisa en local con `npm run dev`.
-
-El alcance, las pruebas y la revisión visual pendiente están en [el informe del rediseño](docs/rediseno-enlace-mobile.md). Esta nota documenta cambios locales; no implica una publicación.
 ## Novedades de la versión 12.61 (ver las respuestas de cada alumno)
 
 - En cada evaluación, la tabla «Resultados» tiene la columna **Respuestas** con «Ver respuestas»: muestra, intento por intento, cada pregunta con ✓ / ✗ (o parcial / por revisar), lo que respondió el alumno y la respuesta correcta. En las preguntas numéricas se ve la fórmula con los datos que le tocaron a ese alumno.
