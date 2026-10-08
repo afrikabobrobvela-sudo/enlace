@@ -9,6 +9,26 @@ body.signed-out #topnav {
 
 /* ---- Pantalla de acceso ------------------------------------------------------------------- */
 
+.login-brand-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 18px 0 10px;
+}
+
+.login-brand-title h2 {
+  margin: 0;
+}
+
+.login-brand .login-brand-icon {
+  display: block;
+  width: clamp(36px, 5vw, 48px);
+  height: clamp(36px, 5vw, 48px);
+  flex: none;
+  object-fit: contain;
+  border-radius: 8px;
+}
+
 .login-panel {
   max-width: 34rem;
   margin: 3rem auto 4rem;
