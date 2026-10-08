@@ -4,7 +4,7 @@
  */
 
 const NAV_ICON_PATHS = {
-  hub: 'M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z',
+  hub: 'M3 4h18v16H3zM7 8h4v3H7zM13 8h4v3h-4zM7 13h4v3H7zM13 13h4v3h-4z',
   content: 'M5 4.5A1.5 1.5 0 0 1 6.5 3H19v15H6.5A1.5 1.5 0 0 0 5 19.5zM5 19.5A1.5 1.5 0 0 0 6.5 21H19M9 7h6',
   tasks: 'M9 3h6v3H9zM7 4.5H5V21h14V4.5h-2M8.5 13l2.5 2.5 4.5-4.5',
   grades: 'M5 20V11M12 20V5M19 20v-6M3 20h18',
@@ -22,7 +22,7 @@ const NAV_ICON_PATHS = {
   refresh: 'M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7',
 };
 const NAV_NAMES = {
-  hub: 'Inicio',
+  hub: 'Resumen',
   content: 'Contenido',
   tasks: 'Actividades',
   grades: 'Calificaciones',

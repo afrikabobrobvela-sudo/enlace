@@ -10,6 +10,7 @@
     "configurar": "node scripts/configurar.mjs",
     "correo": "node scripts/configurar.mjs --correo",
     "build": "node scripts/build.mjs",
+    "test:mobile": "node scripts/test-mobile-api.mjs",
     "medir": "node scripts/build.mjs && node scripts/medir-consultas.mjs",
     "dev": "node scripts/build.mjs && wrangler dev",
     "deploy": "node scripts/revisar-config.mjs && node scripts/build.mjs && wrangler deploy",

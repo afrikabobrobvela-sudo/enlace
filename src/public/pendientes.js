@@ -29,22 +29,43 @@ async function renderHomeDashboard() {
     (p) => `<li><button class="dash-item ${p.overdue ? 'is-overdue' : ''}" ${openItemAttrs(p.course, 'task', p.id)}>
       <span class="dash-title">${esc(p.title)}</span><span class="dash-meta">${esc(p.course_name)} · ${esc(relativeDue(p.due))}${p.extended ? ' · con prórroga' : ''}</span></button></li>`,
   );
-  const grades = data.grades.map(
-    (g) => `<li><button class="dash-item" ${openItemAttrs(g.course, 'task', g.id)}><span class="dash-title">${esc(g.title)}</span>
+  // Conserva las calificaciones reales, ordénalas por fecha y limita el panel a cinco registros.
+  const grades = [...data.grades]
+    .sort((a, b) => (Date.parse(b.graded_at || '') || 0) - (Date.parse(a.graded_at || '') || 0))
+    .slice(0, 5)
+    .map(
+      (g) => `<li><button class="dash-item" ${openItemAttrs(g.course, 'task', g.id)}><span class="dash-title">${esc(g.title)}</span>
       <span class="dash-meta">${esc(g.course_name)} · calificación <b>${esc(g.grade)}</b></span></button></li>`,
-  );
+    );
   const toGrade = data.toGrade.map(
     (t) => `<li><button class="dash-item" ${openItemAttrs(t.course, 'tasks')}><span class="dash-title">${esc(t.course_name)}</span>
       <span class="dash-meta">${t.count} ${t.count === 1 ? 'entrega' : 'entregas'} por calificar</span></button></li>`,
   );
-  const card = (title, items, empty) => `<section class="dash-card"><h2>${title}</h2>${items.length ? `<ul>${items.join('')}</ul>` : `<p class="muted">${empty}</p>`}</section>`;
+  const card = (key, title, items, empty) => `<section class="dash-card" data-dashboard-panel="${key}"><h2>${title}</h2>${items.length ? `<ul>${items.join('')}</ul>` : `<p class="muted">${empty}</p>`}</section>`;
   const cards = [];
-  if (toGrade.length || me.role !== 'student') cards.push(card('Por calificar', toGrade, 'No tienes entregas pendientes de calificar.'));
-  if (pending.length || me.role === 'student') cards.push(card('Por entregar', pending, 'No tienes actividades próximas. ¡Vas al día!'));
-  if (grades.length) cards.push(card('Calificaciones nuevas', grades, ''));
-  box.innerHTML = cards.join('');
+  if (toGrade.length || me.role !== 'student') cards.push(card('to-grade', 'Por calificar', toGrade, 'No tienes entregas pendientes de calificar.'));
+  if (pending.length || me.role === 'student') cards.push(card('pending', 'Por entregar', pending, 'No tienes actividades próximas. ¡Vas al día!'));
+  cards.push(card('grades', 'Calificaciones recientes', grades, 'Aún no tienes calificaciones recientes.'));
+  const hasTabs = toGrade.length > 0 && pending.length > 0;
+  const tabs = hasTabs
+    ? `<div class="pending-tabs" role="tablist" aria-label="Pendientes"><button type="button" role="tab" aria-selected="true" data-pending-tab="to-grade">Por calificar</button><button type="button" role="tab" aria-selected="false" data-pending-tab="pending">Por entregar</button></div>`
+    : '';
+  box.innerHTML = tabs + cards.join('');
+  if (hasTabs) box.querySelector('[data-dashboard-panel="pending"]')?.setAttribute('hidden', '');
   box.hidden = !cards.length;
 }
+
+document.addEventListener('click', e => {
+  const tab = e.target.closest?.('[data-pending-tab]');
+  if (!tab) return;
+  const box = $('#homeDashboard');
+  if (!box) return;
+  const selected = tab.dataset.pendingTab;
+  box.querySelectorAll('[data-pending-tab]').forEach(button => button.setAttribute('aria-selected', String(button === tab)));
+  box.querySelectorAll('[data-dashboard-panel="to-grade"], [data-dashboard-panel="pending"]').forEach(panel => {
+    panel.hidden = panel.dataset.dashboardPanel !== selected;
+  });
+});
 
 // ---- Avisos -------------------------------------------------------------------------------------
 

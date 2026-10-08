@@ -52,6 +52,8 @@ import { mailConfigured } from './mail.js';
 import { quizForStudent, quizWithAccess, quizWithSectionDates, sectionIdsByName, sectionKey, sectionRoutes, sectionsField, validSection } from './sections.js';
 import { gradingRoutes } from './grading.js';
 import { clearSessionCookie, identity, lastLogins, revokeAllStatements } from './auth.js';
+import { listCourses } from './course-list.js';
+import { mobileApi } from './mobile.js';
 import {
   assertAvailable,
   courseGradebook,
@@ -135,6 +137,7 @@ function assertExamRoute(route, url, user) {
 
 export async function api(request, env) {
   try {
+    if (new URL(request.url).pathname.startsWith('/api/mobile/v1/')) return await mobileApi(request, env);
     const user = await identity(request, env);
     const url = new URL(request.url);
     const route = `${request.method} ${url.pathname}`;
@@ -543,33 +546,7 @@ const routes = {
   // Una sola consulta sin importar cuántos cursos haya: el plan gratuito de D1 permite
   // 50 consultas por solicitud y la versión 8 hacía tres por curso.
   'GET /api/courses': async ({ db, user }) => {
-    const notDeleted = 'NOT EXISTS (SELECT 1 FROM aula_deleted_courses d WHERE d.course=c.id)';
-    // ?2: la propiedad de un curso solo cuenta si la persona sigue siendo docente (ver ownsCourse).
-    const rows =
-      user.role === 'admin'
-        ? await all(db, `SELECT c.*, 1 AS can_teach FROM aula_courses c WHERE ${notDeleted} ORDER BY c.created DESC`)
-        : await all(
-            db,
-            `SELECT c.*,
-               CASE WHEN ?2 AND (c.owner=?1 OR EXISTS (SELECT 1 FROM aula_members t WHERE t.course=c.id AND t.user_id=?1 AND t.role='teacher'))
-                 THEN 1 ELSE 0 END AS can_teach
-             FROM aula_courses c
-             -- Primero, por índice, solo los cursos propios o con inscripción (12.30: antes se recorrían todos los cursos).
-             WHERE (c.owner=?1 OR c.id IN (SELECT i.course FROM aula_members i WHERE i.user_id=?1))
-               AND ((?2 AND (c.owner=?1 OR EXISTS (SELECT 1 FROM aula_members t WHERE t.course=c.id AND t.user_id=?1 AND t.role='teacher')))
-                    OR (c.student_visible=1 AND EXISTS (SELECT 1 FROM aula_members m WHERE m.course=c.id AND m.user_id=?1 AND m.role='student')))
-               AND ${notDeleted}
-             ORDER BY c.created DESC`,
-            user.id,
-            user.role === 'teacher' ? 1 : 0,
-          );
-    return json(
-      rows.map(({ can_teach: canTeach, cover: _cover, ...c }) => ({
-        ...c,
-        canTeach: canTeach === 1,
-        canDelete: user.role === 'admin' || ownsCourse(user, c),
-      })),
-    );
+    return json(await listCourses(db, user));
   },
 
   'POST /api/courses': async ({ db, user, request }) => {
