@@ -36,6 +36,7 @@ export function taskRecord(row) {
       end: row.end_at,
       category: row.category ?? null,
       points: row.points ?? 1,
+      maxScore: row.max_score ?? 10,
       rubric: row.rubric ?? null,
       groupCategory: row.group_category || '',
       sections: taskSections(row.sections),
@@ -250,7 +251,7 @@ export async function courseGradebook(db, course, { teacher, userId, memberId = 
   // Al alumno no le llegan ids ni pesos de actividades ocultas (como en la lista de actividades de arriba).
   const weights = weightsRecord(course, settings, teacher ? tasks : tasks.filter((t) => t.visible === 1));
   if (weights) records.push(weights);
-  const categories = await all(db, 'SELECT id, name, weight, source, term, distribution, drop_low, drop_high FROM aula_grade_categories WHERE course=? ORDER BY position, name', course);
+  const categories = await all(db, 'SELECT id, name, weight, source, term, distribution, drop_low, drop_high, max_score FROM aula_grade_categories WHERE course=? ORDER BY position, name', course);
   const grading = gradingRecord(course, settings, categories);
   if (!teacher) {
     // Al alumno solo le llega el orden de las actividades que recibe.
@@ -294,6 +295,7 @@ export function gradingRecord(course, settings, categories) {
         distribution: c.distribution || 'manual',
         dropLow: c.drop_low || 0,
         dropHigh: c.drop_high || 0,
+        maxScore: c.max_score ?? 10,
       })),
       // Parciales (12.26): [{ id, name, weight }]; vacío = sin parciales.
       terms: parseTerms(settings?.terms),

@@ -218,7 +218,54 @@ function exportQuizResults(quizId) {
   toast('Se descargó el libro de Excel con resultados, respuestas y estadísticas.');
 }
 
+/** Respuesta correcta de una pregunta, como texto (12.61). En las numéricas, la fórmula con los datos del alumno. */
+function correctAnswerText(question, d) {
+  const type = question?.type || 'choice';
+  if (type === 'choice') return `${QUIZ_LETTERS[question.correct] || '?'}. ${question.options?.[question.correct] ?? ''}`;
+  if (type === 'multi') return (question.correct || []).map((j) => `${MULTI_LETTERS[j] || '?'}. ${question.options?.[j] ?? ''}`).join('; ');
+  if (type === 'truefalse') return question.correct === false ? 'Falso' : 'Verdadero';
+  if (type === 'matching') return (question.pairs || []).map((p) => `${p.left} → ${p.right}`).join('; ');
+  if (type === 'ordering') return (question.items || []).join(' → ');
+  if (type === 'short' || type === 'multishort') return (question.answers || []).join(' / ');
+  if (type === 'fill') return [...String(question.text || '').matchAll(/\[\[([^\]]*)\]\]/g)].map((m) => m[1].split('|')[0]).join(' | ');
+  if (type === 'essay') return question.guide ? `Guía: ${question.guide}` : 'Se califica a mano';
+  if (type === 'numeric' || type === 'sigfig') {
+    const data = Object.entries(d.values || {}).map(([k, v]) => `${k} = ${v}`).join(', ');
+    return `${question.answer}${question.unit ? ` ${question.unit}` : ''}${data ? ` (con ${data})` : ''}`;
+  }
+  return '';
+}
+
+/** Respuestas de un alumno en una evaluación, intento por intento, con la correcta al lado (12.61). */
+function attemptAnswersModal(quizId, author) {
+  const q = find(quizId);
+  const attempts = records('attempt').filter((a) => a.data.quiz === quizId && a.author === author).sort((a, b) => (a.data.attempt || 1) - (b.data.attempt || 1));
+  const name = attempts[0]?.data.name || 'Alumno';
+  const body = attempts
+    .map((a, i) => {
+      const details = a.data.details || [];
+      const list = details.length
+        ? `<ol class="answer-review">${details
+            .map((d) => {
+              const question = q.data.questions[d.index];
+              const mark = creditMark(d);
+              const text = String(question?.text || '').replace(/\{([A-Za-z_]\w*)\}/g, (m, v) => d.values?.[v] ?? m).replace(/\[\[[^\]]*\]\]/g, '___');
+              return `<li class="${mark.cls}"><p class="answer-q"><span class="quiz-mark ${mark.cls}">${mark.icon}</span> ${esc(text)}${mark.note}</p>
+                <p><span class="muted">Respondió:</span> ${esc(answerText(question, d))}</p>
+                <p><span class="muted">Correcta:</span> ${esc(correctAnswerText(question, d))}</p>${d.feedback ? `<p><span class="muted">Tu comentario:</span> ${esc(d.feedback)}</p>` : ''}</li>`;
+            })
+            .join('')}</ol>`
+        : '<p class="muted">Este intento no tiene respuestas registradas (sigue abierto o se cerró sin contestar).</p>';
+      const score = typeof a.data.score === 'number' ? `${a.data.score.toFixed(2)} / 10` : 'sin calificar';
+      return `<details class="answer-attempt"${i === attempts.length - 1 ? ' open' : ''}><summary>Intento ${a.data.attempt || 1} · ${score}${a.data.correct !== undefined ? ` · ${a.data.correct} de ${a.data.total} correctas` : ''} · ${fmt(a.created)}</summary>${list}</details>`;
+    })
+    .join('');
+  modal(`Respuestas de ${name}`, attempts.length ? body : '<p class="muted">No tiene intentos.</p>');
+}
+
 document.addEventListener('click', (e) => {
+  const answers = e.target.closest('[data-attempt-answers]');
+  if (answers) return attemptAnswersModal(answers.dataset.quiz, answers.dataset.attemptAnswers);
   const stats = e.target.closest('[data-quiz-stats]');
   if (stats) return quizStatsModal(stats.dataset.quizStats);
   const exp = e.target.closest('[data-quiz-export]');

@@ -1,4 +1,4 @@
-# Enlace · versión 12.49
+# Enlace · versión 12.61
 
 Plataforma académica independiente para docentes y alumnos de cualquier academia (nació en la Academia de Física de la BUAP), con interfaz inspirada en Brightspace.
 No es el código de D2L Brightspace ni una plataforma oficial de la BUAP.
@@ -12,6 +12,74 @@ La capa `src/public/coleccion.css` unifica la interfaz con encabezado azul marin
 Incluye ajustes para teléfono y tableta, foco visible, controles táctiles y animaciones de opacidad que se desactivan con «reducir movimiento». No requiere migraciones ni dependencias nuevas. Compila con `npm run build` y revisa en local con `npm run dev`.
 
 El alcance, las pruebas y la revisión visual pendiente están en [el informe del rediseño](docs/rediseno-enlace-mobile.md). Esta nota documenta cambios locales; no implica una publicación.
+## Novedades de la versión 12.61 (ver las respuestas de cada alumno)
+
+- En cada evaluación, la tabla «Resultados» tiene la columna **Respuestas** con «Ver respuestas»: muestra, intento por intento, cada pregunta con ✓ / ✗ (o parcial / por revisar), lo que respondió el alumno y la respuesta correcta. En las preguntas numéricas se ve la fórmula con los datos que le tocaron a ese alumno.
+
+## Novedades de la versión 12.60 (resumen al inicio y máximo del examen en línea)
+
+- **Corregido**: la calificación máxima de un rubro ahora también se aplica a lo que se calcula solo (por ejemplo, el examen en línea). Con máximo 8, un 2.5 vale 3.13, un 5.17 vale 6.46 y un 8 o más vale 10. Antes solo afectaba lo escrito a mano y la casilla mostraba el automático convertido hacia abajo (5.17 → 4.13). Ya tienes 8 puesto en Exámenes: al publicar se recalculan solos Exámenes, el promedio del parcial y la final. Para quitarlo, vuelve a poner 10.
+- En la casilla del rubro con máximo se ven los puntos (6.00 de 8) y en grande lo que vale sobre 10 (7.50), que es lo que entra al promedio.
+- **Resumen al inicio del libro**: después del nombre van la asistencia; por cada parcial, Tareas, Laboratorio y Exámenes (los exámenes siempre al final) y el promedio del parcial; los rubros de toda la materia y la calificación final. Debajo de la final se ve el «Promedio actual» (lo calificado hasta ahora); ya no hay columna aparte de «Promedio parcial».
+- Las actividades siguen a la derecha en bloques por rubro (el subtotal de cada rubro ahora está en el resumen). Un bloque contraído queda como una columna angosta.
+
+## Novedades de la versión 12.59
+
+- Al guardar la calificación máxima con «Recalcular» marcado, si el máximo **ya era** ese valor ahora se avisa en lugar de no hacer nada en silencio. Para convertir calificaciones capturadas sobre 10 a puntos sobre 8: guarda 10 sin marcar y luego 8 marcando «Recalcular» (2.5 → 2.5 de 8 = 3.13).
+
+## Novedades de la versión 12.58
+
+- Con calificación máxima distinta de 10, la casilla (columna o subtotal) muestra en grande la **calificación sobre 10** («7.50 /10») debajo de los puntos que capturaste («6 de 8»). Antes solo se veían los puntos, que parecían una calificación menor.
+- Recuerda: para que lo que ya estaba capturado se tome como puntos (6 → 6 de 8 = 7.5), marca «Recalcular las calificaciones ya capturadas». Sin marcarla, lo capturado conserva su valor sobre 10 y en puntos se ve más bajo (6 sobre 10 = 4.8 de 8).
+
+## Novedades de la versión 12.57
+
+- Corregido: «Guardar» en la ventana de «Calificación máxima» (de una columna o de un subtotal) no hacía nada; ahora guarda el máximo y, si marcas la casilla, recalcula las calificaciones ya capturadas.
+
+## Novedades de la versión 12.56 (calificación máxima del subtotal)
+
+- **Requiere migración** (0038, solo agrega `max_score` a `aula_grade_categories`).
+- En el libro, bajo cada **Subtotal** hay un botón «Calificación máxima…». Si el examen fue sobre 9, pones 9 y escribes en el subtotal los puntos tal cual: 6 se guarda como 6.67 sobre 10. El botón dice entonces «sobre 9 · cambiar…» y la casilla muestra «6 de 9 = 6.67».
+- Igual que en las columnas: las calificaciones ya capturadas solo se recalculan si marcas «Recalcular las calificaciones ya capturadas».
+
+## Novedades de la versión 12.55
+
+- En el libro, al bajar por la tabla el encabezado completo (bloques de rubro y nombres de actividades) se queda fijo arriba; ya no se mueve ni deja ver las casillas debajo.
+
+## Novedades de la versión 12.54
+
+- En el libro, el nombre de cada bloque de rubro («Parcial 1 · Tareas») va centrado sobre sus columnas.
+
+## Novedades de la versión 12.53 (desplegar desde GitHub)
+
+Nuevo flujo «Desplegar» (`.github/workflows/desplegar.yml`): al fusionar un pull request en la rama principal, GitHub corre las pruebas, guarda un respaldo comprobado de la base en R2 privado (`enlace-respaldos/antes-de-desplegar-…`), aplica las migraciones y publica. También se lanza a mano: pestaña **Actions → Desplegar → Run workflow**. Si un paso falla, se detiene ahí (sin respaldo no migra; con pruebas en rojo no publica). Puedes seguir usando `npm run configurar` cuando quieras: hacen lo mismo.
+
+**Configuración, una sola vez** (GitHub → Settings → Secrets and variables → Actions → New repository secret):
+
+1. `CLOUDFLARE_API_TOKEN`: si ya lo tienes por el respaldo semanal, en Cloudflare (My Profile → API Tokens → editar) agrégale **Workers Scripts: Edit**; debe tener también **D1: Edit** y **Workers R2 Storage: Edit**. Si no lo tienes: Create Token → plantilla «Edit Cloudflare Workers» y agrega D1 y R2.
+2. `CLOUDFLARE_ACCOUNT_ID` y `D1_DATABASE_ID`: los mismos del respaldo semanal (si ya existen, no los toques).
+3. `AULA_OWNER_EMAIL`: tu correo de la cuenta principal.
+4. El bucket privado `enlace-respaldos` debe existir (lo creaste para el respaldo semanal; si no: `npx wrangler r2 bucket create enlace-respaldos`).
+
+**Qué no se pierde**: los secretos (Google, Microsoft, correo de avisos, `SESSION_SECRET`, `ENLACE_URL`) viven en Cloudflare y publicar no los toca; la base solo cambia por migraciones no destructivas, con respaldo antes. **Cuidado**: los valores de `[vars]` y el horario del resumen salen del `wrangler.toml` del repositorio. Si alguna vez cambias uno (por ejemplo `FOTO_OBLIGATORIA` o `MICROSOFT_TENANT_ID`) desde el panel de Cloudflare o solo en tu computadora, la siguiente publicación lo regresa a lo que diga el repositorio: cámbialos en el repositorio.
+
+## Novedades de la versión 12.52 (recalcular solo si tú lo decides)
+
+- Al cambiar la calificación máxima de una columna, las calificaciones ya capturadas **no cambian** salvo que marques «Recalcular las calificaciones ya capturadas» en la misma ventana. Con la casilla marcada se comporta como en 12.51 (un 6 pasa a 6 de 9 = 6.67).
+
+## Novedades de la versión 12.51 (calificación máxima por columna)
+
+- **Requiere migración** (0037, solo agrega la columna `max_score` a `aula_tasks`; `npm run configurar` la aplica con respaldo previo).
+- En el libro, el menú ⌄ de cada actividad tiene «Calificación máxima…». Si un examen fue sobre 9, pones 9 y capturas los puntos tal cual: 6 de 9 se guarda como 6.67 sobre 10, igual que en Brightspace. El encabezado dice «sobre 9».
+- Las calificaciones ya capturadas conservan sus puntos y se recalculan: un 6 que ya estaba pasa a 6 de 9 = 6.67. Si después cambias el máximo a 12, queda 6 de 12 = 5. Cada cambio queda en el historial de calificaciones («calificación máxima»).
+- El promedio, los rubros, los colores y lo que ve el alumno usan el valor sobre 10.
+
+## Novedades de la versión 12.50 (bloques por rubro en el libro)
+
+- En el libro de calificaciones, las actividades se agrupan por rubro, como en Brightspace (T1, T2…): por ejemplo «Parcial 1 · Tareas» y «Parcial 1 · Laboratorio» tienen cada uno su bloque, con sus actividades juntas y una columna **Subtotal** al final del bloque (es la misma casilla de rubro de antes: puedes capturarla a mano).
+- Con el botón ⊟ / ⊞ del encabezado se contrae un bloque para ver solo su subtotal; se recuerda por curso en tu navegador.
+- Las actividades sin rubro quedan en un bloque «Sin rubro» al final.
+- «Actividad no encontrada o repetida» ya no aparece: si una actividad se eliminó con la pantalla abierta, se ignora al guardar, y si algo está repetido, el mensaje dice cuál (actividad, evaluación o foro).
 
 ## Novedades de la versión 12.49 (fecha en el libro)
 

@@ -58,6 +58,16 @@ result = run('computeGrade({ tasks, grades, settings, attendancePercent: 90, fin
 check(close(result.categories[1].value, 5), 'Final: la tarea vencida sin calificar vale 0; la oculta no cuenta');
 check(close(result.value, 6.6), 'Final: 7×0.6 + 5×0.3 + 9×0.1 = 6.6');
 check(close(run("computeGrade({ tasks, grades, settings: { ...settings, final: { ...settings.final, missingAsZero: false } }, attendancePercent: 90, final: true }).value"), 8.1));
+// 12.60: la calificación máxima del rubro escala su cálculo automático (como el examen en línea): 2.5 de 8 = 3.125,
+// con tope 10; la captura manual ya está sobre 10 y no se vuelve a escalar; la asistencia no se toca.
+run(`var curveSettings = (max) => ({ scheme: 'categories', final: settings.final, categories: [{ id: 'X', name: 'Exámenes', weight: 100, source: 'tasks', maxScore: max }] });
+  var curveQuiz = [{ id: 'q', data: { grade: { category: 'X', points: 10 } } }];`);
+result = run("computeGrade({ tasks: [], grades: new Map(), settings: curveSettings(8), quizzes: curveQuiz, quizGrades: new Map([['q', 2.5]]) })");
+check(close(result.value, 3.125) && close(result.categories[0].automaticValue, 3.125) && close(result.categories[0].rawAutomatic, 2.5), 'Máximo 8: el examen en línea con 2.5 vale 3.125 (12.60)');
+check(close(run("computeGrade({ tasks: [], grades: new Map(), settings: curveSettings(8), quizzes: curveQuiz, quizGrades: new Map([['q', 9]]) }).value"), 10), 'Con el máximo, el rubro no pasa de 10');
+check(close(run("computeGrade({ tasks: [], grades: new Map(), settings: curveSettings(10), quizzes: curveQuiz, quizGrades: new Map([['q', 2.5]]) }).value"), 2.5), 'Con máximo 10 no cambia nada');
+check(close(run("computeGrade({ tasks: [], grades: new Map(), settings: curveSettings(8), quizzes: curveQuiz, quizGrades: new Map([['q', 2.5]]), categoryGrades: new Map([['X', 6.25]]) }).value"), 6.25), 'La captura manual (ya sobre 10) no se vuelve a escalar');
+check(close(run("computeGrade({ tasks, grades, settings: { ...settings, categories: settings.categories.map((c) => ({ ...c, maxScore: 8 })) }, attendancePercent: 90 }).categories[2].value"), 9), 'La asistencia no usa la calificación máxima');
 // Pesos por actividad (como antes de la fase 2B): simple, o ponderado si todas tienen peso.
 run(`var plain = [T('a'), T('b'), T('c')]; var g2 = new Map([['a', 10], ['b', 6], ['c', null]]); var tasksMode = { ...settings, scheme: 'tasks' };`);
 check(close(run('computeGrade({ tasks: plain, grades: g2, settings: tasksMode }).value'), 8), 'Promedio simple de lo calificado');
@@ -134,6 +144,11 @@ run("current.records.push({ id: 'cg', kind: 'category-grade', revision: 1, data:
 categoryCell = run("categoryGradeCellHtml({ id: 'E', name: 'Exámenes', weight: 50, source: 'tasks', automaticValue: 4 }, current.members[2], 6.6)");
 check(categoryCell.includes('manual-grade-tag') && categoryCell.includes('value="6.6"') && categoryCell.includes('automático: 4.00'), 'La celda distingue una captura manual y conserva la referencia automática');
 run("current.records.pop()");
+// 12.60: con máximo 8, la casilla muestra los puntos (2.50 de 8) y en grande lo que vale sobre 10 (3.13).
+run("current.records.find((r) => r.kind === 'grading').data.categories[0].maxScore = 8");
+categoryCell = run("categoryGradeCellHtml({ id: 'E', name: 'Exámenes', weight: 50, source: 'tasks', automaticValue: 3.125, rawAutomatic: 2.5 }, current.members[2], 3.125)");
+check(categoryCell.includes('placeholder="2.50"') && categoryCell.includes('class="gb-scaled"') && categoryCell.includes('3.13 <small>/10</small>') && categoryCell.includes('Automático: 2.50 de 8') && categoryCell.includes('max="8"'), 'Con calificación máxima, el automático se ve en puntos y su valor sobre 10 en grande (12.60)');
+run("delete current.records.find((r) => r.kind === 'grading').data.categories[0].maxScore");
 run(`section = 'grades'; gradeTab = 'entry'; renderGrades();`);
 page = run("$('#main').innerHTML");
 check(run(`(() => {
@@ -143,9 +158,11 @@ check(run(`(() => {
   return hue(10) > hue(7) && hue(7) > hue(5) && hue(5) > hue(0) && hue(0) < 10 && missing.includes('missing') && later === '';
 })()`), 'Casillas del libro: verde en 10 que baja hacia rojo; rojo si no se entregó y venció');
 check(run(`(() => { const n = gradebookStudents().map((m) => m.name); return n.length > 1 && n.join('|') === [...n].sort((a, b) => a.localeCompare(b, 'es', { sensitivity: 'base' })).join('|'); })()`), 'Libro de calificaciones en orden alfabético');
-check(page.includes('<th class="final-col">Calificación final<div class="muted">Promedio ponderado de los rubros</div></th>') && page.includes('Exámenes<div class="muted">50 %</div>'), 'Columnas de final y de categorías');
+check(page.includes('<th class="final-col" rowspan="2">Calificación final<div class="muted">Promedio ponderado de los rubros</div></th>') && /data-gb-toggle="[^"]+"[^>]*>⊟ Exámenes<\/button><span class="muted"> · 50 %/.test(page) && page.includes('Exámenes<div class="muted">50 %</div><button type="button" class="table-link" data-cg-max="E"'), 'Columna final, rubros en el resumen con su calificación máxima y bloques de actividades (12.60)');
 check((page.match(/class="category-grade-input"/g) || []).length === 6, 'El libro completo muestra una casilla directa por alumno en cada rubro editable');
-check(page.includes('<small class="gb-task-placement">Exámenes</small>Examen') && page.includes('<small class="gb-task-placement">Prácticas</small>Práctica'), 'Cada actividad muestra arriba el rubro o parcial al que pertenece');
+{ const head = page.slice(page.indexOf('<thead>'), page.indexOf('</thead>')), row2 = head.slice(head.indexOf('</tr><tr>')), at = (x) => head.indexOf(x);
+  check(at('>Asistencia<') > 0 && at('>Asistencia<') < at('>Rubros<') && at('>Rubros<') < at('Calificación final') && at('Calificación final') < at('⊟ Prácticas') && at('⊟ Prácticas') < at('⊟ Exámenes'), 'Resumen al inicio (asistencia, rubros, final) y después los bloques de actividades (12.60)');
+  check(row2.indexOf('Prácticas<div class="muted">50 %') < row2.indexOf('Exámenes<div class="muted">50 %') && row2.indexOf('Exámenes<div class="muted">50 %') < row2.indexOf('>Práctica<') && row2.indexOf('>Práctica<') < row2.indexOf('>Examen<') && !head.includes('Subtotal'), 'Los exámenes van al final del resumen y de los bloques; cada actividad en el bloque de su rubro'); }
 check(/final-grade grade-low">2<\/td>/.test(page), 'Sofía: Exámenes 4×50 % y Prácticas vacío → la final queda en 2');
 check(page.includes('Promedio parcial por categorías'));
 run("download = (name, text) => downloads.push(text); exportGrades();");

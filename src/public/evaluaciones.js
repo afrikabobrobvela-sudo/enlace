@@ -720,14 +720,14 @@ function renderQuiz() {
         : ''
     }
       <section class="exam-monitor" id="examMonitor"><p class="muted">Cargando quién está contestando y quién ya terminó…</p></section>${drawNote}${questions}
-      <h2>Resultados</h2><div class="table-wrap"><table><thead><tr><th>Alumno</th><th>Mejor calificación</th><th>Intentos</th><th>Último envío</th>${exam ? '<th>Integridad</th>' : ''}</tr></thead><tbody>${
+      <h2>Resultados</h2><div class="table-wrap"><table><thead><tr><th>Alumno</th><th>Mejor calificación</th><th>Intentos</th><th>Último envío</th>${exam ? '<th>Integridad</th>' : ''}<th>Respuestas</th></tr></thead><tbody>${
         rows
           .map(
             (r) => `<tr><td>${esc(r.name)}${courseSections().length ? `<div class="table-subtext">${esc(sectionName(memberOfAuthor(r.author)?.section) || 'Sin sección')}</div>` : ''}</td><td>${r.best.toFixed(2)} / 10${r.pending ? `<div class="table-subtext">${r.pending} por calificar</div>` : ''}</td><td>${r.count} de ${settings.attempts}</td><td>${fmt(r.last)}</td>${
               exam ? `<td>${integrityCell(r.integrity)}${r.integrity.length ? ` <button type="button" class="table-link" data-integrity="${esc(r.author)}">Detalle</button>` : ''}</td>` : ''
-            }</tr>`,
+            }<td><button type="button" class="table-link" data-attempt-answers="${esc(r.author)}" data-quiz="${esc(q.id)}">Ver respuestas</button></td></tr>`,
           )
-          .join('') || `<tr><td colspan="${exam ? 5 : 4}">No hay intentos registrados.</td></tr>`
+          .join('') || `<tr><td colspan="${exam ? 6 : 5}">No hay intentos registrados.</td></tr>`
       }</tbody></table></div>`;
     {
       // 12.31: el seguimiento (quién contesta, quién terminó y con qué calificación) va en toda evaluación.

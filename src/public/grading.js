@@ -61,9 +61,15 @@ function computeGrade({ tasks, grades, settings, weights, attendancePercent = nu
         const points = items.reduce((n, item) => n + weightOf(item), 0);
         automaticValue = points ? items.reduce((n, item) => n + item.grade * weightOf(item), 0) / points : null;
       }
+      // Calificación máxima del rubro (12.60): el cálculo automático (evaluaciones en línea y actividades) se toma
+      // sobre ese máximo, como en Brightspace: con máximo 8, un 2.5 vale 2.5 × 10 / 8 = 3.13 (tope 10). La captura
+      // manual ya se guarda convertida a 10 (12.56), así que no se vuelve a escalar.
+      const rawAutomatic = automaticValue;
+      const max = Number(category.maxScore) > 0 ? Number(category.maxScore) : 10;
+      if (category.source !== 'attendance' && automaticValue !== null && max !== 10) automaticValue = Math.min(10, (automaticValue * 10) / max);
       // Una captura directa del docente sustituye todo el cálculo automático de este rubro para el alumno.
       const value = categoryGrades.has(category.id) ? Number(categoryGrades.get(category.id)) : automaticValue;
-      return { id: category.id, name: category.name, weight: category.weight, source: category.source, term: category.term || '', value, automaticValue };
+      return { id: category.id, name: category.name, weight: category.weight, source: category.source, term: category.term || '', value, automaticValue, rawAutomatic };
     });
     // Dentro de un parcial, un rubro vacío conserva su peso y aporta 0: no se redistribuye su porcentaje.
     // En el nivel superior, el promedio parcial excluye los parciales completamente vacíos; la calificación
@@ -139,6 +145,20 @@ function taskGradebookHtml(data) {
 function categoryLabel(category, settings = gradingSettings()) {
   const term = category.term && (settings.terms || []).find((t) => t.id === category.term);
   return term ? `${term.name} · ${category.name}` : category.name;
+}
+
+/**
+ * Orden de los rubros en el libro (12.60): por parcial (los de toda la materia al final) y, dentro de cada uno, la
+ * asistencia primero y los exámenes al último, junto al promedio del parcial; los demás, en el orden en que se crearon.
+ */
+function gradebookCategoryOrder(categories, terms = []) {
+  const termIndex = new Map(terms.map((t, i) => [t.id, i]));
+  const group = (c) => (termIndex.has(c.term) ? termIndex.get(c.term) : terms.length);
+  const rank = (c) => (c.source === 'attendance' ? 0 : /ex[aá]men/i.test(c.name) ? 2 : 1);
+  return categories
+    .map((c, i) => ({ c, i }))
+    .sort((a, b) => group(a.c) - group(b.c) || rank(a.c) - rank(b.c) || a.i - b.i)
+    .map((x) => x.c);
 }
 
 /**
@@ -808,33 +828,59 @@ function gradeHeatAttr(task, member, submission) {
   return ' style="--gb-heat: hsl(2 72% 84%)" data-heat="missing" title="Sin entregar (venció)"';
 }
 
+/** Mensaje al guardar una calificación máxima (12.59): avisa si no se recalculó porque el máximo ya era ese. */
+function maxSavedMessage(r) {
+  if (r.same) throw new Error(`El máximo ya era ${r.max}, así que no hay nada que recalcular. Si las calificaciones capturadas están sobre 10 y quieres tomarlas como puntos sobre ${r.max}, guarda primero 10 sin marcar la casilla y luego ${r.max} marcándola.`);
+  return r.changed ? `Calificación máxima guardada; se recalcularon ${r.changed} calificaciones.` : 'Calificación máxima guardada.';
+}
+
+/** Calificación máxima de la captura de un rubro (12.56): se escribe «6 de 9» y se guarda sobre 10. */
+const categoryMax = (id) => {
+  const max = Number(gradingSettings().categories.find((c) => c.id === id)?.maxScore);
+  return max > 0 ? max : 10;
+};
+const categoryPoints = (id, grade) => (grade === null || grade === undefined || grade === '' ? '' : Math.round(Number(grade) * categoryMax(id) / 10 * 100) / 100);
+
 function categoryGradeCellHtml(category, member, value) {
   if (category.source !== 'tasks' || !teaches()) return `<td class="category-col ${gradeToneClass(value)}">${formatGrade(value)}</td>`;
   const manual = categoryGradeOf(member.id, category.id);
   const automatic = category.automaticValue ?? (manual ? null : value);
   const automaticText = formatGrade(automatic);
-  return `<td class="category-col category-grade-cell ${manual ? 'is-manual' : ''} ${gradeToneClass(value)}">
-    <input class="category-grade-input" type="number" min="0" max="10" step="0.01" inputmode="decimal"
-      value="${esc(manual?.data.grade ?? '')}" placeholder="${esc(automaticText)}" data-category-grade
+  const max = categoryMax(category.id);
+  const input = (valueText, placeholder) => `<input class="category-grade-input" type="number" min="0" max="${max}" step="0.01" inputmode="decimal"
+      value="${esc(valueText)}" placeholder="${esc(placeholder)}" data-category-grade
       data-cg-category="${esc(category.id)}" data-cg-member="${esc(member.id)}"
-      aria-label="Calificación manual de ${esc(categoryLabel(category))} para ${esc(member.name)}" title="Escribe una calificación manual; deja vacío para usar el cálculo automático">
+      aria-label="Calificación manual de ${esc(categoryLabel(category))} para ${esc(member.name)}" title="Escribe una calificación manual; deja vacío para usar el cálculo automático">`;
+  if (max === 10)
+    return `<td class="category-col category-grade-cell ${manual ? 'is-manual' : ''} ${gradeToneClass(value)}">
+    ${input(manual?.data.grade ?? '', automaticText)}
     <small class="${manual ? 'manual-grade-tag' : 'category-grade-hint'}">${manual ? `Manual${automatic === null ? '' : ` · automático: ${automaticText}`}` : `Automático: ${automaticText}`}</small></td>`;
+  // Con calificación máxima (12.60): la casilla y el automático están en puntos sobre el máximo (lo que sacó el
+  // alumno) y debajo, en grande, lo que vale sobre 10 y lo que entra al promedio.
+  const rawAuto = category.rawAutomatic !== undefined ? category.rawAutomatic : automatic === null ? null : (automatic * max) / 10;
+  const rawText = rawAuto === null ? '—' : formatGrade(rawAuto);
+  return `<td class="category-col category-grade-cell ${manual ? 'is-manual' : ''} ${gradeToneClass(value)}">
+    ${input(categoryPoints(category.id, manual?.data.grade), rawText)}
+    ${value === null || value === undefined ? '' : `<strong class="gb-scaled" title="${esc(`Sobre 10, con calificación máxima ${max}`)}">${formatGrade(value)} <small>/10</small></strong>`}
+    <small class="${manual ? 'manual-grade-tag' : 'category-grade-hint'}">${manual ? `${categoryPoints(category.id, manual.data.grade)} de ${max} · Manual${rawAuto === null ? '' : ` · automático: ${rawText} de ${max}`}` : `Automático: ${rawAuto === null ? '—' : `${rawText} de ${max}`}`}</small></td>`;
 }
 
 /** Guarda una captura manual de rubro. Eliminar su contenido reactiva el valor automático. */
 async function saveCategoryGradeInput(input) {
   const { cgCategory: category, cgMember: member } = input.dataset;
   const raw = input.value.trim().replace(',', '.');
-  const grade = raw === '' ? null : Number(raw);
+  const max = categoryMax(category);
+  const points = raw === '' ? null : Number(raw);
   input.classList.remove('is-error');
-  if (grade !== null && (!Number.isFinite(grade) || grade < 0 || grade > 10)) {
+  if (points !== null && (!Number.isFinite(points) || points < 0 || points > max)) {
     input.classList.add('is-error');
-    toast('La calificación va de 0 a 10.');
+    toast(`La calificación va de 0 a ${max}.`);
     input.focus();
     return false;
   }
   const saved = categoryGradeOf(member, category);
-  if ((saved?.data.grade ?? null) === grade) return true;
+  if (points === null ? !saved : points === categoryPoints(category, saved?.data.grade)) return true;
+  const grade = points === null ? null : Math.round(points * 10 / max * 10000) / 10000;
   const key = `${category}:${member}`;
   if (categoryGradeSaving.has(key)) return categoryGradeSaving.get(key);
   input.classList.add('is-saving');
@@ -881,15 +927,20 @@ function needsReview(s) {
   return grade === null || grade === undefined || grade === '' || Boolean(s.data.gradedAt && s.data.submitted && s.data.submitted > s.data.gradedAt);
 }
 
+/** Calificación máxima de la columna (12.51): se captura «6 de 9» y se guarda sobre 10 (6.67). */
+const taskMax = (t) => Number(t?.data?.maxScore) > 0 ? Number(t.data.maxScore) : 10;
+const toPoints = (t, grade) => grade === null || grade === undefined || grade === '' ? '' : Math.round(Number(grade) * taskMax(t) / 10 * 100) / 100;
+
 function gradebookCellHtml(t, m, s) {
   const sent = hasSubmission(s);
   const pending = needsReview(s);
   const title = sent ? `${pending ? 'Sin revisar: ' : ''}ver la entrega de ${m.name}${s.data.late ? ' (tardía)' : ''}` : `Calificar a ${m.name} con comentarios o rúbrica`;
-  return `<div class="gb-cell-row${pending ? ' needs-review' : ''}"><input class="gb-input" type="number" min="0" max="10" step="0.01" inputmode="decimal" value="${esc(s?.data.grade ?? '')}" placeholder="—"
+  return `<div class="gb-cell-row${pending ? ' needs-review' : ''}"><input class="gb-input" type="number" min="0" max="${taskMax(t)}" step="0.01" inputmode="decimal" value="${esc(toPoints(t, s?.data.grade))}" placeholder="—"
+      title="${taskMax(t) !== 10 && s?.data.grade != null ? `${toPoints(t, s.data.grade)} de ${taskMax(t)} = ${Number(s.data.grade).toFixed(2)} sobre 10` : ''}"
       data-gb-task="${esc(t.id)}" data-gb-member="${esc(m.id)}" aria-label="Calificación de ${esc(m.name)} en ${esc(t.data.title)}">
     <button type="button" class="gb-open ${sent ? 'has-file' : ''} ${pending ? 'needs-review' : ''}" data-action="review" data-id="${esc(t.id)}" data-member="${esc(m.id)}" title="${esc(title)}" aria-label="${esc(title)}">${sent ? DOC_ICON : '›'}</button></div>${
     pending ? '<span class="review-tag">sin revisar</span>' : ''
-  }${s && s.data.published === false ? '<span class="draft-tag">borrador</span>' : ''}${sent && s.data.late ? '<span class="late-tag">tardía</span>' : ''}`;
+  }${taskMax(t) !== 10 && s?.data.grade != null ? `<strong class="gb-scaled" title="${esc(`${toPoints(t, s.data.grade)} de ${taskMax(t)}`)}">${Number(s.data.grade).toFixed(2)} <small>/10</small></strong>` : ''}${s && s.data.published === false ? '<span class="draft-tag">borrador</span>' : ''}${sent && s.data.late ? '<span class="late-tag">tardía</span>' : ''}`;
 }
 
 /** Menú ⌄ de cada columna (como en Brightspace). `prev`/`next`: columnas visibles a los lados, para moverla. */
@@ -899,12 +950,43 @@ function gradebookColumnMenu(t, prev = null, next = null) {
     <button type="button" data-action="edit-task" data-id="${esc(t.id)}">Editar actividad</button>
     <button type="button" data-gb-enter="${esc(t.id)}">Ingresar calificaciones</button>
     <button type="button" data-gb-bulk="${esc(t.id)}">Calificar en bloque</button>
+    <button type="button" data-gb-max="${esc(t.id)}">Calificación máxima (${taskMax(t)})…</button>
     <button type="button" data-gb-stats="${esc(t.id)}">Ver las estadísticas</button>
     <button type="button" data-gb-move="${esc(t.id)}" data-gb-target="${esc(prev?.id || '')}" ${prev ? '' : 'disabled'}>← Mover a la izquierda</button>
     <button type="button" data-gb-move="${esc(t.id)}" data-gb-target="${esc(next?.id || '')}" data-gb-after="1" ${next ? '' : 'disabled'}>Mover a la derecha →</button>
     <button type="button" class="gb-danger" data-action="trash" data-kind="task" data-id="${esc(t.id)}">Eliminar actividad</button>
   </div></details>`;
 }
+
+document.addEventListener('click', async (e) => {
+  const button = e.target.closest?.('[data-cg-max]');
+  if (!button) return;
+  const c = gradingSettings().categories.find((x) => x.id === button.dataset.cgMax);
+  if (!c) return;
+  modal(`Calificación máxima · ${categoryLabel(c, gradingSettings())}`, `<p class="muted">El promedio que se calcula solo (por ejemplo, el examen en línea) y lo que escribas en la casilla se toman sobre este valor y se convierten a 10, como en Brightspace: 2.5 de 8 = 3.13. Para quitarlo, vuelve a poner 10.</p>
+    <label>Calificación máxima<input name="max" type="number" min="0.01" max="1000" step="0.01" required value="${categoryMax(c.id)}"></label>
+    <label class="check-label"><input type="checkbox" name="rescale"> Recalcular también lo que escribiste a mano en la casilla (se toma como puntos sobre el nuevo máximo: 2.5 de 8 = 3.13)</label>
+    <p class="muted">Sin marcarla, lo escrito a mano conserva su valor sobre 10. Lo que se calcula solo siempre usa el máximo.</p>
+    `, async (f) => {
+    const r = await request('/api/grades/category/max', { course: current.course.id, category: c.id, max: Number(f.get('max')), rescale: f.get('rescale') === 'on' });
+    return maxSavedMessage(r);
+  });
+});
+
+document.addEventListener('click', async (e) => {
+  const button = e.target.closest?.('[data-gb-max]');
+  if (!button) return;
+  const t = records('task').find((x) => x.id === button.dataset.gbMax);
+  if (!t) return;
+  modal(`Calificación máxima · ${t.data.title}`, `    <p class="muted">Captura sobre este valor y Enlace lo convierte a 10, como en Brightspace: 6 de 9 = 6.67.</p>
+    <label>Calificación máxima<input name="max" type="number" min="0.01" max="1000" step="0.01" required value="${taskMax(t)}"></label>
+    <label class="check-label"><input type="checkbox" name="rescale"> Recalcular las calificaciones ya capturadas (se toman como puntos sobre el nuevo máximo: 2.5 de 8 = 3.13)</label>
+    <p class="muted">Sin marcarla, las calificaciones ya capturadas no cambian.</p>
+    `, async (f) => {
+    const r = await request('/api/task/max', { course: current.course.id, id: t.id, max: Number(f.get('max')), rescale: f.get('rescale') === 'on' });
+    return maxSavedMessage(r);
+  });
+});
 
 /** Mueve la columna `id` antes (o después) de la columna `target` y guarda el orden para todos los docentes del curso. */
 async function moveGradebookColumn(id, target, after = false) {
@@ -979,13 +1061,17 @@ document.addEventListener('dragend', () => {
 async function saveGradebookCell(input) {
   const { gbTask: task, gbMember: member } = input.dataset;
   const raw = input.value.trim().replace(',', '.');
-  const grade = raw === '' ? null : Number(raw);
+  const t = records('task').find((x) => x.id === task), max = taskMax(t);
+  const points = raw === '' ? null : Number(raw);
   input.classList.remove('is-error');
-  if (grade !== null && (!Number.isFinite(grade) || grade < 0 || grade > 10)) {
+  if (points !== null && (!Number.isFinite(points) || points < 0 || points > max)) {
     input.classList.add('is-error');
-    toast('La calificación va de 0 a 10.');
+    toast(`La calificación va de 0 a ${max}.`);
     return false;
   }
+  // Se guarda sobre 10 (6 de 9 = 6.6667); si la casilla no cambió, no se vuelve a guardar.
+  if (points !== null && points === toPoints(t, gradeOf(member, task)?.data.grade)) return true;
+  const grade = points === null ? null : Math.round(points * 10 / max * 10000) / 10000;
   const s = gradeOf(member, task);
   if ((s?.data.grade ?? null) === grade) return true;
   const key = `${task}:${member}`;

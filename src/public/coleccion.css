@@ -1567,3 +1567,37 @@ body.signed-out .header-tools > :not(#themeToggle) { display: none; }
 @media (max-width: 720px) {
   .theme-toggle { width: 42px; height: 42px; }
 }
+/* 12.50: bloques por rubro en el libro (como T1, T2 de Brightspace). */
+.gradebook th.gb-group { text-align: center; white-space: nowrap; border-left: 2px solid var(--line, #c9d3dc); background: var(--tomo-papel, #f4f6f8); }
+.gradebook .gb-group-toggle { font: inherit; font-weight: 700; background: none; border: 0; padding: 4px 6px; min-height: 24px; cursor: pointer; color: inherit; }
+.gradebook .gb-subtotal { border-right: 2px solid var(--line, #c9d3dc); }
+
+/* 12.55: con bloques por rubro el encabezado tiene dos filas; la segunda se fija debajo de la primera
+   (--gb-row1 lo mide syncGradebookHead()) y todo el encabezado queda por encima de las casillas al bajar. */
+.gradebook thead th { position: sticky; top: 0; z-index: 3; }
+.gradebook thead tr + tr th { top: calc(var(--gb-row1, 0px) - 3px); }
+.gradebook thead th.sticky-name { z-index: 5; }
+/* La tinta del curso puede ser translúcida: sobre fondo blanco, para que no se vean las casillas al bajar. */
+.gradebook thead th.gb-group { background: linear-gradient(var(--tomo-papel, #f4f6f8), var(--tomo-papel, #f4f6f8)), #fff !important; }
+
+/* 12.58: con calificación máxima distinta de 10 la casilla muestra, bajo los puntos capturados, la calificación sobre 10. */
+.gradebook .gb-scaled { display: block; margin-top: 4px; font-size: 15px; font-weight: 800; color: var(--tinta, #111a2e); }
+.gradebook .gb-scaled small { font-size: 12px; font-weight: 500; color: var(--ink-faint); }
+
+/* 12.60: resumen al inicio del libro (asistencia, rubros y promedio de cada parcial, final) y bloques de actividades. */
+.gradebook thead th.gb-group.gb-sum-group { background: linear-gradient(#e9eef5, #e9eef5), #fff !important; text-align: center; }
+.gradebook th.term-col, .gradebook td.term-col { border-right: 2px solid var(--line, #c9d3dc); }
+.gradebook th.gb-collapsed, .gradebook td.gb-collapsed { min-width: 56px; width: 56px; font-size: 12px; color: var(--ink-faint); text-align: center; }
+.gradebook .gb-running { display: block; margin-top: 4px; font-size: 12px; font-weight: 500; color: var(--ink-faint); white-space: nowrap; }
+.gradebook th.gb-sum-cat .table-link { display: block; margin: 4px auto 0; font-size: 12px; font-weight: 600; line-height: 1.3; min-height: 24px; white-space: nowrap; }
+
+/* 12.61: respuestas de un alumno en una evaluación (docente). */
+.answer-attempt { margin: 0 0 12px; border: 1px solid var(--line, #d5dde5); border-radius: 8px; padding: 8px 12px; }
+.answer-attempt > summary { cursor: pointer; font-weight: 700; min-height: 24px; }
+.answer-review { margin: 8px 0 0; padding-left: 22px; }
+.answer-review li { margin: 0 0 10px; padding: 6px 8px; border-left: 4px solid var(--line, #d5dde5); background: #fafbfc; }
+.answer-review li.ok { border-left-color: #2e8b57; }
+.answer-review li.bad { border-left-color: #c0392b; }
+.answer-review li.partial, .answer-review li.pending { border-left-color: #c98a00; }
+.answer-review p { margin: 2px 0; }
+.answer-review .answer-q { font-weight: 600; }

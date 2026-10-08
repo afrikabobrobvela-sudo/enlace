@@ -200,14 +200,16 @@ export const gradingRoutes = {
     const wantsQuizzes = Array.isArray(body.quizzes) && body.quizzes.length;
     const wantsForums = Array.isArray(body.forums) && body.forums.length;
     const [taskRows, quizRows, forumRows] = await Promise.all([
-      all(db, 'SELECT id, forum FROM aula_tasks WHERE course=? AND deleted_at IS NULL', body.course),
+      all(db, 'SELECT id, forum, title FROM aula_tasks WHERE course=? AND deleted_at IS NULL', body.course),
       wantsQuizzes ? all(db, "SELECT id, data FROM aula_records WHERE course=? AND kind='quiz' AND deleted_at IS NULL", body.course) : [],
       wantsForums ? all(db, "SELECT id, data FROM aula_records WHERE course=? AND kind='forum' AND deleted_at IS NULL", body.course) : [],
     ]);
-    const taskIds = new Set(taskRows.map((t) => t.id));
+    const taskTitles = new Map(taskRows.map((t) => [t.id, t.title]));
     const seen = new Set();
-    const assignments = (Array.isArray(body.assignments) ? body.assignments : []).map((item) => {
-      if (!taskIds.has(item?.task) || seen.has(item.task)) fail('Actividad no encontrada o repetida.');
+    // Una actividad eliminada mientras la pantalla seguía abierta (por ejemplo, desde otro grupo) se ignora.
+    const sent = (Array.isArray(body.assignments) ? body.assignments : []).filter((item) => taskTitles.has(item?.task));
+    const assignments = sent.map((item) => {
+      if (seen.has(item.task)) fail(`La actividad «${taskTitles.get(item.task)}» está repetida.`);
       seen.add(item.task);
       const category = categoryOf(item, 'actividades');
       return { task: item.task, category: category?.id ?? null, points: pointsOf(item.points, 1) };
@@ -217,7 +219,8 @@ export const gradingRoutes = {
     const quizChanges = [];
     for (const item of wantsQuizzes ? body.quizzes : []) {
       const data = quizzes.get(item?.quiz);
-      if (!data || seen.has(item.quiz)) fail('Evaluación no encontrada o repetida.');
+      if (!data) continue;
+      if (seen.has(item.quiz)) fail(`La evaluación «${data.title}» está repetida.`);
       seen.add(item.quiz);
       const category = categoryOf(item, 'evaluaciones');
       const grade = category
@@ -233,7 +236,8 @@ export const gradingRoutes = {
     const newTasks = [];
     for (const item of wantsForums ? body.forums : []) {
       const data = forums.get(item?.forum);
-      if (!data || seen.has(item.forum)) fail('Foro no encontrado o repetido.');
+      if (!data) continue;
+      if (seen.has(item.forum)) fail(`El foro «${data.title}» está repetido.`);
       seen.add(item.forum);
       const category = categoryOf(item, 'foros');
       if (!category || graded.has(item.forum)) continue;
@@ -517,6 +521,34 @@ export const gradingRoutes = {
 
   // Captura directa de un rubro por alumno. Una calificación manual sustituye el cálculo del rubro;
   // `grade: null` la borra y devuelve el rubro a su cálculo automático.
+  // Calificación máxima de la captura directa de un rubro (12.56), como la de una columna (12.51): se guarda sobre 10 y,
+  // solo si el docente lo pide (`rescale`), las ya capturadas conservan sus puntos y se recalculan.
+  'POST /api/grades/category/max': async ({ db, user, request }) => {
+    const body = await readJson(request);
+    requireTeacher(await access(db, user, body.course));
+    const category = await one(db, 'SELECT id, source, max_score FROM aula_grade_categories WHERE id=? AND course=?', body.category, body.course);
+    if (!category) fail('Rubro no encontrado.', 404);
+    if (category.source !== 'tasks') fail('Este rubro se calcula desde asistencia y no admite captura manual.');
+    const max = Number(body.max);
+    if (!(max > 0 && max <= 1000)) fail('La calificación máxima debe ser mayor que 0 y hasta 1000.');
+    const old = category.max_score ?? 10;
+    const update = db.prepare('UPDATE aula_grade_categories SET max_score=? WHERE id=? AND course=?').bind(max, category.id, body.course);
+    if (body.rescale !== true || old === max) {
+      await update.run();
+      return json({ ok: true, max, changed: 0, same: body.rescale === true && old === max, old });
+    }
+    const results = await db.batch([
+      update,
+      db
+        .prepare(
+          `UPDATE aula_records SET data=json_set(data,'$.grade',min(10, round(json_extract(data,'$.grade') * ?1 / ?2, 4))), revision=revision+1, updated=?3
+           WHERE course=?4 AND kind='category-grade' AND json_extract(data,'$.category')=?5 AND json_extract(data,'$.grade') IS NOT NULL`,
+        )
+        .bind(old, max, nowIso(), body.course, category.id),
+    ]);
+    return json({ ok: true, max, changed: results[1].meta?.changes ?? 0 });
+  },
+
   'POST /api/grades/category': async ({ db, user, request }) => {
     const body = await readJson(request);
     requireTeacher(await access(db, user, body.course));

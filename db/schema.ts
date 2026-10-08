@@ -316,6 +316,8 @@ export const tasks = sqliteTable(
     // Migración 0005.
     category: text('category').references(() => gradeCategories.id, { onDelete: 'set null' }),
     points: real('points').notNull().default(1), // valor dentro de su categoría
+    // Migración 0037 (12.51): sobre cuánto se captura la calificación en el libro (se guarda sobre 10).
+    maxScore: real('max_score').notNull().default(10),
     rubric: text('rubric').references(() => rubrics.id, { onDelete: 'set null' }),
     groupCategory: text('group_category').notNull().default(''), // '' = entrega individual
     // Migración 0025: secciones a las que va dirigida (JSON con ids de aula_sections; '' o '[]' = todas).
@@ -398,6 +400,8 @@ export const gradeCategories = sqliteTable(
     // Migración 0031: calificaciones más bajas / más altas que no cuentan (por alumno).
     dropLow: integer('drop_low').notNull().default(0),
     dropHigh: integer('drop_high').notNull().default(0),
+    // Migración 0038 (12.56): sobre cuánto se captura el subtotal del rubro (se guarda sobre 10).
+    maxScore: real('max_score').notNull().default(10),
     updated: text('updated').notNull(),
   },
   (t) => [
