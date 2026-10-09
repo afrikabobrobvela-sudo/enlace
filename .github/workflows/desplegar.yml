@@ -6,9 +6,12 @@
 # Hace lo mismo que `npm run configurar`: solo sustituye los dos marcadores de wrangler.toml (base y correo).
 # Los secretos de la aplicación (Google, Microsoft, correo, SESSION_SECRET) viven en Cloudflare y no se tocan.
 #
-# Configuración (una sola vez, ver LEEME.md → «Desplegar desde GitHub»). Secrets del repositorio:
+# Configuración (una sola vez, ver LEEME.md → «Desplegar desde GitHub»). Secrets del environment «produccion»
+# (12.64: no del repositorio, para que un flujo de otra rama no pueda leerlos; el environment pide la aprobación del
+# responsable y solo acepta la rama principal):
 #   CLOUDFLARE_API_TOKEN (Workers Scripts: Edit, D1: Edit, Workers R2 Storage: Edit),
 #   CLOUDFLARE_ACCOUNT_ID, D1_DATABASE_ID y AULA_OWNER_EMAIL.
+# El token solo está en los pasos que hablan con Cloudflare: la instalación y las pruebas corren sin él.
 # El repositorio es público: el respaldo NUNCA se guarda como artefacto de GitHub, y los valores que salen de
 # secrets (correo, id de la base) GitHub los oculta en el registro.
 name: Desplegar
@@ -26,30 +29,38 @@ jobs:
     runs-on: ubuntu-latest
     # Solo el repositorio del responsable y solo la rama principal (a mano desde otra rama no publica).
     if: ${{ github.repository_owner == 'afrikabobrobvela-sudo' && github.ref == 'refs/heads/claude/plataforma-enlace-project-9ugeud' }}
-    env:
-      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-      D1_DATABASE_ID: ${{ secrets.D1_DATABASE_ID }}
-      OWNER: ${{ secrets.AULA_OWNER_EMAIL }}
+    environment: produccion
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - run: npm install --no-audit --no-fund
+      # Exactamente lo de package-lock.json (npm install podía resolver otras versiones).
+      - run: npm ci --no-audit --no-fund
       - name: Revisar configuración
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          D1_DATABASE_ID: ${{ secrets.D1_DATABASE_ID }}
+          OWNER: ${{ secrets.AULA_OWNER_EMAIL }}
         run: |
           for v in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID D1_DATABASE_ID OWNER; do
-            if [ -z "${!v}" ]; then echo "::error::Falta un secret del repositorio ($v; ver LEEME.md → Desplegar desde GitHub)"; exit 1; fi
+            if [ -z "${!v}" ]; then echo "::error::Falta un secret del environment produccion ($v; ver LEEME.md → Desplegar desde GitHub)"; exit 1; fi
           done
       - name: Pruebas
         run: npm test
       - name: Usar la base y la cuenta de producción
+        env:
+          D1_DATABASE_ID: ${{ secrets.D1_DATABASE_ID }}
+          OWNER: ${{ secrets.AULA_OWNER_EMAIL }}
         run: |
           sed -i "s/PEGA_AQUI_EL_ID_DE_TU_BASE/${D1_DATABASE_ID}/" wrangler.toml
           sed -i "0,/AULA_OWNER_EMAIL = \"tu-correo@gmail.com\"/s//AULA_OWNER_EMAIL = \"${OWNER}\"/" wrangler.toml
           node scripts/revisar-config.mjs
       - name: Respaldo antes de migrar (R2 privado enlace-respaldos)
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           STAMP=$(date -u +%Y-%m-%d-%H%M)
           npx wrangler d1 export DB --remote --output respaldo.sql
@@ -60,6 +71,12 @@ jobs:
         if: always()
         run: rm -f respaldo.sql respaldo.sql.gz
       - name: Migraciones
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: npx wrangler d1 migrations apply DB --remote
       - name: Publicar
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: node scripts/build.mjs && npx wrangler deploy

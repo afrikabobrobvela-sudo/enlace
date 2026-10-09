@@ -132,9 +132,11 @@ export const directoryRoutes = {
     return json({ created: rows.length, existing }, 201);
   },
 
-  // El docente (o la administración) registra su academia y unidad.
+  // El docente registra su academia y unidad una sola vez (12.64): el banco de preguntas comparte por academia, así que
+  // cambiarla después daría acceso al banco de otra academia. La administración puede cambiar la suya cuando quiera.
   'POST /api/profile/classification': async ({ db, user, request }) => {
     if (user.role !== 'teacher' && user.role !== 'admin') fail('Solo el personal docente registra su academia.', 403);
+    if (user.role !== 'admin' && user.academy_id && user.unit_id) fail('Tu academia ya está registrada. Para cambiarla, pídelo a la administración.', 409);
     const body = await readJson(request);
     const { academyId, unitId } = await validClassification(db, body.academy, body.unit);
     await run(db, 'UPDATE aula_users SET academy_id=?, unit_id=? WHERE id=?', academyId, unitId, user.id);

@@ -26,6 +26,7 @@ const RECIPIENTS = `rcpt AS (
 
 /** Cursos activos donde enseña cada destinatario (alias `r`): propios o como co-docente, por índice (12.30). */
 const TEACHES = (r) => `CROSS JOIN aula_courses c ON (c.owner=${r}.uid OR c.id IN (SELECT t.course FROM aula_members t WHERE t.user_id=${r}.uid AND t.role='teacher'))
+         AND EXISTS (SELECT 1 FROM aula_users tu WHERE tu.id=${r}.uid AND tu.role IN ('teacher','admin'))
          AND c.archived_at IS NULL AND NOT EXISTS (SELECT 1 FROM aula_deleted_courses d WHERE d.course=c.id)`;
 
 /** Arma los mensajes del resumen (uno por persona con algo nuevo). */

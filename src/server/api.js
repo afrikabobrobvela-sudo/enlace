@@ -1100,7 +1100,8 @@ const routes = {
        FROM json_each(?2) j WHERE true
        ON CONFLICT(course,email) DO UPDATE SET name=excluded.name,matricula=excluded.matricula,role='student',
          user_id=coalesce(aula_members.user_id,excluded.user_id),
-         section=CASE WHEN excluded.section<>'' THEN excluded.section ELSE aula_members.section END`,
+         section=CASE WHEN excluded.section<>'' THEN excluded.section ELSE aula_members.section END
+       WHERE aula_members.role<>'teacher'`,
       body.course,
       students,
     );

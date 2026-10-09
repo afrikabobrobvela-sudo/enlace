@@ -86,6 +86,9 @@ assert.equal((await googleLogin({ sub: 'g-2', email: 'a@example.test', email_ver
 assert.equal((await googleLogin({ sub: 'g-2', email: 'a@example.test', aud: 'otra-app' })).headers.get('location'), '/?login_error=google');
 assert.equal((await googleLogin({ sub: 'g-2', email: 'a@example.test', nonce: 'repetido' })).headers.get('location'), '/?login_error=google');
 assert.equal((await googleLogin({ sub: 'g-2', email: 'a@example.test' }, { returnTo: '//evil.test/robar' })).headers.get('location'), '/', 'Sin redirección abierta');
+// 12.64: el navegador quita tabuladores y saltos de línea de Location (quedaría //evil.test): se rechazan.
+assert.equal((await googleLogin({ sub: 'g-2', email: 'a@example.test' }, { returnTo: '/\t/evil.test/robar' })).headers.get('location'), '/', 'Sin tabulador');
+assert.equal((await googleLogin({ sub: 'g-2', email: 'a@example.test' }, { returnTo: '/?curso=c1#c=1&s=quiz' })).headers.get('location'), '/?curso=c1#c=1&s=quiz');
 
 const restricted = { ...baseEnv, ALLOWED_EMAIL_DOMAINS: 'alumno.buap.mx, correo.buap.mx' };
 assert.equal((await googleLogin({ sub: 'g-3', email: 'x@gmail.com' }, { env: restricted })).headers.get('location'), '/?login_error=domain');
