@@ -509,6 +509,39 @@ async function examOnlyCourse(db, a, user) {
 
 // ---- Rutas -------------------------------------------------------------------------------------
 
+/**
+ * Equipos (12.63): solo alumnos del curso, todos de una misma sección cuando el curso tiene secciones, y cada alumno en
+ * un solo equipo por categoría. `groups`: [{ title, members }]; `exceptId`: el equipo que se edita. Devuelve la sección.
+ */
+async function checkTeams(db, course, category, sectionInput, groups, exceptId = '') {
+  const section = await validSection(db, course, sectionInput);
+  const ids = groups.flatMap((g) => g.members);
+  const rows = ids.length
+    ? await all(db, "SELECT id, name, section FROM aula_members WHERE course=? AND role='student' AND id IN (SELECT value FROM json_each(?))", course, JSON.stringify(ids))
+    : [];
+  if (rows.length !== new Set(ids).size) fail('Hay integrantes que no son alumnos de este curso.');
+  const hasSections = section || (await one(db, 'SELECT 1 AS x FROM aula_sections WHERE course=? LIMIT 1', course));
+  const outside = hasSections ? rows.filter((m) => (m.section || '') !== section) : [];
+  if (outside.length) {
+    const names = outside.slice(0, 3).map((m) => m.name).join(', ') + (outside.length > 3 ? ` y ${outside.length - 3} más` : '');
+    fail(`No se pueden juntar alumnos de diferentes secciones en un equipo: ${names} ${outside.length === 1 ? 'es' : 'son'} de otra sección.`);
+  }
+  if (ids.length) {
+    const busy = await one(
+      db,
+      `SELECT json_extract(r.data,'$.title') AS title, j.value AS member FROM aula_records r, json_each(r.data,'$.members') j
+       WHERE r.course=? AND r.kind='group' AND r.deleted_at IS NULL AND r.id<>? AND json_extract(r.data,'$.category')=?
+         AND j.value IN (SELECT value FROM json_each(?)) LIMIT 1`,
+      course,
+      exceptId || '',
+      category,
+      JSON.stringify(ids),
+    );
+    if (busy) fail(`${rows.find((m) => m.id === busy.member)?.name || 'Un alumno'} ya está en "${busy.title}" de "${category}". Cada alumno va en un solo equipo por categoría.`, 409);
+  }
+  return section;
+}
+
 const routes = {
   'GET /api/me': async ({ db, env, user }) =>
     json({
@@ -1110,7 +1143,7 @@ const routes = {
     return json({ ok: true });
   },
 
-  // Crea una categoría nueva con todos sus equipos en una sola consulta.
+  // Crea una categoría nueva con todos sus equipos en una sola consulta (12.63: de una sola sección si el curso tiene secciones).
   'POST /api/groups/bulk': async ({ db, user, request }) => {
     const body = await readJson(request);
     requireTeacher(await access(db, user, body.course));
@@ -1129,26 +1162,21 @@ const routes = {
       }
       return { title, members };
     });
+    const section = await checkTeams(db, body.course, category, body.section, groups);
+    // La misma categoría puede repetirse en otra sección (Equipos de laboratorio de 5AV y de 5BV).
     const existing = await one(
       db,
-      "SELECT count(*) AS n FROM aula_records WHERE course=? AND kind='group' AND json_extract(data,'$.category')=?",
+      "SELECT count(*) AS n FROM aula_records WHERE course=? AND kind='group' AND deleted_at IS NULL AND json_extract(data,'$.category')=? AND coalesce(json_extract(data,'$.section'),'')=?",
       body.course,
       category,
+      section,
     );
-    if (existing.n) fail(`Ya existe la categoría "${category}". Usa otro nombre o elimina esa categoría primero.`, 409);
-    if (assigned.size) {
-      const valid = await one(
-        db,
-        "SELECT count(*) AS n FROM aula_members WHERE course=? AND role='student' AND id IN (SELECT value FROM json_each(?))",
-        body.course,
-        JSON.stringify([...assigned]),
-      );
-      if (valid.n !== assigned.size) fail('Hay alumnos que no pertenecen a este curso.');
-    }
+    if (existing.n)
+      fail(`Ya existe la categoría "${category}"${section ? ' en esta sección' : ''}. Usa otro nombre o elimina esa categoría primero.`, 409);
     const now = nowIso();
     const rows = groups.map((g) => ({
       id: crypto.randomUUID(),
-      data: JSON.stringify({ title: g.title, body: '', visible: true, members: g.members, category }),
+      data: JSON.stringify({ title: g.title, body: '', visible: true, members: g.members, category, section }),
     }));
     await run(
       db,
@@ -1313,11 +1341,9 @@ const routes = {
         }
       }
       if (kind === 'group') {
-        data.members = Array.isArray(input.members) ? [...new Set(input.members)] : [];
-        for (const memberId of data.members) {
-          if (!(await one(db, 'SELECT id FROM aula_members WHERE id=? AND course=?', memberId, body.course))) fail('Integrante no válido.');
-        }
+        data.members = Array.isArray(input.members) ? [...new Set(input.members.map(String))] : [];
         data.category = String(input.category || 'Equipos de trabajo').slice(0, 100);
+        data.section = await checkTeams(db, body.course, data.category, input.section, [data], previous?.id);
       }
     } else {
       // kind === 'post': hilo o respuesta (12.23), con las reglas del foro.
@@ -1424,6 +1450,26 @@ const routes = {
     if (!rest.length) fail('Es la única sección de la actividad: elimínala.', 409);
     await run(db, 'UPDATE aula_tasks SET sections=?, revision=revision+1 WHERE id=? AND course=?', JSON.stringify(rest.sort()), task.id, body.course);
     return json({ ok: true, sections: rest });
+  },
+
+  // Calificar individual o por equipo (12.63): cambia la categoría de equipos de la actividad ('' = individual) sin abrir el editor.
+  'POST /api/task/team': async ({ db, user, request }) => {
+    const body = await readJson(request);
+    requireTeacher(await access(db, user, body.course));
+    const task = await loadTask(db, body.id, body.course);
+    if (task.forum) fail('La participación en un foro se califica por alumno.');
+    const category = optionalText(body.groupCategory, 100);
+    if (category) {
+      const found = await one(
+        db,
+        "SELECT 1 AS x FROM aula_records WHERE course=? AND kind='group' AND deleted_at IS NULL AND json_extract(data,'$.category')=? LIMIT 1",
+        body.course,
+        category,
+      );
+      if (!found) fail(`No hay equipos en "${category}". Fórmalos primero en Grupos.`, 404);
+    }
+    await run(db, 'UPDATE aula_tasks SET group_category=?, revision=revision+1, updated=? WHERE id=? AND course=?', category, nowIso(), task.id, body.course);
+    return json({ ok: true, groupCategory: category });
   },
 
   // Calificación máxima de la columna (12.51): las calificaciones se guardan sobre 10. Con `rescale` (12.52, solo si el

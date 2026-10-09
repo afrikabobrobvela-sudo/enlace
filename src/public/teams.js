@@ -31,8 +31,9 @@ function makeTeams(students, { mode, value, order, prefix = 'Equipo', random = M
 }
 
 /** Lista pegada "equipo, correo" (en cualquier orden, separada por tabulador, coma o punto y coma). */
-function parseTeamList(text, students) {
+function parseTeamList(text, students, everyone = students) {
   const byEmail = new Map(students.map((s) => [String(s.email || '').toLowerCase(), s]));
+  const enrolled = new Set(everyone.map((s) => String(s.email || '').toLowerCase()));
   const teams = new Map();
   const errors = [];
   const used = new Set();
@@ -46,7 +47,7 @@ function parseTeamList(text, students) {
       const team = cells.find((c) => !c.includes('@'));
       const student = email && byEmail.get(email);
       if (!team || !email) errors.push(`Fila ${index + 1}: falta el equipo o el correo.`);
-      else if (!student) errors.push(`Fila ${index + 1}: ${email} no está inscrito en el curso.`);
+      else if (!student) errors.push(`Fila ${index + 1}: ${email} ${enrolled.has(email) ? 'es de otra sección' : 'no está inscrito en el curso'}.`);
       else if (used.has(student.id)) errors.push(`Fila ${index + 1}: ${email} aparece dos veces.`);
       else {
         used.add(student.id);
@@ -58,12 +59,20 @@ function parseTeamList(text, students) {
 }
 
 function bulkTeamsModal() {
-  // Con secciones, los equipos se forman con los alumnos de la sección elegida en el filtro.
-  const students = studentsInView();
+  // Con secciones (12.63), los equipos se forman con los alumnos de UNA sección: nunca se mezclan.
+  const secs = courseSections();
+  const all = current.members.filter((m) => m.role === 'student');
+  const options = [...secs.map((x) => [x.id, x.name]), ...(all.some((m) => !m.section) ? [['', 'Sin sección']] : [])];
+  const initial = options.some(([id]) => id === selectedSection()) ? selectedSection() : options[0]?.[0] || '';
+  let students = all;
   let proposal = [];
   modal(
     'Crear equipos en lote',
     field('Nombre de la categoría', 'category', 'Equipos de laboratorio', 'text', 'required maxlength="100"') +
+      (secs.length
+        ? `<label>Sección<select name="teamsSection">${options.map(([id, name]) => `<option value="${esc(id)}" ${id === initial ? 'selected' : ''}>${esc(name)}</option>`).join('')}</select></label>
+           <p class="muted">Los equipos se forman solo con alumnos de esta sección. Repite para cada sección (puedes usar la misma categoría).</p>`
+        : '') +
       `<label>Cómo formarlos<select name="teamsMethod">
          <option value="count">Número de equipos</option>
          <option value="size">Integrantes por equipo</option>
@@ -79,7 +88,7 @@ function bulkTeamsModal() {
        <button type="button" class="secondary" id="teamsShuffle">Revolver</button>`,
     async (f) => {
       if (!proposal.length) throw new Error('No hay equipos para crear. Revisa la cantidad o la lista.');
-      const { created } = await request('/api/groups/bulk', { course: current.course.id, category: f.get('category'), groups: proposal });
+      const { created } = await request('/api/groups/bulk', { course: current.course.id, category: f.get('category'), section: secs.length ? f.get('teamsSection') || '' : '', groups: proposal });
       return `Se ${created === 1 ? 'creó 1 equipo' : `crearon ${created} equipos`} en "${f.get('category')}".`;
     },
     'Crear equipos',
@@ -90,12 +99,13 @@ function bulkTeamsModal() {
   const preview = $('#teamsPreview');
   const nameOf = (id) => esc(students.find((s) => s.id === id)?.name || '');
   const update = () => {
+    if (secs.length) students = all.filter((m) => (m.section || '') === get('teamsSection'));
     const method = get('teamsMethod');
     box.querySelector('.teams-auto').hidden = method === 'list';
     box.querySelector('.teams-list').hidden = method !== 'list';
     $('#teamsShuffle').hidden = method === 'list' || get('teamsOrder') !== 'random';
     let errors = [];
-    if (method === 'list') ({ teams: proposal, errors } = parseTeamList(get('teamsList'), students));
+    if (method === 'list') ({ teams: proposal, errors } = parseTeamList(get('teamsList'), students, all));
     else proposal = makeTeams(students, { mode: method, value: get('teamsValue'), order: get('teamsOrder'), prefix: get('teamsPrefix').trim() || 'Equipo' });
     const assigned = new Set(proposal.flatMap((t) => t.members));
     const without = students.filter((s) => !assigned.has(s.id));
@@ -109,6 +119,7 @@ function bulkTeamsModal() {
       (proposal.length && without.length ? `<p class="muted">Sin equipo: ${without.map((s) => esc(s.name)).join(', ')}.</p>` : '');
   };
   box.addEventListener('input', update);
+  box.addEventListener('change', update);
   $('#teamsShuffle').onclick = update;
   update();
 }
@@ -129,6 +140,17 @@ function deleteCategoryModal(category) {
   $('#formSave').classList.add('danger-button');
 }
 
+// ---- Equipos por sección (12.63) ----
+
+/** Alumno → equipo que ya lo tiene en la categoría (sin contar `exceptId`). */
+function teamTaken(category, exceptId) {
+  const map = new Map();
+  records('group')
+    .filter((g) => g.data.category === category && g.id !== exceptId)
+    .forEach((g) => g.data.members.forEach((id) => map.set(id, g.data.title)));
+  return map;
+}
+
 // ---- Entregas por equipo ----
 
 function teamFor(task, memberId) {
@@ -147,3 +169,39 @@ function teamBannerHtml(task) {
     ? `<p class="team-banner">Entrega por equipo: <strong>${esc(team.data.title)}</strong> (${esc(teamNames(team))}). Lo que entregue cualquier integrante cuenta para todos.</p>`
     : `<p class="team-banner warning">Esta actividad es por equipo y todavía no tienes equipo en "${esc(task.data.groupCategory)}". Pide a tu docente que te agregue.</p>`;
 }
+
+// ---- Calificar individual o por equipo (12.63) ----
+
+const gradeModeLabel = (task) => (task?.data.groupCategory ? `Calificación por equipo · ${task.data.groupCategory}` : 'Calificación individual');
+
+/** Elige cómo se califica una actividad: a cada alumno o al equipo completo (con la categoría de equipos). */
+function teamModeModal(task) {
+  const categories = [...new Set(records('group').map((g) => g.data.category))];
+  const current_ = task.data.groupCategory || '';
+  modal(
+    `Cómo calificar · ${task.data.title}`,
+    `<fieldset class="team-mode"><legend>Calificar</legend>
+       <label class="check-label"><input type="radio" name="teamMode" value="" ${current_ ? '' : 'checked'}> Individual: cada alumno por separado</label>
+       ${categories
+         .map((c) => `<label class="check-label"><input type="radio" name="teamMode" value="${esc(c)}" ${current_ === c ? 'checked' : ''}> Por equipo: ${esc(c)} <span class="muted">(${((n) => `${n} ${n === 1 ? 'equipo' : 'equipos'}`)(records('group').filter((g) => g.data.category === c).length)})</span></label>`)
+         .join('')}
+     </fieldset>
+     ${categories.length ? '' : '<p class="muted">Todavía no hay equipos. Fórmalos en Grupos (Más › Grupos) y vuelve aquí.</p>'}
+     <p class="muted">Por equipo, la calificación que escribas a un integrante se aplica a todo su equipo (en el libro, en la lista de la actividad y al evaluar). Al evaluar puedes desmarcar «Aplicar a todo el equipo» para calificar solo a un alumno. Lo que entregue un integrante cuenta para su equipo.</p>`,
+    async (f) => {
+      const groupCategory = f.get('teamMode') || '';
+      await request('/api/task/team', { course: current.course.id, id: task.id, groupCategory });
+      task.data.groupCategory = groupCategory;
+      task.revision = (task.revision || 0) + 1;
+      return groupCategory ? `Se calificará por equipo (${groupCategory}).` : 'Se calificará a cada alumno por separado.';
+    },
+  );
+}
+
+document.addEventListener('click', (e) => {
+  const button = e.target.closest?.('[data-team-mode]');
+  if (!button) return;
+  const task = records('task').find((t) => t.id === button.dataset.teamMode);
+  if (task) teamModeModal(task);
+});
+

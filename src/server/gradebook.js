@@ -693,6 +693,8 @@ export async function saveGrade(db, { course, grader, taskId, memberId, revision
   if (!member) fail('Alumno no encontrado.');
   if (grade !== null && (!Number.isFinite(grade) || grade < 0 || grade > 10)) fail('Calificación fuera de la escala 0 a 10.');
   const note = optionalText(feedback, 15000);
+  // Sin `feedback` (captura en el libro), los comentarios que ya había se conservan (12.63).
+  const keepFeedback = feedback === undefined;
   const scores = await rubricSnapshot(db, task, rubric);
   const existing = await one(db, 'SELECT * FROM aula_submissions WHERE task=? AND member=?', task.id, member.id);
   if (existing && revision !== existing.revision) fail('Esta calificación cambió. Recarga antes de guardar.', 409);
@@ -723,7 +725,8 @@ export async function saveGrade(db, { course, grader, taskId, memberId, revision
   const sql = `INSERT INTO aula_submissions (id,course,task,member,author,body,file_ids,submitted,late,manual,grade,feedback,published,
       graded_by,graded_at,rubric_scores,revision,created,updated)
     VALUES (?1,?2,?3,?4,?5,'','[]','',0,1,?6,?7,?8,?9,?10,?11,1,?10,?10)
-    ON CONFLICT(task,member) DO UPDATE SET grade=excluded.grade, feedback=excluded.feedback, published=excluded.published,
+    ON CONFLICT(task,member) DO UPDATE SET grade=excluded.grade, feedback=CASE WHEN ?14 THEN aula_submissions.feedback ELSE excluded.feedback END,
+      published=excluded.published,
       graded_by=excluded.graded_by, graded_at=excluded.graded_at,
       rubric_scores=CASE WHEN ?12 THEN excluded.rubric_scores ELSE aula_submissions.rubric_scores END,
       revision=aula_submissions.revision+1, updated=excluded.updated
@@ -739,7 +742,7 @@ export async function saveGrade(db, { course, grader, taskId, memberId, revision
       return [
         db
           .prepare(sql)
-          .bind(`submission:${task.id}:${owner}`, course, task.id, m.id, owner, grade, note, publish ? 1 : 0, grader.id, now, scores ?? null, scores === undefined ? 0 : 1, seen),
+          .bind(`submission:${task.id}:${owner}`, course, task.id, m.id, owner, grade, note, publish ? 1 : 0, grader.id, now, scores ?? null, scores === undefined ? 0 : 1, seen, keepFeedback ? 1 : 0),
         db
           .prepare(history)
           .bind(
@@ -751,7 +754,7 @@ export async function saveGrade(db, { course, grader, taskId, memberId, revision
             grade,
             old ? old.published : null,
             publish ? 1 : 0,
-            (old?.feedback ?? '') !== note ? 1 : 0,
+            !keepFeedback && (old?.feedback ?? '') !== note ? 1 : 0,
             team && m.id !== member.id ? 'calificación de equipo' : 'calificación',
             grader.id,
             now,
@@ -761,7 +764,15 @@ export async function saveGrade(db, { course, grader, taskId, memberId, revision
   );
   const saved = await one(db, 'SELECT * FROM aula_submissions WHERE task=? AND member=?', task.id, member.id);
   if (saved.graded_at !== now) fail('Esta calificación cambió. Recarga antes de guardar.', 409);
-  return submissionRecord(saved);
+  if (targets.length < 2) return submissionRecord(saved);
+  // Por equipo, también los registros de los demás integrantes, para que la interfaz los actualice sin recargar.
+  const others = await all(
+    db,
+    'SELECT * FROM aula_submissions WHERE task=? AND member IN (SELECT value FROM json_each(?))',
+    task.id,
+    JSON.stringify(targets.filter((m) => m.id !== member.id).map((m) => m.id)),
+  );
+  return { ...submissionRecord(saved), teamRecords: others.map(submissionRecord) };
 }
 
 export async function quizHasAttempts(db, course, quizId) {
