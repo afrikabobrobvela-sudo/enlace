@@ -70,6 +70,27 @@ const itemApplies = (record, member) =>
   // «Solo con acceso especial»: quien enseña ve a todos y cuenta solo a quienes lo tienen (al alumno ya le llega filtrado).
   (!record?.data?.specialOnly || !teaches() || (typeof hasSpecialAccess === 'function' && hasSpecialAccess(record, member)));
 
+// Equipos por sección (12.63): un equipo es de una sola sección.
+
+/** Sección del equipo: la guardada o, en equipos anteriores, la de su primer integrante ('' = sin sección). */
+function groupSection(group) {
+  if (typeof group?.data?.section === 'string') return group.data.section;
+  const first = current.members.find((m) => group?.data?.members?.includes(m.id) && m.role === 'student');
+  return first?.section || '';
+}
+
+/** ¿Un equipo anterior junta alumnos de varias secciones? */
+function groupMixesSections(group) {
+  const sections = new Set(current.members.filter((m) => m.role === 'student' && group.data.members.includes(m.id)).map((m) => m.section || ''));
+  return courseSections().length > 0 && sections.size > 1;
+}
+
+/** ¿El equipo se ve con el filtro de secciones? */
+function groupInView(group) {
+  const chosen = selectedSections();
+  return !chosen.length || chosen.includes(groupSection(group) || SECTION_NONE);
+}
+
 /** Filtro de secciones para las pantallas de quien enseña (nada si el curso no tiene secciones). */
 function sectionFilterHtml() {
   if (!teaches() || !courseSections().length) return '';

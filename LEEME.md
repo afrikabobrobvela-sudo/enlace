@@ -1,9 +1,16 @@
-# Enlace · versión 12.62
+# Enlace · versión 12.63
 
 Plataforma académica independiente para docentes y alumnos de cualquier academia (nació en la Academia de Física de la BUAP), con interfaz inspirada en Brightspace.
 No es el código de D2L Brightspace ni una plataforma oficial de la BUAP.
 
 Esta versión se despliega en **tu propia cuenta de Cloudflare** (Workers + D1 + R2, plan gratuito) y ya no depende de ChatGPT Sites.
+
+## Novedades de la versión 12.63 (equipos por sección y calificar por equipo)
+
+- **Equipos por sección**: en «Nuevo grupo» eliges la sección y solo aparecen sus alumnos; Enlace no deja guardar un equipo con alumnos de secciones distintas (dice quién es de otra sección). «Crear equipos en lote» también pide la sección, y puedes repetir la misma categoría (por ejemplo, «Equipos de laboratorio») en cada sección. La lista de Grupos tiene columna y filtro de sección, y avisa si un equipo anterior mezcla secciones para que lo corrijas.
+- Cada alumno va en **un solo equipo por categoría** (al lado de su nombre se ve si ya está en otro).
+- **Calificar individual o por equipo**: en la lista de cada actividad (botón «Calificación individual / por equipo») y en el menú ⌄ de su columna en el libro. Por equipo, la calificación que escribas a un integrante se aplica a todo su equipo, también en el libro; al evaluar una entrega puedes desmarcar «Aplicar a todo el equipo» para calificar solo a un alumno. La columna dice «por equipo».
+- Corrección: capturar una calificación en el libro ya no borra los comentarios escritos antes al evaluar. En la lista de la actividad, la casilla usa la calificación máxima de la columna.
 
 ## Novedades de la versión 12.62 (se deshace el PR #29)
 

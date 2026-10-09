@@ -951,6 +951,7 @@ function gradebookColumnMenu(t, prev = null, next = null) {
     <button type="button" data-gb-enter="${esc(t.id)}">Ingresar calificaciones</button>
     <button type="button" data-gb-bulk="${esc(t.id)}">Calificar en bloque</button>
     <button type="button" data-gb-max="${esc(t.id)}">Calificación máxima (${taskMax(t)})…</button>
+    ${t.data.forum ? '' : `<button type="button" data-team-mode="${esc(t.id)}">Individual o por equipo (${t.data.groupCategory ? 'por equipo' : 'individual'})…</button>`}
     <button type="button" data-gb-stats="${esc(t.id)}">Ver las estadísticas</button>
     <button type="button" data-gb-move="${esc(t.id)}" data-gb-target="${esc(prev?.id || '')}" ${prev ? '' : 'disabled'}>← Mover a la izquierda</button>
     <button type="button" data-gb-move="${esc(t.id)}" data-gb-target="${esc(next?.id || '')}" data-gb-after="1" ${next ? '' : 'disabled'}>Mover a la derecha →</button>
@@ -1085,10 +1086,19 @@ const gradebookSaving = new Map(); // guardados en curso (Enter y luego salir de
 
 async function saveGradebookGrade(input, task, member, s, grade) {
   try {
-    const saved = await request('/api/grade', { course: current.course.id, task, member, revision: s?.revision, grade, publish: reviewPublishNow() });
-    const i = current.records.findIndex((r) => r.id === saved.id);
-    if (i >= 0) current.records[i] = saved;
-    else current.records.push(saved);
+    // Actividad por equipo (12.63): la calificación es para todo el equipo del alumno.
+    const t = records('task').find((x) => x.id === task);
+    const team = teamFor(t, member);
+    const { teamRecords = [], ...saved } = await request('/api/grade', { course: current.course.id, task, member, revision: s?.revision, grade, publish: reviewPublishNow(), team: Boolean(team) });
+    for (const record of [saved, ...teamRecords]) {
+      const i = current.records.findIndex((r) => r.id === record.id);
+      if (i >= 0) current.records[i] = record;
+      else current.records.push(record);
+      // En la lista de la actividad no se vuelve a dibujar: se actualizan las casillas de los compañeros.
+      if (record !== saved)
+        document.querySelectorAll(`.gb-input[data-gb-task="${CSS.escape(task)}"][data-gb-member="${CSS.escape(record.data.member)}"]`).forEach((x) => (x.value = toPoints(t, record.data.grade)));
+    }
+    if (teamRecords.length) toast(`Se aplicó a todo el equipo «${team.data.title}» (${teamRecords.length + 1} integrantes).`);
     refreshGradebook();
     return true;
   } catch (error) {

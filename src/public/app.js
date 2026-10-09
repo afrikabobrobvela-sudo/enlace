@@ -168,10 +168,11 @@ function renderTask() {
   if (!t)
     return renderTasks();
   const subs = records('submission').filter(s => s.data.task === t.id), own = subs.find(s => s.data.member === myMember()?.id) || subs.find(s => s.author === viewerKey());
-  $('#main').innerHTML = `<div class="crumbs"><button data-section="tasks">Actividades</button><span>›</span><span>${teaches() ? 'Envíos en carpeta' : 'Entrega'}</span></div><h1>${esc(t.data.title)}${sectionTag(t)}</h1><p class="deadline">Vence: ${fmt(t.data.due)}</p>${t.data.forum ? forumTaskNote(t) : ''}${t.data.extended ? `<p class="extension-note">Tienes acceso especial en esta actividad: ${esc([t.data.start && Date.parse(t.data.start) > Date.now() ? 'disponible desde ' + fmt(t.data.start) : '', t.data.due ? 'vence ' + fmt(t.data.due) : '', t.data.end ? 'cierra ' + fmt(t.data.end) : ''].filter(Boolean).join(', ') || 'puedes verla y entregarla')}.</p>` : ''}${!teaches() && t.data.groupCategory ? teamBannerHtml(t) : ''}${richText(t.data.body, t.data.fileIds)}${teaches() || t.data.fileIds?.length ? `<section class="task-materials"><div class="panel-head"><h2>Material del docente</h2>${teaches() ? button('＋ Subir archivos o presentaciones', 'task-files', t.id) : ''}</div>${fileLinks(t.data.fileIds)}${!t.data.fileIds?.length ? '<p class="muted">No hay archivos adjuntos a esta actividad.</p>' : ''}</section>` : ''}${teaches() ? `<div class="toolbar">${button('Editar actividad', 'edit-task', t.id, 'secondary')}${button('Descargar entregas (ZIP)', 'zip-task', t.id, 'secondary')}${t.data.forum ? '' : button('Calificar en bloque', 'bulk-grade', t.id, 'secondary')}${specialAccessButton('task', t.id)}${sectionFilterHtml()}</div>${sectionDatesSummary(t.id)}<div class="table-wrap"><table><thead><tr><th>Alumno</th>${courseSections().length ? '<th>Sección</th>' : ''}<th>Estado</th><th>Calificación</th><th>Acción</th></tr></thead><tbody>${studentsInView().filter(m => itemApplies(t, m)).map(m => {
+  $('#main').innerHTML = `<div class="crumbs"><button data-section="tasks">Actividades</button><span>›</span><span>${teaches() ? 'Envíos en carpeta' : 'Entrega'}</span></div><h1>${esc(t.data.title)}${sectionTag(t)}</h1><p class="deadline">Vence: ${fmt(t.data.due)}</p>${t.data.forum ? forumTaskNote(t) : ''}${t.data.extended ? `<p class="extension-note">Tienes acceso especial en esta actividad: ${esc([t.data.start && Date.parse(t.data.start) > Date.now() ? 'disponible desde ' + fmt(t.data.start) : '', t.data.due ? 'vence ' + fmt(t.data.due) : '', t.data.end ? 'cierra ' + fmt(t.data.end) : ''].filter(Boolean).join(', ') || 'puedes verla y entregarla')}.</p>` : ''}${!teaches() && t.data.groupCategory ? teamBannerHtml(t) : ''}${richText(t.data.body, t.data.fileIds)}${teaches() || t.data.fileIds?.length ? `<section class="task-materials"><div class="panel-head"><h2>Material del docente</h2>${teaches() ? button('＋ Subir archivos o presentaciones', 'task-files', t.id) : ''}</div>${fileLinks(t.data.fileIds)}${!t.data.fileIds?.length ? '<p class="muted">No hay archivos adjuntos a esta actividad.</p>' : ''}</section>` : ''}${teaches() ? `<div class="toolbar">${button('Editar actividad', 'edit-task', t.id, 'secondary')}${button('Descargar entregas (ZIP)', 'zip-task', t.id, 'secondary')}${t.data.forum ? '' : button('Calificar en bloque', 'bulk-grade', t.id, 'secondary') + `<button type="button" class="secondary" data-team-mode="${esc(t.id)}">${esc(gradeModeLabel(t))} ▾</button>`}${specialAccessButton('task', t.id)}${sectionFilterHtml()}</div>${sectionDatesSummary(t.id)}<div class="table-wrap"><table><thead><tr><th>Alumno</th>${courseSections().length ? '<th>Sección</th>' : ''}<th>Estado</th><th>Calificación</th><th>Acción</th></tr></thead><tbody>${studentsInView().filter(m => itemApplies(t, m)).map(m => {
     const s = subs.find(s => s.data.member === m.id);
     const ext = extensionOf(t.id, m.id);
-    return `<tr><td><span class="person">${avatarHtml(m)}<span>${esc(m.name)}</span></span>${ext ? `<div class="table-subtext special-note">Acceso especial: ${esc(specialSummary({ start: ext.data.start, due: ext.data.due, end: ext.data.end }))}</div>` : ''}</td>${courseSections().length ? `<td>${esc(sectionName(m.section) || '—')}</td>` : ''}<td${needsReview(s) ? ' class="status-review"' : ''}>${s ? s.data.manual ? 'Captura manual' : `${s.data.late ? 'Entrega tardía' : 'Entregado'}${needsReview(s) ? ' · sin revisar' : ''}` : 'Sin entrega'}</td><td>${s?.data.grade ?? '—'}</td><td><button class="table-link" data-action="review" data-id="${t.id}" data-member="${m.id}">Evaluar →</button> <button type="button" class="text-btn" data-special-access="task" data-id="${esc(t.id)}" data-member="${esc(m.id)}">${ext ? 'Cambiar acceso' : 'Acceso especial'}</button></td></tr>`;
+    const team = teamFor(t, m.id);
+    return `<tr><td><span class="person">${avatarHtml(m)}<span>${esc(m.name)}</span></span>${t.data.groupCategory ? `<div class="table-subtext">${team ? esc(team.data.title) : 'Sin equipo'}</div>` : ''}${ext ? `<div class="table-subtext special-note">Acceso especial: ${esc(specialSummary({ start: ext.data.start, due: ext.data.due, end: ext.data.end }))}</div>` : ''}</td>${courseSections().length ? `<td>${esc(sectionName(m.section) || '—')}</td>` : ''}<td${needsReview(s) ? ' class="status-review"' : ''}>${s ? s.data.manual ? 'Captura manual' : `${s.data.late ? 'Entrega tardía' : 'Entregado'}${needsReview(s) ? ' · sin revisar' : ''}` : 'Sin entrega'}</td><td>${s?.data.grade ?? '—'}</td><td><button class="table-link" data-action="review" data-id="${t.id}" data-member="${m.id}">Evaluar →</button> <button type="button" class="text-btn" data-special-access="task" data-id="${esc(t.id)}" data-member="${esc(m.id)}">${ext ? 'Cambiar acceso' : 'Acceso especial'}</button></td></tr>`;
   }).join('') || '<tr><td colspan="4">Inscribe alumnos para revisar sus entregas.</td></tr>'}</tbody></table></div>` : `${own ? `<section class="panel"><h2>Tu entrega</h2><p class="deadline">${fmt(own.data.submitted)}${own.data.submitted ? ` <button type="button" class="text-btn" data-receipt="${esc(own.id)}">Comprobante</button>` : ''}</p>${richText(own.data.body)}${fileLinks(own.data.fileIds)}<p>Calificación: <b>${own.data.grade ?? 'Pendiente'}</b></p>${richText(own.data.feedback)}${rubricResultHtml(own.data.rubricScores)}</section>` : ''}${t.data.forum ? '' : `<div class="toolbar">${button(own ? 'Actualizar entrega' : 'Realizar entrega', 'submit', t.id)}</div>`}`}`;
   if (teaches()) enhanceTaskGradeRoster(t, subs);
 }
@@ -196,8 +197,8 @@ function enhanceTaskGradeRoster(task, submissions) {
     const gradeCell = row.cells[hasSections ? 3 : 2];
     if (statusCell) statusCell.textContent = delivered ? (submission.data.late ? 'Entrega tardía' : 'Entregado') : row.dataset.graded === 'yes' ? 'Sin entrega · calificado' : 'Sin entrega';
     if (gradeCell) {
-      gradeCell.innerHTML = `<input class="gb-input task-grade-input" type="number" min="0" max="10" step="0.01" inputmode="decimal"
-        value="${esc(submission?.data.grade ?? '')}" placeholder="—" data-gb-task="${esc(task.id)}" data-gb-member="${esc(member.id)}"
+      gradeCell.innerHTML = `<input class="gb-input task-grade-input" type="number" min="0" max="${taskMax(task)}" step="0.01" inputmode="decimal"
+        value="${esc(toPoints(task, submission?.data.grade))}" placeholder="—" data-gb-task="${esc(task.id)}" data-gb-member="${esc(member.id)}"
         aria-label="Calificación de ${esc(member.name)} en ${esc(task.data.title)}">${submission?.data.published === false ? '<span class="draft-tag">borrador</span>' : ''}`;
     }
   });
@@ -361,7 +362,7 @@ function renderGrades() {
     const drafts = teaches() ? records('submission').filter(r => r.data.task === t.id && r.data.published === false).length : 0;
     const unreviewed = members.filter(m => itemApplies(t, m) && needsReview(gradeOf(m.id, t.id))).length;
     // Se arrastra el encabezado para cambiar la columna de lugar (12.30).
-    return `<th class="gb-task-col" draggable="true" data-gb-col="${esc(t.id)}" title="Arrastra para cambiar de lugar la columna"><div class="gb-col-head"><span>${esc(t.data.title)}${sectionTag(t)}${taskMax(t) !== 10 ? `<small class="gb-task-due">sobre ${taskMax(t)}</small>` : ''}${t.data.due ? `<small class="gb-task-due">${esc(new Date(t.data.due).toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' }))}</small>` : ''}</span>${gradebookColumnMenu(t, cols[cols.indexOf(t) - 1], cols[cols.indexOf(t) + 1])}</div>${unreviewed ? `<span class="review-count">${unreviewed} sin revisar</span>` : ''}${drafts ? `<button class="table-link" data-action="publish-task" data-id="${t.id}">Publicar ${drafts} ${drafts === 1 ? 'borrador' : 'borradores'}</button>` : ''}</th>`;
+    return `<th class="gb-task-col" draggable="true" data-gb-col="${esc(t.id)}" title="Arrastra para cambiar de lugar la columna"><div class="gb-col-head"><span>${esc(t.data.title)}${sectionTag(t)}${taskMax(t) !== 10 ? `<small class="gb-task-due">sobre ${taskMax(t)}</small>` : ''}${t.data.groupCategory ? `<small class="gb-task-due gb-team-tag" title="${esc(gradeModeLabel(t))}">por equipo</small>` : ''}${t.data.due ? `<small class="gb-task-due">${esc(new Date(t.data.due).toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' }))}</small>` : ''}</span>${gradebookColumnMenu(t, cols[cols.indexOf(t) - 1], cols[cols.indexOf(t) + 1])}</div>${unreviewed ? `<span class="review-count">${unreviewed} sin revisar</span>` : ''}${drafts ? `<button class="table-link" data-action="publish-task" data-id="${t.id}">Publicar ${drafts} ${drafts === 1 ? 'borrador' : 'borradores'}</button>` : ''}</th>`;
   };
   const catHead = (c, inTerm) => `<th class="category-col gb-sum-cat">${esc(c.name)}<div class="muted">${c.weight} %${inTerm ? ' del parcial' : ''}</div>${c.source === 'tasks' ? `<button type="button" class="table-link" data-cg-max="${esc(c.id)}" title="Sobre cuánto se califica este rubro">${categoryMax(c.id) === 10 ? 'Calificación máxima…' : `sobre ${categoryMax(c.id)} · cambiar…`}</button>` : ''}</th>`;
   const groupHead = (g) => {
@@ -753,12 +754,32 @@ function materialModal(old) {
   richAttachments = files = attachmentManager($('#fields'), d.fileIds || [], 'material');
 }
 function groupModal(old) {
-  modal(old ? 'Editar grupo' : 'Nuevo grupo', field('Nombre', 'title', old?.data.title || '', 'text', 'required') + field('Categoría', 'category', old?.data.category || 'Equipos de trabajo', 'text', 'required') + `<fieldset class="member-list"><legend>Integrantes</legend>${current.members.filter(m => m.role === 'student').map(m => `<label><input type="checkbox" name="m_${m.id}" ${old?.data.members.includes(m.id) ? 'checked' : ''}> ${esc(m.name)}</label>`).join('')}</fieldset>`, f => save('group', {
+  // 12.63: con secciones, el equipo es de una sola sección y solo se listan sus alumnos.
+  const secs = courseSections();
+  const students = current.members.filter(m => m.role === 'student');
+  const options = [...secs.map(x => [x.id, x.name]), ...(students.some(m => !m.section) ? [['', 'Sin sección']] : [])];
+  const wanted = old ? groupSection(old) : selectedSection();
+  const initial = options.some(([id]) => id === wanted) ? wanted : options[0]?.[0] || '';
+  const memberList = (sec, category) => {
+    const busy = teamTaken(category, old?.id);
+    return `<legend>Integrantes</legend>${students.filter(m => !secs.length || (m.section || '') === sec).map(m => `<label><input type="checkbox" name="m_${m.id}" ${old?.data.members.includes(m.id) ? 'checked' : ''}> ${esc(m.name)}${busy.get(m.id) ? ` <span class="muted">(ya en ${esc(busy.get(m.id))})</span>` : ''}</label>`).join('') || '<p class="muted">No hay alumnos en esta sección.</p>'}`;
+  };
+  const sectionField = secs.length ? `<label>Sección<select name="groupSection" data-group-section>${options.map(([id, name]) => `<option value="${esc(id)}" ${id === initial ? 'selected' : ''}>${esc(name)}</option>`).join('')}</select></label><p class="muted">Un equipo solo puede tener alumnos de una misma sección.</p>` : '';
+  modal(old ? 'Editar grupo' : 'Nuevo grupo', field('Nombre', 'title', old?.data.title || '', 'text', 'required') + field('Categoría', 'category', old?.data.category || 'Equipos de trabajo', 'text', 'required') + sectionField + `<fieldset class="member-list" id="groupMembers">${memberList(initial, old?.data.category || 'Equipos de trabajo')}</fieldset>`, f => save('group', {
     title: f.get('title'),
     category: f.get('category'),
-    members: current.members.filter(m => f.get('m_' + m.id) === 'on').map(m => m.id),
+    section: secs.length ? f.get('groupSection') || '' : '',
+    members: students.filter(m => f.get('m_' + m.id) === 'on').map(m => m.id),
     visible: true
   }, old));
+  const box = $('#fields').firstElementChild;
+  const refresh = () => {
+    const keep = new Set([...box.querySelectorAll('#groupMembers input:checked')].map(i => i.name));
+    $('#groupMembers').innerHTML = memberList(box.querySelector('[data-group-section]')?.value || '', box.querySelector('[name="category"]').value.trim());
+    $('#groupMembers').querySelectorAll('input').forEach(i => i.checked = keep.has(i.name));
+  };
+  box.querySelector('[data-group-section]')?.addEventListener('change', refresh);
+  box.querySelector('[name="category"]').addEventListener('change', refresh);
 }
 function courseModal(edit = false) {
   const c = edit ? current.course : null;
