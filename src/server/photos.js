@@ -18,17 +18,21 @@ function photoType(bytes) {
   return null;
 }
 
-/** ¿Puede `viewer` ver la foto de `owner`? Una consulta. */
+/**
+ * ¿Puede `viewer` ver la foto de `owner`? Una consulta. Quien enseña ve la foto de sus alumnos solo si la cuenta es de
+ * alumno (12.64): cualquier correo se puede inscribir, y eso no debe abrir la foto de un docente o de la administración.
+ */
 async function canSeePhoto(db, viewer, ownerId) {
   if (viewer.id === ownerId || viewer.role === 'admin') return true;
   const row = await one(
     db,
     `SELECT 1 AS ok FROM aula_members a JOIN aula_members b ON b.course=a.course
        WHERE a.user_id=?1 AND b.user_id=?2 AND a.role IN ('student','teacher') AND b.role IN ('student','teacher')
-         AND (a.role='teacher' OR b.role='teacher')
+         AND (a.role='teacher' OR (b.role='teacher' AND EXISTS (SELECT 1 FROM aula_users o WHERE o.id=?1 AND o.role='student')))
      UNION ALL
      SELECT 1 FROM aula_courses c JOIN aula_members m ON m.course=c.id AND m.role IN ('student','teacher')
-       WHERE (c.owner=?2 AND m.user_id=?1) OR (c.owner=?1 AND m.user_id=?2)
+       WHERE (c.owner=?2 AND m.user_id=?1 AND (m.role='teacher' OR EXISTS (SELECT 1 FROM aula_users o WHERE o.id=?1 AND o.role='student')))
+          OR (c.owner=?1 AND m.user_id=?2)
      LIMIT 1`,
     ownerId,
     viewer.id,
@@ -78,7 +82,13 @@ export const photoRoutes = {
     const target = body.user ? String(body.user) : user.id;
     if (target !== user.id && user.role !== 'admin') {
       requireTeacher(await access(db, user, body.course));
-      const enrolled = await one(db, "SELECT 1 AS ok FROM aula_members WHERE course=? AND user_id=? AND role='student'", body.course, target);
+      // Solo cuentas de alumno (12.64): inscribir el correo de un docente no permite quitarle su foto.
+      const enrolled = await one(
+        db,
+        "SELECT 1 AS ok FROM aula_members m JOIN aula_users u ON u.id=m.user_id WHERE m.course=? AND m.user_id=? AND m.role='student' AND u.role='student'",
+        body.course,
+        target,
+      );
       if (!enrolled) fail('Ese alumno no está en este curso.', 404);
     }
     const row = await one(db, 'SELECT photo FROM aula_users WHERE id=?', target);

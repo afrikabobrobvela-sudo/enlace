@@ -25,9 +25,13 @@ const noticeKey = (item) => `${item.type}:${item.id}:${item.at}`;
 const STUDENT_COURSES = `SELECT m.id AS member, m.course, m.section FROM aula_members m JOIN aula_courses c ON c.id=m.course
   WHERE m.user_id=?1 AND m.role='student' AND c.archived_at IS NULL AND c.student_visible=1
     AND NOT EXISTS (SELECT 1 FROM aula_deleted_courses d WHERE d.course=c.id)`;
-/** Cursos activos en los que la persona enseña (propietaria o co-docente): por índice, sin recorrer todos los cursos. */
+/**
+ * Cursos activos en los que la persona enseña (propietaria o co-docente): por índice, sin recorrer todos los cursos.
+ * Como en access(), solo mientras siga siendo docente (12.64: a quien se retira ya no le llegan avisos ni clases).
+ */
 const TEACHER_COURSES = `SELECT c.id AS course FROM aula_courses c
   WHERE (c.owner=?1 OR c.id IN (SELECT t.course FROM aula_members t WHERE t.user_id=?1 AND t.role='teacher'))
+    AND EXISTS (SELECT 1 FROM aula_users tu WHERE tu.id=?1 AND tu.role IN ('teacher','admin'))
     AND c.archived_at IS NULL AND NOT EXISTS (SELECT 1 FROM aula_deleted_courses d WHERE d.course=c.id)`;
 
 async function receiptFolio(env, submission) {

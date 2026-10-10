@@ -159,7 +159,11 @@ export function cookie(name, value, maxAgeSeconds) {
   return `${name}=${value}; Max-Age=${maxAgeSeconds}; Path=/; HttpOnly; Secure; SameSite=Lax`;
 }
 
-/** Acepta solo rutas internas (`/algo`), nunca `//otro-sitio` ni URLs absolutas. */
+/**
+ * Acepta solo rutas internas (`/algo`), nunca `//otro-sitio` ni URLs absolutas. Sin espacios ni caracteres de control
+ * (12.64): el navegador quita tabuladores y saltos de línea de un Location, así que `/<TAB>/otro-sitio` terminaba en
+ * `//otro-sitio`.
+ */
 export function safeReturnPath(value) {
-  return typeof value === 'string' && /^\/(?![/\\])/.test(value) && value.length < 500 ? value : '/';
+  return typeof value === 'string' && /^\/(?![/\\])[^\s\x00-\x1f\x7f]*$/.test(value) && value.length < 500 ? value : '/';
 }

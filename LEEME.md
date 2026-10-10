@@ -1,9 +1,24 @@
-# Enlace · versión 12.63
+# Enlace · versión 12.64
 
 Plataforma académica independiente para docentes y alumnos de cualquier academia (nació en la Academia de Física de la BUAP), con interfaz inspirada en Brightspace.
 No es el código de D2L Brightspace ni una plataforma oficial de la BUAP.
 
 Esta versión se despliega en **tu propia cuenta de Cloudflare** (Workers + D1 + R2, plan gratuito) y ya no depende de ChatGPT Sites.
+
+## Novedades de la versión 12.64 (correcciones de la auditoría de seguridad)
+
+- **Despliegue desde GitHub más seguro.** Los flujos «Desplegar» y «Respaldo semanal» usan ahora los *environments* `produccion` y `respaldo`, el token de Cloudflare solo está en los pasos que hablan con Cloudflare (la instalación y las pruebas corren sin él) e instalan exactamente lo de `package-lock.json` (`npm ci`). **Tienes que terminar la configuración en GitHub** (una sola vez):
+  1. *Settings → Environments*: abre `produccion` (se crea sola en la primera publicación; si no aparece, *New environment* con ese nombre). Marca **Required reviewers** y ponte tú; en *Deployment branches and tags* elige **Selected branches** y agrega `claude/plataforma-enlace-project-9ugeud`. Agrega ahí los cuatro *Environment secrets*: `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, `D1_DATABASE_ID` y `AULA_OWNER_EMAIL`.
+  2. Crea `respaldo` igual, **sin** revisores (para que el respaldo del domingo corra solo), con la misma rama y los secrets `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` y `D1_DATABASE_ID`.
+  3. Después borra esos secrets de *Settings → Secrets and variables → Actions → Repository secrets*: así un flujo de otra rama ya no puede leerlos.
+  4. *Settings → Branches → Add rule* para `claude/plataforma-enlace-project-9ugeud`: **Require a pull request before merging** y **Require approvals**.
+  5. Recomendado: genera un `CLOUDFLARE_API_TOKEN` nuevo y revoca el anterior.
+  Desde entonces, cada publicación espera tu aprobación en *Actions → Desplegar → Review deployments*.
+- **Co-docentes protegidos.** «Traer alumnos de otro curso» ya no puede convertir en alumno a un co-docente (como ya pasaba con la inscripción a mano y la lista pegada).
+- **Academia.** El docente registra su academia una sola vez; después solo la administración puede cambiar la suya. El banco de preguntas comparte por academia: cambiarse daba acceso al banco de otra academia. Si un docente se equivocó de academia, avísame y lo corregimos desde la base.
+- **Docentes retirados.** A quien se retira de la lista de docentes ya no le llegan clases, cursos ni avisos de entregas de sus cursos (calendario, campana y resumen por correo).
+- **Fotos de perfil.** Inscribir un correo en un curso ya no permite ver ni quitar la foto de una cuenta de docente o de administración (solo la de alumnos).
+- **Inicio de sesión.** La dirección de regreso después de entrar ya no acepta espacios ni caracteres de control (un tabulador permitía mandar a otro sitio).
 
 ## Novedades de la versión 12.63 (equipos por sección y calificar por equipo)
 
@@ -59,7 +74,7 @@ Esta versión se despliega en **tu propia cuenta de Cloudflare** (Workers + D1 +
 
 Nuevo flujo «Desplegar» (`.github/workflows/desplegar.yml`): al fusionar un pull request en la rama principal, GitHub corre las pruebas, guarda un respaldo comprobado de la base en R2 privado (`enlace-respaldos/antes-de-desplegar-…`), aplica las migraciones y publica. También se lanza a mano: pestaña **Actions → Desplegar → Run workflow**. Si un paso falla, se detiene ahí (sin respaldo no migra; con pruebas en rojo no publica). Puedes seguir usando `npm run configurar` cuando quieras: hacen lo mismo.
 
-**Configuración, una sola vez** (GitHub → Settings → Secrets and variables → Actions → New repository secret):
+**Configuración, una sola vez** (desde 12.64, como *Environment secrets* del environment `produccion`; ver «Novedades de la versión 12.64»):
 
 1. `CLOUDFLARE_API_TOKEN`: si ya lo tienes por el respaldo semanal, en Cloudflare (My Profile → API Tokens → editar) agrégale **Workers Scripts: Edit**; debe tener también **D1: Edit** y **Workers R2 Storage: Edit**. Si no lo tienes: Create Token → plantilla «Edit Cloudflare Workers» y agrega D1 y R2.
 2. `CLOUDFLARE_ACCOUNT_ID` y `D1_DATABASE_ID`: los mismos del respaldo semanal (si ya existen, no los toques).
@@ -993,7 +1008,7 @@ Para generar un `SESSION_SECRET` aleatorio: `node -e "console.log(require('crypt
 - **Respaldo automático semanal (GitHub Actions).** El flujo `.github/workflows/respaldo.yml` exporta la base cada domingo y la guarda comprimida en un almacenamiento R2 **privado** (`enlace-respaldos`); nunca como archivo de GitHub, porque el repositorio es público. Configuración única:
   1. `npx wrangler r2 bucket create enlace-respaldos` y, para que los respaldos de más de 180 días se borren solos: `npx wrangler r2 bucket lifecycle add enlace-respaldos --expire-days 180` (acepta las opciones que pregunte).
   2. En Cloudflare, *My Profile → API Tokens → Create Token* con permisos **D1: Edit** y **Workers R2 Storage: Edit** para tu cuenta.
-  3. En GitHub, *Settings → Secrets and variables → Actions → New repository secret*: `CLOUDFLARE_API_TOKEN` (el token), `CLOUDFLARE_ACCOUNT_ID` (panel de Cloudflare, columna derecha) y `D1_DATABASE_ID` (el `database_id` de tu `wrangler.toml`).
+  3. En GitHub, *Settings → Environments → respaldo → Add environment secret* (desde 12.64; antes eran secrets del repositorio): `CLOUDFLARE_API_TOKEN` (el token), `CLOUDFLARE_ACCOUNT_ID` (panel de Cloudflare, columna derecha) y `D1_DATABASE_ID` (el `database_id` de tu `wrangler.toml`).
   4. Pruébalo en *Actions → Respaldo semanal → Run workflow*. Cada respaldo se comprueba antes de guardarse. Para descargar uno: `npx wrangler r2 object get enlace-respaldos/NOMBRE.sql.gz --file NOMBRE.sql.gz --remote`, descomprímelo (7-Zip en Windows) y restáuralo con `npm run restaurar`.
 - **Vigilancia.** `.github/workflows/vigilancia.yml` revisa cada hora `https://…/salud` (Worker, base de datos y que el correo de administración no sea el de ejemplo). Si Enlace deja de responder, GitHub te avisa por correo (*Settings → Notifications → Actions*). Los flujos con horario solo corren en la rama principal del repositorio.
 - Los archivos adjuntos viven en R2, almacenamiento redundante de Cloudflare, pero eso no protege de un borrado por error: respáldalos desde Enlace como se indica arriba. La carpeta tiene trabajos de alumnos; guárdala en un lugar privado.
