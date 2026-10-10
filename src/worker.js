@@ -9,6 +9,7 @@ import { CONTENT_SECURITY_POLICY, SECURITY_HEADERS } from './server/http.js';
 import { assets } from './generated/assets.js';
 import { runDigest } from './server/digest.js';
 import { serveSebConfig } from './server/seb.js';
+import { serveCertificatePage } from './server/constancias.js';
 
 const TYPES = {
   html: 'text/html; charset=utf-8',
@@ -42,6 +43,9 @@ export default {
     // Configuración de Safe Exam Browser de una evaluación (SEB la descarga sin sesión; 12.28).
     const seb = url.pathname.match(/^\/seb\/([A-Za-z0-9-]{1,64})\.seb$/);
     if (seb && request.method === 'GET') return serveSebConfig(env.DB, seb[1], url.origin);
+    // Verificación pública de una constancia (12.67): a esta dirección lleva el código QR del PDF.
+    const folio = url.pathname.match(/^\/constancia\/([A-Za-z0-9-]{1,40})$/);
+    if (folio && request.method === 'GET') return serveCertificatePage(env.DB, folio[1].toUpperCase());
     // Vigilancia: confirma que el Worker y la base responden. No expone datos.
     if (url.pathname === '/salud') {
       try {

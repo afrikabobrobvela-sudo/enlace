@@ -1,9 +1,21 @@
-# Enlace · versión 12.66
+# Enlace · versión 12.67
 
 Plataforma académica independiente para docentes y alumnos de cualquier academia (nació en la Academia de Física de la BUAP), con interfaz inspirada en Brightspace.
 No es el código de D2L Brightspace ni una plataforma oficial de la BUAP.
 
 Esta versión se despliega en **tu propia cuenta de Cloudflare** (Workers + D1 + R2, plan gratuito) y ya no depende de ChatGPT Sites.
+
+## Novedades de la versión 12.67 (constancias con folio y código QR)
+
+- **Constancias en PDF** para tus cursos. Se activan en *Administración del curso → Constancias*, donde eliges cómo se obtienen:
+  - **Al aprobar una evaluación** (por ejemplo, la evaluación final) con la calificación mínima que indiques: el alumno ve en la portada del curso «Obtener mi constancia» y la descarga. Ideal para cursos a tu ritmo.
+  - **O las entregas tú**: marcas a los alumnos y presionas «Entregar a los marcados».
+- Cada constancia lleva el nombre del alumno, el curso, las horas (opcional), la calificación si la obtuvo con la evaluación, la fecha, tu firma, un **folio** (por ejemplo `ENL-1B3C174386`) y un **código QR**.
+- **Verificación pública**: el QR lleva a `…/constancia/<folio>`, una página sin iniciar sesión que dice si la constancia es válida, revocada o no existe. Así nadie puede falsificar una.
+- Puedes **revocar** una constancia (la verificación lo dirá) y volver a entregarla con el mismo folio. Quien ya tenía la suya la conserva aunque después apagues las constancias.
+- En «Más opciones» puedes cambiar el nombre del curso que aparece y la firma (por omisión, tu nombre). Los cambios solo afectan a las constancias que se entreguen después.
+- **Migración nueva** (`0039_constancias.sql`): solo agrega una columna y una tabla; no toca datos. Se aplica sola al publicar.
+- Nota: la constancia de Enlace es una constancia de participación o aprobación. La **DC-3** de la STPS requiere tu registro como agente capacitador y la firma de la empresa del trabajador.
 
 ## Novedades de la versión 12.66 (videos incrustados)
 
