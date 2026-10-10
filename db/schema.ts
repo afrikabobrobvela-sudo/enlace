@@ -172,6 +172,8 @@ export const courses = sqliteTable(
     theme: integer('theme').notNull().default(0),
     // Migración 0039 (12.67): configuración de constancias en JSON ('' = sin constancias; ver src/server/constancias.js).
     certificate: text('certificate').notNull().default(''),
+    // Migración 0040 (12.68): código para unirse ('' = sin código; índice único parcial). Nunca sale en las respuestas del curso.
+    joinCode: text('join_code').notNull().default(''),
   },
   (t) => [index('aula_courses_owner').on(t.owner)],
 );

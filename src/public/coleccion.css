@@ -569,3 +569,12 @@ footer a { padding-block: 4px; }
 .certificate-card p { margin: 0 0 12px; }
 .certificate-table td { vertical-align: middle; }
 .certificate-table .danger-link, .certificate-table .table-link { min-height: 24px; }
+
+/* 12.68: código para unirse (Administración del curso). Código grande, enlace y QR para proyectarlo en clase. */
+.join-code-box { display: flex; gap: 24px; align-items: flex-start; flex-wrap: wrap; }
+.join-code-box > div:first-child { flex: 1 1 260px; min-width: 0; }
+.join-code-box .muted { margin: 0; }
+.join-code { margin: 0 0 12px; font-family: var(--condensada); font-stretch: 80%; font-weight: 800; font-size: 44px; letter-spacing: 0.06em; color: var(--tinta); font-variant-numeric: tabular-nums; }
+.join-link { margin: 0 0 8px; overflow-wrap: anywhere; }
+.join-qr { width: 200px; max-width: 100%; }
+.join-qr svg { display: block; width: 100%; height: auto; }

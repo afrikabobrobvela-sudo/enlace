@@ -52,6 +52,7 @@ import { mailConfigured } from './mail.js';
 import { quizForStudent, quizWithAccess, quizWithSectionDates, sectionIdsByName, sectionKey, sectionRoutes, sectionsField, validSection } from './sections.js';
 import { gradingRoutes } from './grading.js';
 import { certificateRoutes } from './constancias.js';
+import { joinRoutes } from './unirse.js';
 import { clearSessionCookie, identity, lastLogins, revokeAllStatements } from './auth.js';
 import {
   assertAvailable,
@@ -147,7 +148,7 @@ export async function api(request, env) {
     assertHasPhoto(route, user, env);
     const ctx = { db: env.DB, env, user, url, request };
     const handler =
-      routes[route] || attendanceRoutes[route] || gradingRoutes[route] || directoryRoutes[route] || privacyRoutes[route] || periodRoutes[route] || dashboardRoutes[route] || reportRoutes[route] || demoRoutes[route] || backupRoutes[route] || userRoutes[route] || bankRoutes[route] || sectionRoutes[route] || photoRoutes[route] || digestRoutes[route] || accessRoutes[route] || specialAccessRoutes[route] || forumRoutes[route] || importRoutes[route] || coverRoutes[route] || certificateRoutes[route];
+      routes[route] || attendanceRoutes[route] || gradingRoutes[route] || directoryRoutes[route] || privacyRoutes[route] || periodRoutes[route] || dashboardRoutes[route] || reportRoutes[route] || demoRoutes[route] || backupRoutes[route] || userRoutes[route] || bankRoutes[route] || sectionRoutes[route] || photoRoutes[route] || digestRoutes[route] || accessRoutes[route] || specialAccessRoutes[route] || forumRoutes[route] || importRoutes[route] || coverRoutes[route] || certificateRoutes[route] || joinRoutes[route];
     if (handler) return await handler(ctx);
     if (request.method === 'GET' && url.pathname.startsWith('/api/file/')) return await downloadFile(ctx, url.pathname.slice(10));
     if (request.method === 'GET' && url.pathname.startsWith('/api/photo/')) return await servePhoto(ctx, url.pathname.slice(11));
@@ -165,7 +166,8 @@ export async function api(request, env) {
 // ---- Registros de contenido (aula_records) ---------------------------------------------------
 
 /** El curso sin la llave interna de su portada en R2 (la interfaz usa cover_updated). */
-const publicCourse = ({ cover: _cover, ...course }) => course;
+// El código para unirse (12.68) tampoco sale aquí: el docente lo pide con GET /api/course/join-code.
+const publicCourse = ({ cover: _cover, join_code: _joinCode, ...course }) => course;
 const unpack = (row) => (row ? { ...row, data: parseJson(row.data, {}) } : null);
 
 function validTheme(value) {
@@ -598,7 +600,7 @@ const routes = {
             user.role === 'teacher' ? 1 : 0,
           );
     return json(
-      rows.map(({ can_teach: canTeach, cover: _cover, ...c }) => ({
+      rows.map(({ can_teach: canTeach, cover: _cover, join_code: _joinCode, ...c }) => ({
         ...c,
         canTeach: canTeach === 1,
         canDelete: user.role === 'admin' || ownsCourse(user, c),
