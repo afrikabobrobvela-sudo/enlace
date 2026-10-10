@@ -1,9 +1,17 @@
-# Enlace · versión 12.65
+# Enlace · versión 12.66
 
 Plataforma académica independiente para docentes y alumnos de cualquier academia (nació en la Academia de Física de la BUAP), con interfaz inspirada en Brightspace.
 No es el código de D2L Brightspace ni una plataforma oficial de la BUAP.
 
 Esta versión se despliega en **tu propia cuenta de Cloudflare** (Workers + D1 + R2, plan gratuito) y ya no depende de ChatGPT Sites.
+
+## Novedades de la versión 12.66 (videos incrustados)
+
+- **Videos dentro de materiales, noticias, foros e instrucciones.** Pega el enlace de un video de **YouTube, Vimeo, Google Drive o Cloudflare Stream** solo en su propia línea, o usa el botón **«Video»** de la barra de formato. Se ve el reproductor dentro de Enlace (16:9, también en el celular) con un enlace «Abrir en YouTube» por si la red de la escuela lo bloquea.
+- **No ocupa almacenamiento**: Enlace solo guarda el enlace; el video se reproduce desde el sitio donde está.
+- Funcionan los enlaces que da el botón «Compartir» de cada sitio, incluidos los que empiezan en un minuto (`?t=95`), los *shorts* de YouTube y los videos privados de Vimeo con su clave.
+- Recomendaciones: en YouTube súbelos como **«No listado»**; en Google Drive, compártelos como «Cualquier persona con el enlace»; para cursos que vendas, Vimeo o Cloudflare Stream permiten limitar en qué sitios se reproducen.
+- Un enlace dentro de una oración sigue siendo un enlace normal, y los de otros sitios no se incrustan (por seguridad, Enlace solo permite reproductores de esos cuatro sitios).
 
 ## Novedades de la versión 12.65 («Los libros llegan»)
 

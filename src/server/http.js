@@ -10,7 +10,9 @@ export const SECURITY_HEADERS = {
 // 'wasm-unsafe-eval' solo permite compilar WebAssembly (decodificadores de imágenes de pdf.js); no habilita eval de JavaScript.
 export const CONTENT_SECURITY_POLICY =
   "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; " +
-  "connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self' https://accounts.google.com; frame-ancestors 'none'";
+  "connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self' https://accounts.google.com; frame-ancestors 'none'; " +
+  // Videos incrustados (12.66, richVideo() en richtext.js): solo los reproductores de estos sitios.
+  "frame-src https://www.youtube-nocookie.com https://player.vimeo.com https://drive.google.com https://*.cloudflarestream.com";
 
 export function json(data, status = 200, extraHeaders = {}) {
   return new Response(JSON.stringify(data), {

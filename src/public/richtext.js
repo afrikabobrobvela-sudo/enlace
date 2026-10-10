@@ -3,9 +3,12 @@
  * Se guarda como texto sencillo con marcas fáciles de leer (el mismo texto de siempre sigue viéndose bien):
  *   **negrita**   *cursiva*   # Título   ## Subtítulo   - lista   1. lista numerada   > cita   ---
  *   [texto](https://enlace)   ![descripción](archivo:ID)   y fórmulas $…$, $$…$$, \(…\), \[…\] (KaTeX, en math.js).
+ *   Un enlace de YouTube, Vimeo, Google Drive o Cloudflare Stream solo en su línea se muestra como video (12.66).
  *
  * Seguridad: todo el texto se escapa antes de dar formato; solo se generan etiquetas fijas, los enlaces
  * aceptan únicamente http/https y las imágenes solo archivos del propio elemento, servidos por Enlace.
+ * Los videos nunca usan la dirección escrita: se extrae el identificador (validado con una expresión fija) y se
+ * arma la dirección del reproductor de cada sitio; la CSP (frame-src en http.js) solo admite esos sitios.
  */
 
 const RICH_ESCAPES = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
@@ -36,6 +39,52 @@ function richInline(text, { fileIds, slots }) {
   return out.replace(/\u0000(\d+)\u0000/g, (_, i) => richEsc(slots[i]));
 }
 
+// ---- Videos (12.66) --------------------------------------------------------------------------------
+// Cada sitio: expresión sobre la dirección completa → dirección del reproductor y nombre para el enlace de respaldo.
+const RICH_VIDEO_SITES = [
+  {
+    name: 'YouTube',
+    re: /^https?:\/\/(?:www\.|m\.)?(?:youtube\.com\/(?:watch\?(?:[^#\s]*&)?v=|shorts\/|embed\/|live\/)|youtu\.be\/)([A-Za-z0-9_-]{11})(?:[?&#][^\s]*)?$/,
+    embed: (m, url) => {
+      const start = /[?&#]t=(\d+)s?(?:&|$)/.exec(url)?.[1];
+      return `https://www.youtube-nocookie.com/embed/${m[1]}?rel=0${start ? '&start=' + start : ''}`;
+    },
+  },
+  {
+    name: 'Vimeo',
+    re: /^https?:\/\/(?:www\.)?(?:vimeo\.com\/|player\.vimeo\.com\/video\/)(\d{1,12})(?:\/([0-9a-f]{6,20}))?(?:[?#][^\s]*)?$/,
+    embed: (m, url) => {
+      const hash = m[2] || /[?&]h=([0-9a-f]{6,20})(?:&|$)/.exec(url)?.[1];
+      return `https://player.vimeo.com/video/${m[1]}${hash ? '?h=' + hash : ''}`;
+    },
+  },
+  {
+    name: 'Google Drive',
+    re: /^https?:\/\/drive\.google\.com\/(?:file\/d\/([A-Za-z0-9_-]{10,100})(?:\/(?:view|preview|edit))?|open\?id=([A-Za-z0-9_-]{10,100}))(?:[?&#][^\s]*)?$/,
+    embed: (m) => `https://drive.google.com/file/d/${m[1] || m[2]}/preview`,
+  },
+  {
+    name: 'Cloudflare Stream',
+    re: /^https?:\/\/(customer-[a-z0-9]{1,40})\.cloudflarestream\.com\/([a-f0-9]{32})(?:\/(?:watch|iframe))?(?:[?#][^\s]*)?$/,
+    embed: (m) => `https://${m[1]}.cloudflarestream.com/${m[2]}/iframe`,
+  },
+];
+
+/** Si `url` es un video de un sitio admitido, devuelve { name, src } con la dirección del reproductor. */
+function richVideo(url) {
+  const clean = String(url ?? '').trim();
+  for (const site of RICH_VIDEO_SITES) {
+    const m = site.re.exec(clean);
+    if (m) return { name: site.name, src: site.embed(m, clean) };
+  }
+  return null;
+}
+
+/** Reproductor incrustado con un enlace para abrirlo en el sitio original (por si la red lo bloquea). */
+function richVideoHtml(video, url) {
+  return `<figure class="rich-video"><div class="rich-video-frame"><iframe src="${richEsc(video.src)}" title="Video de ${video.name}" loading="lazy" allow="autoplay; encrypted-media; fullscreen; picture-in-picture" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe></div><figcaption><a href="${richEsc(url)}" target="_blank" rel="noopener noreferrer">Abrir en ${video.name}</a></figcaption></figure>`;
+}
+
 /**
  * Convierte el texto guardado en HTML seguro.
  * `fileIds`: archivos adjuntos al elemento (las únicas imágenes que se pueden mostrar).
@@ -63,6 +112,9 @@ function richText(source, fileIds = []) {
     let m;
     if (!line.trim()) {
       flush();
+    } else if ((m = /^\s*(https?:\/\/[^\s\u0000\u0001]+)\s*$/.exec(line)) && (m[2] = richVideo(m[1]))) {
+      flush();
+      html.push(richVideoHtml(m[2], m[1]));
     } else if ((m = /^(#{1,3})\s+(.+)$/.exec(line))) {
       flush();
       const tag = ['h3', 'h4', 'h5'][m[1].length - 1];
@@ -99,6 +151,7 @@ const RICH_TOOLS = [
   ['link', 'Enlace', 'Insertar enlace'],
   ['math', 'Fórmula', 'Insertar fórmula'],
   ['image', 'Imagen', 'Insertar imagen'],
+  ['video', 'Video', 'Insertar video de YouTube, Vimeo, Google Drive o Cloudflare Stream'],
 ];
 
 /** Área de texto con barra de formato y vista previa. Con `images` agrega el botón para insertar fotos. */
@@ -111,7 +164,7 @@ function richTextarea(label, name, value = '', { required = false, images = fals
       <button type="button" class="rich-tool rich-preview-toggle" data-format="preview" aria-pressed="false">Vista previa</button></div>
     <textarea name="${name}" aria-label="${richEsc(label)}" ${required ? 'required' : ''}>${richEsc(value)}</textarea>
     <div class="rich-preview" data-rich-preview hidden></div>
-    <p class="rich-hint muted">Selecciona texto y usa los botones, o escribe **negrita**, *cursiva*, - lista. Fórmulas: $v = v_0 + a t$.</p>
+    <p class="rich-hint muted">Selecciona texto y usa los botones, o escribe **negrita**, *cursiva*, - lista. Fórmulas: $v = v_0 + a t$. Un enlace de YouTube o Vimeo solo en su línea se ve como video.</p>
     ${images ? '<input type="file" accept="image/*" data-rich-image hidden>' : ''}</div>`;
 }
 
@@ -185,6 +238,13 @@ document.addEventListener('click', async (e) => {
     }
     case 'image':
       return editor.querySelector('[data-rich-image]')?.click();
+    case 'video': {
+      const url = prompt('Pega el enlace del video (YouTube, Vimeo, Google Drive o Cloudflare Stream)', 'https://');
+      if (!url || url.trim() === 'https://') return;
+      if (!richVideo(url)) return toast('Ese enlace no es de un video de YouTube, Vimeo, Google Drive o Cloudflare Stream. Copia la dirección del video desde el botón «Compartir».');
+      richInsertBlock(area, url.trim());
+      return richRefreshPreview(editor);
+    }
     case 'preview': {
       const preview = editor.querySelector('[data-rich-preview]');
       preview.hidden = !preview.hidden;
