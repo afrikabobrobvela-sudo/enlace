@@ -1,9 +1,17 @@
-# Enlace · versión 12.64
+# Enlace · versión 12.65
 
 Plataforma académica independiente para docentes y alumnos de cualquier academia (nació en la Academia de Física de la BUAP), con interfaz inspirada en Brightspace.
 No es el código de D2L Brightspace ni una plataforma oficial de la BUAP.
 
 Esta versión se despliega en **tu propia cuenta de Cloudflare** (Workers + D1 + R2, plan gratuito) y ya no depende de ChatGPT Sites.
+
+## Novedades de la versión 12.65 («Los libros llegan»)
+
+- **Logotipo animado.** Al abrir Enlace, los tres lomos de la marca entran deslizándose uno tras otro en la barra superior (una sola vez por carga de la página).
+- **Pantalla de acceso nueva.** El panel oscuro muestra una pila de tomos de colores (Materiales, Actividades, Asistencia y Calificaciones) que llegan desde el borde de la caja; en la computadora la caja queda centrada en la pantalla. En el teléfono la pila va junto a «Tu aula virtual» y el botón para entrar sigue a la vista. Los textos no cambiaron.
+- **Mientras carga.** Si los datos tardan más de medio segundo (por ejemplo, con poca señal), en lugar de solo «Cargando tus cursos…» se ve la marca con los lomos pasando.
+- **Mis cursos.** La primera vez que se abre el estante en cada visita, las portadas llegan una tras otra (menos de un segundo; buscar o regresar no lo repite).
+- Todo es una animación corta que no retrasa nada: se puede entrar o tocar un curso desde el primer instante. Si el teléfono o la computadora tienen activado «reducir movimiento», no se mueve nada y todo aparece completo.
 
 ## Novedades de la versión 12.64 (correcciones de la auditoría de seguridad)
 

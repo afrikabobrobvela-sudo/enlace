@@ -1,4 +1,6 @@
-/* Pantalla de acceso. Se muestra cuando la API responde 401 (no hay sesión válida). */
+/* Pantalla de acceso. Se muestra cuando la API responde 401 (no hay sesión válida).
+ * La pila de tomos (12.65) es decorativa (aria-hidden): repite en lomos lo que dice el párrafo y llega deslizándose
+ * desde el borde de la caja, como los lomos de la marca (coleccion.css, «Los libros llegan»). */
 
 const LOGIN_ERRORS = {
   cancelled: 'Cancelaste el inicio de sesión. Puedes intentarlo de nuevo.',
@@ -65,7 +67,12 @@ function renderLogin(methods = { google: true, email: false }) {
     <div class="login-layout">
     <div class="login-brand">
       <div>
-        <svg class="brand-mark" viewBox="0 0 40 40" aria-hidden="true"><rect width="40" height="40" rx="7" fill="#ffffff"/><rect x="9" y="8" width="23" height="6.5" rx="1.2" fill="#1f3fd1"/><rect x="9" y="16.75" width="15" height="6.5" rx="1.2" fill="#c0183f"/><rect x="9" y="25.5" width="23" height="6.5" rx="1.2" fill="#0a6e60"/></svg>
+        <div class="login-pila" aria-hidden="true">
+          <span class="pila-tomo" data-theme="1">Materiales</span>
+          <span class="pila-tomo" data-theme="3">Actividades</span>
+          <span class="pila-tomo" data-theme="5">Asistencia</span>
+          <span class="pila-tomo" data-theme="2">Calificaciones</span>
+        </div>
         <h2>Tu aula virtual</h2>
         <p>Para docentes y alumnos de cualquier academia: materiales, actividades, calificaciones y asistencia en un solo lugar.</p>
       </div>

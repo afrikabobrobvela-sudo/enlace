@@ -139,7 +139,9 @@ Enlace se ve como una colección de libros de divulgación científica: papel bl
 
 Es una interfaz con energía, no calmada, pero densa y de trabajo: tablas de columnas fijas, cifras tabulares y títulos condensados pesados que ocupan poco ancho. Rechaza el LMS de tarjetas azul-turquesa, los mosaicos de métricas y las sombras suaves y difusas. Toda la capa vive en `src/public/coleccion.css`, cargada después de `tema.css` y `movil.css`; solo cambia la apariencia.
 
-La marca son tres lomos horizontales que forman una E (cobalto, granza y verdete sobre un cuadro blanco de esquina 7 px), en la barra de `index.html` y en `login.js`.
+La marca son tres lomos horizontales que forman una E (cobalto, granza y verdete sobre un cuadro blanco de esquina 7 px), en la barra de `index.html`; en el acceso (`login.js`) crece a una pila de tomos.
+
+**The Libros Llegan Rule (12.65).** El único gesto de movimiento de la colección: los lomos entran deslizándose desde la izquierda, uno tras otro (`cubic-bezier(0.16, 1, 0.3, 1)`, 0.6–0.7 s, 80–120 ms entre uno y otro), y se quedan quietos. Una vez por pantalla de entrada: la marca de la barra al abrir la página, la pila del acceso, la primera vez que se ve el estante de Mis cursos y, solo mientras se espera la carga, la marca en ciclo. Solo `transform` y opacidad; nada bloquea la acción (el botón de entrar y las portadas funcionan desde el primer instante) y con movimiento reducido todo aparece quieto y completo.
 
 **Key Characteristics:**
 - Una tinta por tomo, con tres tonos: `--tomo` (plana), `--tomo-lomo` (oscura) y `--tomo-papel` (fondo claro).
@@ -265,6 +267,9 @@ Esquinas moderadas: 6 px (`--radius-sm`) en botones, campos, menús y avisos; 8 
 
 ### Portada del tomo (signature)
 En el estante: tinta plana a lo ancho, lomo de 18 px a la izquierda, código del grupo en una etiqueta blanca al 16 %, título condensado blanco abajo a la izquierda, al menos 190 px de alto; toda la portada abre el curso y el menú «⋯» queda encima. Con imagen de portada, un velo de tinta (#111a2e del 20 al 78 %) sobre la foto. Archivada, en gris (`grayscale(0.85)`). Dentro del curso, `.hub-banner` repite la portada a mayor escala con lomo de 26 px; las tarjetas de unidad alternan tinta y lomo.
+
+### Pila de tomos (acceso)
+En el panel de tinta del acceso, cuatro tomos acostados (`.pila-tomo` con `data-theme`) con las partes del aula, decorativos (`aria-hidden`): tinta plana, cabeza y pie del lomo de 9 px (5 px en el teléfono), esquina de 4 px, título blanco condensado 800 (`title`, 20 px; el de abajo, más grueso, `cover-title` a 24 px), 3 px entre uno y otro y un poco desalineados para que se lean como libros apilados y no como barras. Llegan desde el borde de la caja (`overflow: hidden`). En el teléfono la pila va a la izquierda del título, con texto `label` de 12 px.
 
 ### Diálogo y avisos
 Diálogo de 8 px sin borde, sombra grande y filete de 2 px de la tinta bajo el encabezado (título 24 px condensado). Avisos (`.notice`) en papel de la tinta con título del lomo. Notificación emergente (`#toast`) en tinta con texto blanco.
