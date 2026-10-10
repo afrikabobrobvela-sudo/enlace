@@ -466,3 +466,92 @@ footer a { padding-block: 4px; }
 .answer-review li.partial, .answer-review li.pending { border-left-color: #c98a00; }
 .answer-review p { margin: 2px 0; }
 .answer-review .answer-q { font-weight: 600; }
+
+/* ---- 12.65: «Los libros llegan» ---------------------------------------------------------------------------- */
+/* La marca son tres lomos que llegan deslizándose uno tras otro. Un solo gesto por pantalla de entrada:
+   - barra: la marca, una vez al abrir la página;
+   - carga (index.html): los lomos pasan en ciclo; solo se ve si los datos tardan más de 0.4 s;
+   - acceso (login.js): la pila de tomos entra desde el borde de la caja;
+   - Mis cursos: las portadas llegan al estante la primera vez (shelfArrival() en workspace.js).
+   Solo transform y opacidad; con movimiento reducido todo aparece quieto y completo. */
+.lomo { transform-box: fill-box; }
+@keyframes libro-llega {
+  from { transform: translateX(-140%); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}
+@keyframes libro-pasa {
+  0% { transform: translateX(-140%); opacity: 0; animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1); }
+  30%, 72% { transform: none; opacity: 1; animation-timing-function: cubic-bezier(0.7, 0, 0.84, 0); }
+  100% { transform: translateX(140%); opacity: 0; }
+}
+@keyframes tomo-llega { from { transform: translateX(calc(-100% - 80px)); } } /* fuera de la caja aunque el tomo esté recorrido */
+@keyframes portada-llega { from { transform: translateX(-36px); opacity: 0; } }
+@keyframes arranque-aparece { from { opacity: 0; } }
+
+/* Carga inicial: la marca sin su cuadro, sobre el papel. */
+.arranque { display: grid; justify-items: center; gap: 2px; padding-top: min(14vh, 120px); }
+.arranque-marca { width: 64px; height: 64px; }
+.arranque .empty { padding: 0; color: var(--ink-soft); }
+
+/* Acceso: una pila de tomos con las partes del aula. Juntos, con las cabezas del lomo más oscuras y un poco
+   desalineados, para que se lean como libros apilados y no como barras de una gráfica. */
+@media (min-width: 721px) {
+  body.signed-out #main { display: flex; flex-direction: column; justify-content: center; }
+}
+.login-pila { display: grid; justify-items: start; gap: 3px; margin: 4px 0 14px; }
+.pila-tomo {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  height: 42px;
+  padding: 0 24px;
+  border-radius: 4px;
+  background: var(--tomo);
+  box-shadow: inset 9px 0 0 var(--tomo-lomo), inset -9px 0 0 var(--tomo-lomo); /* cabeza y pie del lomo */
+  color: #fff;
+  font-family: var(--condensada);
+  font-stretch: 80%;
+  font-weight: 800;
+  font-size: 20px;
+  line-height: 1;
+  white-space: nowrap;
+}
+.pila-tomo:nth-child(1) { width: 66%; margin-left: 22px; height: 40px; }
+.pila-tomo:nth-child(2) { width: 58%; margin-left: 8px; height: 36px; }
+.pila-tomo:nth-child(3) { width: 80%; margin-left: 30px; height: 46px; }
+.pila-tomo:nth-child(4) { width: 88%; height: 50px; font-size: 24px; font-stretch: 72%; }
+@media (max-width: 720px) {
+  /* En el teléfono la pila va junto al título, para que el botón de entrar siga a la vista. */
+  .login-brand > div:first-child { display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: 16px; align-items: end; }
+  .login-brand > div:first-child > h2 { grid-column: 2; grid-row: 1; margin: 0 !important; font-size: 30px !important; line-height: 0.95; }
+  .login-brand > div:first-child > p { grid-column: 1 / -1; margin-top: 16px; }
+  .login-pila { margin: 0; gap: 2px; }
+  .pila-tomo { padding: 0 11px; box-shadow: inset 5px 0 0 var(--tomo-lomo), inset -5px 0 0 var(--tomo-lomo); font-size: 12px; font-stretch: 85%; letter-spacing: 0.04em; }
+  .pila-tomo:nth-child(1) { width: 104px; margin-left: 10px; height: 21px; }
+  .pila-tomo:nth-child(2) { width: 98px; margin-left: 4px; height: 20px; }
+  .pila-tomo:nth-child(3) { width: 108px; margin-left: 14px; height: 23px; }
+  .pila-tomo:nth-child(4) { width: 128px; height: 25px; font-size: 12px; font-stretch: 85%; }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .wordmark .lomo { animation: libro-llega 0.6s cubic-bezier(0.16, 1, 0.3, 1) both; }
+  .wordmark .lomo-2 { animation-delay: 0.1s; }
+  .wordmark .lomo-3 { animation-delay: 0.2s; }
+
+  .arranque { animation: arranque-aparece 0.25s ease-out 0.4s both; }
+  .arranque-marca .lomo { animation: libro-pasa 2.2s both infinite; }
+  .arranque-marca .lomo-2 { animation-delay: 0.12s; }
+  .arranque-marca .lomo-3 { animation-delay: 0.24s; }
+
+  .pila-tomo { animation: tomo-llega 0.7s cubic-bezier(0.16, 1, 0.3, 1) both; }
+  .pila-tomo:nth-child(2) { animation-delay: 0.08s; }
+  .pila-tomo:nth-child(3) { animation-delay: 0.16s; }
+  .pila-tomo:nth-child(4) { animation-delay: 0.24s; }
+
+  .cards.llegan > article.course { animation: portada-llega 0.6s cubic-bezier(0.16, 1, 0.3, 1) both; }
+  .cards.llegan > article.course:nth-child(2) { animation-delay: 0.05s; }
+  .cards.llegan > article.course:nth-child(3) { animation-delay: 0.1s; }
+  .cards.llegan > article.course:nth-child(4) { animation-delay: 0.15s; }
+  .cards.llegan > article.course:nth-child(5) { animation-delay: 0.2s; }
+  .cards.llegan > article.course:nth-child(n + 6) { animation-delay: 0.25s; }
+}

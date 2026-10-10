@@ -43,8 +43,20 @@ function workspaceHome() {
   $('#main').innerHTML = `<section class="home-courses"><div class="home-title-row"><div><p class="workspace-eyebrow">ENLACE · BUAP</p><h1>Mis cursos</h1><p class="muted">Tus materias, grupos y espacios de aprendizaje.</p></div><div class="action-row">${courses.some(c => !c.canTeach && !c.archived_at) ? '<button class="primary" data-checkin-code>Registrar asistencia</button>' : ''}${courses.length ? button('Calendario', 'calendar', '', 'secondary') : ''}${['admin', 'teacher'].includes(me.role) ? button('Curso de ejemplo', 'demo-course', '', 'secondary') : ''}${me.role === 'admin' ? button('Docentes' + (me.pendingTeacherRequests ? ` <span class="badge-count" aria-label="${me.pendingTeacherRequests} solicitudes pendientes">${me.pendingTeacherRequests}</span>` : ''), 'teachers', '', 'secondary') + button('Usuarios', 'users', '', 'secondary') + button('Reportes', 'reports', '', 'secondary') : ''}${['admin', 'teacher'].includes(me.role) ? button('＋ Crear curso', 'new-course') : ''}</div></div>${registrationBanner()}<div id="homeDashboard" class="home-dashboard" hidden></div><div class="workspace-filterbar"><label class="search-control"><span class="sr-only">Buscar por materia o grupo</span><input type="search" data-course-search placeholder="Buscar por materia o grupo…"></label><label class="filter-control">Mostrar<select data-course-filter><option value="all">Cursos activos</option><option value="teach">Cursos que imparto</option><option value="learn">Cursos en los que estoy inscrito</option><option value="archived">Cursos archivados</option></select></label><span class="muted" id="courseCount">${courses.length} cursos</span></div><div class="cards">${courses.map(c => `<article class="course ${c.archived_at ? 'is-archived' : ''}" data-theme="${courseThemeOf(c)}" data-archived="${c.archived_at ? 'yes' : 'no'}" data-course-card data-teach="${c.canTeach ? 'yes' : 'no'}" data-search-text="${esc((c.name + ' ' + c.group_name).toLowerCase())}"><div class="course-cover ${c.cover_updated ? 'has-cover' : ''}"${coverStyle(c)}><span class="code">${esc(c.group_name)}</span><h2>${button(esc(c.name), 'course', c.id, 'course-title-link')}</h2>${c.canTeach && !c.archived_at || c.canDelete ? `<details class="card-actions"><summary aria-label="Opciones de ${esc(c.name)}">⋯</summary><div class="card-menu">${c.canTeach && !c.archived_at ? button('Editar curso y portada', 'edit-course-card', c.id, 'table-link') : ''}${c.canDelete ? button('Eliminar curso / grupo', 'delete-course', c.id, 'danger-link') : ''}</div></details>` : ''}</div><div class="course-content"><span class="role-pill">${c.canTeach ? 'Docente' : 'Alumno'}</span>${c.period ? `<span class="role-pill period-pill">${esc(c.period)}</span>` : ''}${c.archived_at ? '<span class="role-pill archived-pill">Archivado</span>' : ''}<div class="course-card-footer">${button('Abrir curso →', 'course', c.id, 'text-btn')}</div></div></article>`).join('')}</div>${!courses.length ? empty('Tu espacio está listo', me.role === 'student' ? 'Cuando tu docente te inscriba con el correo de tu cuenta, tus cursos aparecerán aquí.' : 'Crea una materia, asigna su grupo y organiza el contenido para tus alumnos.') : '<p class="empty" id="noCourseResults" hidden>No hay cursos que coincidan con tu búsqueda.</p>'}</section>`;
   decorateCourseVisibility();
   filterCourses(); // oculta los archivados en la vista inicial
+  shelfArrival();
   renderHomeDashboard();
   maybeAskClassification();
+}
+
+/* 12.65: la primera vez que se ve el estante en esta carga de la página, las portadas llegan una tras otra
+   (coleccion.css, «Los libros llegan»). Se quita la clase al terminar para que buscar o volver no las repita. */
+let shelfArrived = false;
+function shelfArrival() {
+  if (shelfArrived) return;
+  shelfArrived = true;
+  const shelf = $('#main .cards');
+  shelf?.classList?.add('llegan');
+  setTimeout(() => shelf?.classList?.remove('llegan'), 1400);
 }
 
 function decorateCourseVisibility() {
