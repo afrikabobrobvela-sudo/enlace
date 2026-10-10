@@ -72,4 +72,45 @@ for (const attack of attacks) {
   checks += 4;
 }
 
-console.log(`PASS: ${checks} verificaciones de texto con formato — títulos, listas, enlaces, imágenes propias, fórmulas intactas y sin HTML ni enlaces peligrosos.`);
+// ---- Videos (12.66): solo en su línea y de sitios admitidos; el reproductor se arma con el identificador ----
+const iframeSrc = (text) => /<iframe src="([^"]*)"/.exec(rich(text))?.[1];
+assert.equal(iframeSrc('https://www.youtube.com/watch?v=dQw4w9WgXcQ'), 'https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ?rel=0');
+assert.equal(iframeSrc('  https://youtu.be/dQw4w9WgXcQ?t=95  '), 'https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ?rel=0&amp;start=95');
+assert.equal(iframeSrc('https://m.youtube.com/watch?feature=share&v=dQw4w9WgXcQ&t=30s'), 'https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ?rel=0&amp;start=30');
+assert.equal(iframeSrc('https://www.youtube.com/shorts/dQw4w9WgXcQ'), 'https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ?rel=0');
+assert.equal(iframeSrc('https://vimeo.com/76979871'), 'https://player.vimeo.com/video/76979871');
+assert.equal(iframeSrc('https://vimeo.com/76979871/8272103f6e'), 'https://player.vimeo.com/video/76979871?h=8272103f6e');
+assert.equal(iframeSrc('https://drive.google.com/file/d/1AbCdEfGhIjKlMnOpQ_rs-tu/view?usp=sharing'), 'https://drive.google.com/file/d/1AbCdEfGhIjKlMnOpQ_rs-tu/preview');
+assert.equal(iframeSrc('https://customer-abc123.cloudflarestream.com/0123456789abcdef0123456789abcdef/watch'), 'https://customer-abc123.cloudflarestream.com/0123456789abcdef0123456789abcdef/iframe');
+checks += 8;
+html = rich('Repaso:\nhttps://youtu.be/dQw4w9WgXcQ\nY después la práctica.');
+has(html, '<p>Repaso:</p><figure class="rich-video">', 'El video corta el párrafo');
+has(html, 'title="Video de YouTube"', 'El reproductor lleva título accesible');
+has(html, 'referrerpolicy="strict-origin-when-cross-origin"', 'YouTube recibe el origen (sin él no reproduce)');
+has(html, '<a href="https://youtu.be/dQw4w9WgXcQ" target="_blank" rel="noopener noreferrer">Abrir en YouTube</a>', 'Enlace de respaldo');
+has(html, '<p>Y después la práctica.</p>', 'El texto sigue después del video');
+// Dentro de una oración, de otro sitio o con identificador inválido: queda como enlace.
+lacks(rich('Mira https://youtu.be/dQw4w9WgXcQ antes de clase'), '<iframe', 'En medio del texto es un enlace');
+const videoAttacks = [
+  'https://evil.test/watch?v=dQw4w9WgXcQ',
+  'https://youtube.com.evil.test/watch?v=dQw4w9WgXcQ',
+  'https://www.youtube.com/watch?v=dQw4w9WgXc"onload=alert(1)',
+  'https://www.youtube.com/watch?v=dQw4w9W<b>',
+  'https://vimeo.com/123/"><script>alert(1)</script>',
+  'https://customer-x.cloudflarestream.com/../../evil/iframe',
+  'https://drive.google.com/file/d/../../evil.test/view',
+  'javascript:alert(1)//https://youtu.be/dQw4w9WgXcQ',
+];
+for (const attack of videoAttacks) {
+  html = rich(attack);
+  lacks(html, '<iframe', 'No es un video admitido: ' + attack);
+  assert(!/<(script|b)[\s>]/i.test(html), 'Sin etiquetas del usuario: ' + attack + ' → ' + html);
+  checks++;
+}
+// Con un identificador válido y basura después, la dirección del reproductor solo lleva el identificador.
+const src = iframeSrc('https://www.youtube.com/watch?v=dQw4w9WgXcQ&x="><script>alert(1)</script>');
+assert(src === undefined || src === 'https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ?rel=0', 'Reproductor sin basura: ' + src);
+lacks(rich('https://www.youtube.com/watch?v=dQw4w9WgXcQ&x="><script>alert(1)</script>'), '<script', 'La basura se escapa');
+checks++;
+
+console.log(`PASS: ${checks} verificaciones de texto con formato — títulos, listas, enlaces, imágenes propias, fórmulas intactas, videos solo de sitios admitidos y sin HTML ni enlaces peligrosos.`);
