@@ -140,6 +140,7 @@ export const importRoutes = {
       );
     }
     await db.batch(statements);
-    return json({ created: newTasks.length, grades: rows.length, widened: widened.length });
+    // `tasks`: las actividades nuevas (12.71: el H5P recuerda la suya para actualizarla después).
+    return json({ created: newTasks.length, grades: rows.length, widened: widened.length, tasks: newTasks.map((t) => ({ id: t.id, title: t.title })) });
   },
 };

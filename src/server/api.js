@@ -55,6 +55,7 @@ import { certificateRoutes } from './constancias.js';
 import { joinRoutes } from './unirse.js';
 import { VISIBLE_TO_STUDENT, annotationRoutes } from './anotaciones.js';
 import { messageRoutes } from './mensajes.js';
+import { h5pRoutes } from './h5p.js';
 import { clearSessionCookie, identity, lastLogins, revokeAllStatements } from './auth.js';
 import {
   assertAvailable,
@@ -150,7 +151,7 @@ export async function api(request, env) {
     assertHasPhoto(route, user, env);
     const ctx = { db: env.DB, env, user, url, request };
     const handler =
-      routes[route] || attendanceRoutes[route] || gradingRoutes[route] || directoryRoutes[route] || privacyRoutes[route] || periodRoutes[route] || dashboardRoutes[route] || reportRoutes[route] || demoRoutes[route] || backupRoutes[route] || userRoutes[route] || bankRoutes[route] || sectionRoutes[route] || photoRoutes[route] || digestRoutes[route] || accessRoutes[route] || specialAccessRoutes[route] || forumRoutes[route] || importRoutes[route] || coverRoutes[route] || certificateRoutes[route] || joinRoutes[route] || annotationRoutes[route] || messageRoutes[route];
+      routes[route] || attendanceRoutes[route] || gradingRoutes[route] || directoryRoutes[route] || privacyRoutes[route] || periodRoutes[route] || dashboardRoutes[route] || reportRoutes[route] || demoRoutes[route] || backupRoutes[route] || userRoutes[route] || bankRoutes[route] || sectionRoutes[route] || photoRoutes[route] || digestRoutes[route] || accessRoutes[route] || specialAccessRoutes[route] || forumRoutes[route] || importRoutes[route] || coverRoutes[route] || certificateRoutes[route] || joinRoutes[route] || annotationRoutes[route] || messageRoutes[route] || h5pRoutes[route];
     if (handler) return await handler(ctx);
     if (request.method === 'GET' && url.pathname.startsWith('/api/file/')) return await downloadFile(ctx, url.pathname.slice(10));
     if (request.method === 'GET' && url.pathname.startsWith('/api/photo/')) return await servePhoto(ctx, url.pathname.slice(11));
@@ -689,10 +690,10 @@ const routes = {
     // alumno (o la vista de un alumno), solo el suyo. Se leen antes de filtrar por las condiciones de liberación.
     const gradebook = await courseGradebook(db, courseId, { teacher: teach, userId: viewer, memberId: viewing?.id, attemptUser });
     const progress = teach
-      ? await all(db, 'SELECT member, record, opened_at, completed_at FROM aula_progress WHERE course=?', courseId)
+      ? await all(db, 'SELECT member, record, opened_at, completed_at, score FROM aula_progress WHERE course=?', courseId)
       : await all(
           db,
-          `SELECT p.member, p.record, p.opened_at, p.completed_at FROM aula_progress p JOIN aula_members m ON m.id=p.member
+          `SELECT p.member, p.record, p.opened_at, p.completed_at, p.score FROM aula_progress p JOIN aula_members m ON m.id=p.member
            WHERE p.course=?1 AND (m.id=?3 OR (?3 IS NULL AND m.user_id=?2))`,
           courseId,
           viewer,
@@ -835,17 +836,27 @@ const routes = {
     await assertConditions(db, material.data.conditions, member.id, 'Material no disponible.');
     await assertConditions(db, unitData?.data.conditions, member.id, 'Material no disponible.');
     const completed = body.action === 'complete' ? now : null;
+    // Actividad H5P (12.71): al terminarla llega su calificación (0 a 10) y se conserva la mejor.
+    let score = null;
+    if (body.score !== undefined && body.score !== null) {
+      score = Number(body.score);
+      if (body.action !== 'complete' || !Number.isFinite(score) || score < 0 || score > 10) fail('Resultado no válido.');
+      score = Math.round(score * 100) / 100;
+    }
     await run(
       db,
-      `INSERT INTO aula_progress (member,record,course,opened_at,completed_at) VALUES (?1,?2,?3,?4,?5)
+      `INSERT INTO aula_progress (member,record,course,opened_at,completed_at,score,score_at) VALUES (?1,?2,?3,?4,?5,?7,CASE WHEN ?7 IS NULL THEN NULL ELSE ?4 END)
        ON CONFLICT(member,record) DO UPDATE SET opened_at=coalesce(aula_progress.opened_at, excluded.opened_at),
-         completed_at=CASE ?6 WHEN 'open' THEN aula_progress.completed_at ELSE excluded.completed_at END`,
+         completed_at=CASE ?6 WHEN 'open' THEN aula_progress.completed_at ELSE excluded.completed_at END,
+         score_at=CASE WHEN ?7 IS NOT NULL AND (aula_progress.score IS NULL OR ?7>aula_progress.score) THEN ?4 ELSE aula_progress.score_at END,
+         score=CASE WHEN ?7 IS NOT NULL AND (aula_progress.score IS NULL OR ?7>aula_progress.score) THEN ?7 ELSE aula_progress.score END`,
       member.id,
       material.id,
       body.course,
       now,
       completed,
       body.action,
+      score,
     );
     return json({ record: material.id, opened_at: now, completed_at: body.action === 'open' ? undefined : completed });
   },
@@ -1329,6 +1340,11 @@ const routes = {
           if (!['https:', 'http:'].includes(parsed.protocol)) fail('Usa un enlace http o https.');
         }
         data.fileIds = await validateFiles(db, input.fileIds, body.course, user, 'material');
+        // Actividad del libro a la que se llevan los resultados de su H5P (12.71); el editor no la manda: se conserva.
+        const h5pTask = input.h5pTask ?? previous?.data.h5pTask;
+        if (h5pTask && (await one(db, 'SELECT 1 AS ok FROM aula_tasks WHERE id=? AND course=? AND deleted_at IS NULL', String(h5pTask), body.course))) {
+          data.h5pTask = String(h5pTask);
+        }
       }
       if (kind === 'quiz') {
         Object.assign(data, quizFields(input));
@@ -2313,19 +2329,12 @@ const routes = {
 const MY_SECTION = "(SELECT section FROM aula_members WHERE course=?1 AND user_id=?4 AND role='student')";
 const MY_MEMBER = "(SELECT id FROM aula_members WHERE course=?1 AND user_id=?4 AND role='student')";
 
-async function downloadFile({ db, env, user, url, request }, id) {
-  const file = await one(db, 'SELECT * FROM aula_files WHERE id=?', id);
-  if (!file) fail('Archivo no encontrado.', 404);
-  // Con un examen abierto que bloquea la plataforma, solo se descargan las imágenes de ese examen.
-  if (user.activeExam) {
-    const inExam = await one(
-      db,
-      "SELECT 1 AS ok FROM aula_records r, json_each(r.data,'$.questions') qq WHERE r.id=? AND json_extract(qq.value,'$.image')=? LIMIT 1",
-      user.activeExam.quiz,
-      id,
-    );
-    if (!inExam) fail(ACTIVE_EXAM_MESSAGE, 423, { activeExam: user.activeExam });
-  }
+/**
+ * ¿Puede esta persona leer el archivo? Las mismas reglas para descargarlo, verlo o abrirlo como actividad H5P (12.71):
+ * quien enseña en el curso, su dueño, o un alumno si está enlazado desde algo que le corresponde ver.
+ */
+export async function assertCanReadFile({ db, user, url }, file) {
+  const id = file.id;
   // Imagen de una pregunta del banco (propia o compartida por la academia): la ve el docente aunque sea de otro curso.
   const fromBank = url.searchParams.get('bank') === '1' && file.scope === 'material' && (await bankImageVisible(db, user, id));
   const a = fromBank ? { teach: true } : await access(db, user, file.course);
@@ -2374,6 +2383,22 @@ async function downloadFile({ db, env, user, url, request }, id) {
       ));
     if (!permitted) fail('No tienes acceso a este archivo.', 403);
   }
+}
+
+async function downloadFile({ db, env, user, url, request }, id) {
+  const file = await one(db, 'SELECT * FROM aula_files WHERE id=?', id);
+  if (!file) fail('Archivo no encontrado.', 404);
+  // Con un examen abierto que bloquea la plataforma, solo se descargan las imágenes de ese examen.
+  if (user.activeExam) {
+    const inExam = await one(
+      db,
+      "SELECT 1 AS ok FROM aula_records r, json_each(r.data,'$.questions') qq WHERE r.id=? AND json_extract(qq.value,'$.image')=? LIMIT 1",
+      user.activeExam.quiz,
+      id,
+    );
+    if (!inExam) fail(ACTIVE_EXAM_MESSAGE, 423, { activeExam: user.activeExam });
+  }
+  await assertCanReadFile({ db, user, url }, file);
   if (url.searchParams.get('preview') === '1') return previewFile(env, request, file);
   const object = await env.BUCKET.get(file.r2_key || file.id);
   if (!object) fail('Archivo no disponible.', 404);

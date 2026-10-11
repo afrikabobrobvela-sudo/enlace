@@ -11,8 +11,9 @@ export const SECURITY_HEADERS = {
 export const CONTENT_SECURITY_POLICY =
   "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; " +
   "connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self' https://accounts.google.com; frame-ancestors 'none'; " +
-  // Videos incrustados (12.66, richVideo() en richtext.js): solo los reproductores de estos sitios.
-  "frame-src https://www.youtube-nocookie.com https://player.vimeo.com https://drive.google.com https://*.cloudflarestream.com";
+  // Videos incrustados (12.66, richVideo() en richtext.js): solo los reproductores de estos sitios; 'self' para el
+  // reproductor H5P (12.71), que corre aislado con la CSP `sandbox` de /h5p/.
+  "frame-src 'self' https://www.youtube-nocookie.com https://player.vimeo.com https://drive.google.com https://*.cloudflarestream.com";
 
 export function json(data, status = 200, extraHeaders = {}) {
   return new Response(JSON.stringify(data), {

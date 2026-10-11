@@ -49,6 +49,9 @@ export const progress = sqliteTable(
     course: text('course').notNull(),
     openedAt: text('opened_at'),
     completedAt: text('completed_at'),
+    // Migración 0043 (12.71): la mejor calificación (0 a 10) de la actividad H5P del material y cuándo se obtuvo.
+    score: real('score'),
+    scoreAt: text('score_at'),
   },
   (t) => [primaryKey({ columns: [t.member, t.record] }), index('aula_progress_course').on(t.course)],
 );

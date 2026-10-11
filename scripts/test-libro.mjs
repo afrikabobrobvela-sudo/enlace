@@ -101,7 +101,7 @@ r = await imp({
     { title: 'Proyecto', grades: [{ member: id('carla'), grade: 10 }] },
   ],
 });
-assert.deepEqual(r, { created: 1, grades: 3, widened: 0 });
+assert.deepEqual({ ...r, tasks: r.tasks.length }, { created: 1, grades: 3, widened: 0, tasks: 1 }); // tasks (12.71): las actividades creadas
 data = await course();
 const nota = (task, n) => data.records.find((x) => x.kind === 'submission' && x.data.task === task && x.data.member === id(n))?.data.grade;
 const proyecto = data.records.find((x) => x.kind === 'task' && x.data.title === 'Proyecto');
@@ -110,7 +110,7 @@ assert.deepEqual(proyecto.data.sections, [bv], 'La actividad nueva es solo para 
 assert(!(await course('ana')).records.some((x) => x.id === proyecto.id), 'Ana (5AV) no ve la actividad de 5BV');
 // La otra sección importa a la misma actividad: ahora es para las dos y Ana ve su calificación.
 r = await imp({ section: av, activities: [{ task: proyecto.id, grades: [{ member: id('ana'), grade: 6 }] }, { task: t3, grades: [{ member: id('beto'), grade: 5 }] }] });
-assert.deepEqual(r, { created: 0, grades: 2, widened: 2 });
+assert.deepEqual({ ...r, tasks: r.tasks.length }, { created: 0, grades: 2, widened: 2, tasks: 0 }); // tasks (12.71): las actividades creadas
 data = await course();
 assert.deepEqual(data.records.find((x) => x.id === proyecto.id).data.sections, [av, bv].sort());
 assert.deepEqual([nota(proyecto.id, 'ana'), nota(proyecto.id, 'carla'), nota(t3, 'beto')], [6, 10, 5]);
@@ -118,7 +118,7 @@ const deAna = await course('ana');
 assert.equal(deAna.records.find((x) => x.kind === 'submission' && x.data.task === proyecto.id)?.data.grade, 6);
 // Sin sección (todo el curso) funciona como antes y no cambia las secciones de la actividad.
 r = await imp({ activities: [{ task: t2, grades: [{ member: id('beto'), grade: 10 }] }] });
-assert.deepEqual(r, { created: 0, grades: 1, widened: 0 });
+assert.deepEqual({ ...r, tasks: r.tasks.length }, { created: 0, grades: 1, widened: 0, tasks: 0 }); // tasks (12.71): las actividades creadas
 checks += 9;
 assert.deepEqual(store.raw().prepare('PRAGMA foreign_key_check').all(), []);
 
