@@ -12,6 +12,7 @@ const NAV_ICON_PATHS = {
   forums: 'M4 5h16v10H10l-5 4v-4H4zM8 9h8M8 12h5',
   attendance: 'M4 5h16v16H4zM4 9h16M8 3v4M16 3v4M9 15l2 2 4-4',
   notices: 'M4 10v4l3 1 1 5h3l-1-4 8 3V5L7 9zM18 9.5a3 3 0 0 1 0 5',
+  messages: 'M3 6h18v12H3zM3 6l9 7 9-7',
   groups: 'M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM2.5 20a6.5 6.5 0 0 1 13 0M16 4.5a3.5 3.5 0 0 1 0 6.5M18 14.5a6 6 0 0 1 3.5 5.5',
   members: 'M4 4h16v16H4zM12 11a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5zM7.5 17a4.5 4.5 0 0 1 9 0',
   progress: 'M3 17l6-6 4 4 7-7M14 8h6v6',
@@ -30,6 +31,7 @@ const NAV_NAMES = {
   forums: 'Foros',
   attendance: 'Asistencia',
   notices: 'Noticias',
+  messages: 'Mensajes',
   groups: 'Grupos',
   members: 'Alumnos',
   progress: 'Progreso',
@@ -44,7 +46,7 @@ const navIcon = (name) =>
 /** Las cuatro secciones de la barra: el alumno consulta sus notas; el docente pasa lista desde el teléfono. */
 const bottomNavSections = () => (teaches() ? ['hub', 'content', 'tasks', 'attendance'] : ['hub', 'content', 'tasks', 'grades']);
 const moreSections = () =>
-  (teaches() ? ['grades', 'quizzes', 'forums', 'notices', 'groups', 'members', 'progress', 'admin'] : ['quizzes', 'forums', 'attendance', 'notices', 'groups', 'members']).filter(
+  (teaches() ? ['grades', 'quizzes', 'forums', 'messages', 'notices', 'groups', 'members', 'progress', 'admin'] : ['quizzes', 'forums', 'messages', 'attendance', 'notices', 'groups', 'members']).filter(
     (s) => !bottomNavSections().includes(s),
   );
 

@@ -1,9 +1,41 @@
-# Enlace · versión 12.68
+# Enlace · versión 12.71
 
 Plataforma académica independiente para docentes y alumnos de cualquier academia (nació en la Academia de Física de la BUAP), con interfaz inspirada en Brightspace.
 No es el código de D2L Brightspace ni una plataforma oficial de la BUAP.
 
 Esta versión se despliega en **tu propia cuenta de Cloudflare** (Workers + D1 + R2, plan gratuito) y ya no depende de ChatGPT Sites.
+
+## Novedades de la versión 12.71 (actividades interactivas H5P)
+
+- **Actividades H5P dentro de los materiales.** Crea la actividad en [Lumi](https://app.lumi.education) (gratis, para Windows, Mac y Linux) o en h5p.com, descárgala como archivo **.h5p** y súbela como archivo de un material. El material muestra **«Abrir actividad interactiva»** y se juega dentro de Enlace, también en el celular.
+- **Resultado**: al terminar, el material queda completado y se guarda la **mejor calificación** de cada alumno (sobre 10). El alumno ve «Tu mejor resultado». Tú ves cuántos la terminaron, **«Ver resultados»** (lista por alumno) y **«Llevar al libro de calificaciones»**: la primera vez crea una actividad con el nombre del material y después actualiza esa misma.
+- **Seguridad**: una actividad H5P trae su propio código; Enlace la abre **aislada** (no puede leer la sesión ni actuar en Enlace en nombre del alumno). Solo la abren quienes pueden ver el material.
+- Ten en cuenta:
+  - El avance **dentro** de la actividad no se guarda entre visitas (si el alumno cierra a la mitad, empieza de nuevo); el resultado final sí.
+  - El resultado lo informa el navegador del alumno: úsalo para actividades de práctica o de poco peso, no para exámenes (para eso están las evaluaciones de Enlace).
+  - Funcionan las actividades que no dependen de servicios externos; los videos interactivos con YouTube también se permiten.
+- **Migración nueva** (`0043_resultado_h5p.sql`): solo agrega dos columnas.
+- El reproductor es [h5p-standalone](https://github.com/tunapanda/h5p-standalone) 3.8.2 (licencia MIT), incluido en Enlace.
+
+## Novedades de la versión 12.70 (mensajes directos)
+
+- **Mensajes privados** en cada curso, en *Más → Mensajes*:
+  - **Tú** ves la lista de conversaciones (las que tienen mensajes sin leer, resaltadas y con su número) y respondes en cada una. Con **«Nuevo mensaje»** escribes a un alumno, a varios o a todo el grupo (respeta el filtro de sección): cada uno lo recibe en su conversación privada, sin ver a quién más se envió.
+  - **El alumno** tiene una sola conversación con los docentes del curso y puede escribirte cuando lo necesite (con un tope de 30 mensajes por hora para evitar abusos).
+  - Tus co-docentes también ven las conversaciones del curso.
+- **Avisos**: cada mensaje nuevo aparece en la **campana** («Mensaje de …», un aviso por conversación) y en el **resumen diario por correo** («Tienes N mensajes nuevos»).
+- Los mensajes admiten el mismo formato que el resto de Enlace (negritas, listas, enlaces y fórmulas).
+- **Migración nueva** (`0042_mensajes.sql`): solo agrega dos tablas.
+
+## Novedades de la versión 12.69 (anotar entregas)
+
+- **Corrige sobre el archivo del alumno.** En la pantalla para calificar una entrega, cada PDF o foto tiene el botón **«Anotar»**. Se abre a pantalla completa con:
+  - **Pluma** para marcar o subrayar, **Resaltar** (arrastra un recuadro amarillo), **Comentario** (toca donde va y escribe; aparece un número en la página y el texto abajo) y **Borrar** (toca una marca), con **Deshacer**.
+  - **Desplazar**, para mover la página en el celular o la tableta sin dibujar.
+  - **Guardar** y **Descargar con correcciones** (un PDF con las marcas y, al pie de cada página, sus comentarios).
+- **El alumno las ve cuando publicas la calificación**: en su entrega aparece «Ver correcciones» y puede descargar el PDF corregido. Mientras la calificación sea borrador, no ve nada. Nunca ve las de otros.
+- Funciona con PDF (hasta 60 páginas) y con fotos (JPG, PNG, WebP). Las marcas no cambian el archivo original.
+- **Migración nueva** (`0041_anotaciones.sql`): solo agrega una tabla.
 
 ## Novedades de la versión 12.68 (código para unirse y cursos a tu ritmo)
 

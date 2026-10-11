@@ -143,6 +143,16 @@ export const dashboardRoutes = {
          SELECT 'submission', t.id, s.course, c.name, t.title, s.submitted
            FROM teach CROSS JOIN aula_submissions s ON s.course=teach.course AND s.manual=0 AND s.submitted>?2
            JOIN aula_tasks t ON t.id=s.task AND t.deleted_at IS NULL JOIN aula_courses c ON c.id=s.course
+         UNION ALL
+         -- Mensajes directos (12.70), uno por conversación: al alumno, los de sus docentes; al docente, los de sus alumnos.
+         -- Con estos son 5 términos, el máximo que admite D1 en un SELECT compuesto.
+         SELECT 'message', g.member, g.course, c.name, 'Mensaje de ' || g.author_name, max(g.created)
+           FROM mine CROSS JOIN aula_messages g ON g.member=mine.member AND g.from_teacher=1 AND g.created>?2
+           JOIN aula_courses c ON c.id=g.course GROUP BY g.member
+         UNION ALL
+         SELECT 'message', g.member, g.course, c.name, 'Mensaje de ' || g.author_name, max(g.created)
+           FROM teach CROSS JOIN aula_messages g ON g.course=teach.course AND g.from_teacher=0 AND g.created>?2
+           JOIN aula_courses c ON c.id=g.course GROUP BY g.member
          ORDER BY at DESC LIMIT ${limit}`,
         user.id,
         since,

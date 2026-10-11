@@ -49,6 +49,9 @@ export const progress = sqliteTable(
     course: text('course').notNull(),
     openedAt: text('opened_at'),
     completedAt: text('completed_at'),
+    // Migración 0043 (12.71): la mejor calificación (0 a 10) de la actividad H5P del material y cuándo se obtuvo.
+    score: real('score'),
+    scoreAt: text('score_at'),
   },
   (t) => [primaryKey({ columns: [t.member, t.record] }), index('aula_progress_course').on(t.course)],
 );
@@ -886,3 +889,46 @@ export const certificates = sqliteTable(
   },
   (t) => [uniqueIndex('aula_certificates_member').on(t.course, t.memberId)],
 );
+
+/**
+ * Migración 0041 (12.69): anotaciones del docente sobre un archivo de entrega (PDF o imagen). `data` guarda, por página,
+ * trazos de pluma, recuadros resaltados y comentarios numerados, en coordenadas relativas al ancho de la página
+ * (ver src/server/anotaciones.js). El alumno las ve cuando la calificación de esa entrega está publicada.
+ */
+export const annotations = sqliteTable(
+  'aula_annotations',
+  {
+    fileId: text('file_id').primaryKey(),
+    course: text('course').notNull(),
+    data: text('data').notNull(),
+    updated: text('updated').notNull(),
+    updatedBy: text('updated_by').notNull(),
+  },
+  (t) => [index('aula_annotations_course').on(t.course)],
+);
+
+/**
+ * Migración 0042 (12.70): mensajes directos. Una conversación por inscripción (`member`) entre el alumno y quienes
+ * enseñan en el curso; `from_teacher` dice quién escribió. `aula_message_threads` guarda hasta cuándo leyó cada lado.
+ */
+export const messages = sqliteTable(
+  'aula_messages',
+  {
+    id: text('id').primaryKey(),
+    course: text('course').notNull(),
+    member: text('member').notNull(),
+    fromTeacher: integer('from_teacher').notNull(),
+    author: text('author').notNull(),
+    authorName: text('author_name').notNull(),
+    body: text('body').notNull(),
+    created: text('created').notNull(),
+  },
+  (t) => [index('aula_messages_member').on(t.member, t.created), index('aula_messages_course').on(t.course, t.created)],
+);
+
+export const messageThreads = sqliteTable('aula_message_threads', {
+  member: text('member').primaryKey(),
+  course: text('course').notNull(),
+  studentReadAt: text('student_read_at').notNull().default(''),
+  teacherReadAt: text('teacher_read_at').notNull().default(''),
+});

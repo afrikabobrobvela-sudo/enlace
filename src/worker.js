@@ -10,6 +10,7 @@ import { assets } from './generated/assets.js';
 import { runDigest } from './server/digest.js';
 import { serveSebConfig } from './server/seb.js';
 import { serveCertificatePage } from './server/constancias.js';
+import { serveH5p } from './server/h5p.js';
 
 const TYPES = {
   html: 'text/html; charset=utf-8',
@@ -43,6 +44,9 @@ export default {
     // Configuración de Safe Exam Browser de una evaluación (SEB la descarga sin sesión; 12.28).
     const seb = url.pathname.match(/^\/seb\/([A-Za-z0-9-]{1,64})\.seb$/);
     if (seb && request.method === 'GET') return serveSebConfig(env.DB, seb[1], url.origin);
+    // Actividades H5P (12.71): el reproductor y los archivos del paquete, con token firmado y CSP `sandbox`.
+    const h5p = url.pathname.match(/^\/h5p\/([A-Za-z0-9_.-]{20,400})\/(.*)$/);
+    if (h5p && request.method === 'GET') return serveH5p(env, h5p[1], h5p[2]);
     // Verificación pública de una constancia (12.67): a esta dirección lleva el código QR del PDF.
     const folio = url.pathname.match(/^\/constancia\/([A-Za-z0-9-]{1,40})$/);
     if (folio && request.method === 'GET') return serveCertificatePage(env.DB, folio[1].toUpperCase());
@@ -88,6 +92,8 @@ export default {
       ...SECURITY_HEADERS,
       ...cache,
       ...(assets[name].etag ? { ETag: assets[name].etag } : {}),
+      // El reproductor H5P corre con origen opaco (12.71): sus fuentes y hojas necesitan permiso de otro origen.
+      ...(name.startsWith('vendor/h5p-standalone-') ? { 'Access-Control-Allow-Origin': '*' } : {}),
     };
     const known = request.headers.get('If-None-Match');
     if (known && assets[name].etag && known.split(',').some((tag) => tag.trim().replace(/^W\//, '') === assets[name].etag)) {

@@ -35,7 +35,7 @@ export async function digestMessages(db, env, now = new Date()) {
   // ?1 ahora, ?2 hace 24 h, ?3 hace 72 h (ventanas); solo la consulta de «vence pronto» usa ?4 (dentro de 24 h).
   const params = [nowIsoText, new Date(+now - 24 * HOUR).toISOString(), new Date(+now - 72 * HOUR).toISOString()];
   const soon = new Date(+now + 24 * HOUR).toISOString();
-  const [people, content, tasks, grades, due, toGrade, posts] = await Promise.all([
+  const [people, content, tasks, grades, due, toGrade, posts, inbox] = await Promise.all([
     all(db, `WITH ${RECIPIENTS} SELECT uid, email, name FROM rcpt`, ...params),
     // Noticias, evaluaciones y materiales publicados (o programados que ya se publicaron) desde su último resumen.
     all(
@@ -123,6 +123,20 @@ export async function digestMessages(db, env, now = new Date()) {
        GROUP BY place.uid, coalesce(json_extract(p.data,'$.parent'), p.id) LIMIT 20000`,
       ...params,
     ),
+    // Mensajes directos (12.70): al alumno, los de sus docentes; al docente, los de sus alumnos. Por curso.
+    all(
+      db,
+      `WITH ${RECIPIENTS}, place AS (
+         SELECT uid, course, member, 0 AS teach, since FROM mine
+         UNION ALL
+         SELECT r.uid, c.id, NULL, 1, r.since FROM rcpt r ${TEACHES('r')})
+       SELECT place.uid, c.name AS course_name, count(*) AS n
+       FROM place CROSS JOIN aula_messages g ON g.course=place.course AND g.created>place.since AND g.created<=?1
+         AND ((place.teach=0 AND g.member=place.member AND g.from_teacher=1) OR (place.teach=1 AND g.from_teacher=0))
+       JOIN aula_courses c ON c.id=g.course
+       GROUP BY place.uid, g.course LIMIT 20000`,
+      ...params,
+    ),
   ]);
   const byUser = new Map();
   const add = (uid, course, line) => {
@@ -139,6 +153,7 @@ export async function digestMessages(db, env, now = new Date()) {
   for (const x of tasks) if (!dueSoon.has(x.uid + ':' + x.id)) add(x.uid, x.course_name, `Actividad nueva: «${x.title}»${x.due ? ` (vence ${when(x.due)})` : ''}`);
   for (const x of content) add(x.uid, x.course_name, `${label[x.kind]}: «${x.title}»`);
   for (const x of toGrade) add(x.uid, x.course_name, `${x.n} ${x.n === 1 ? 'entrega nueva' : 'entregas nuevas'} por calificar`);
+  for (const x of inbox) add(x.uid, x.course_name, x.n === 1 ? 'Tienes un mensaje nuevo' : `Tienes ${x.n} mensajes nuevos`);
   for (const x of posts) add(x.uid, x.course_name, `Foro: ${x.n === 1 ? 'publicación nueva' : `${x.n} publicaciones nuevas`} en «${x.title}»`);
   const url = env.ENLACE_URL || '';
   const messages = [];

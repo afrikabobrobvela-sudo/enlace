@@ -578,3 +578,55 @@ footer a { padding-block: 4px; }
 .join-link { margin: 0 0 8px; overflow-wrap: anywhere; }
 .join-qr { width: 200px; max-width: 100%; }
 .join-qr svg { display: block; width: 100%; height: auto; }
+
+/* 12.69: anotar entregas. Diálogo a pantalla completa con las páginas y su capa de marcas (anotar.js). */
+.annotate-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0 12px; }
+dialog.annotator { width: 100vw; height: 100dvh; max-width: none; max-height: none; margin: 0; padding: 0; border: 0; background: #e9edf2; display: flex; flex-direction: column; }
+dialog.annotator:not([open]) { display: none; }
+.ann-toolbar { position: sticky; top: 0; z-index: 2; flex-wrap: wrap; gap: 8px; }
+.ann-group { display: inline-flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.ann-toolbar [aria-pressed="true"] { background: #fff; color: var(--tinta); font-weight: 800; }
+.ann-help { margin: 0; padding: 8px 16px; font-size: 14px; color: var(--ink-soft); background: #fff; border-bottom: 1px solid var(--line); }
+.ann-pages { flex: 1; overflow: auto; padding: 16px; }
+.ann-page { max-width: 1000px; margin: 0 auto 24px; }
+.ann-sheet { position: relative; background: #fff; box-shadow: 0 2px 0 rgba(17, 26, 46, 0.14); }
+.ann-canvas { display: block; width: 100%; height: auto; }
+.ann-sheet svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.ann-pages[data-tool="pen"] svg, .ann-pages[data-tool="box"] svg { touch-action: none; cursor: crosshair; }
+.ann-pages[data-tool="text"] svg { cursor: copy; }
+.ann-pages[data-tool="erase"] svg [data-i] { cursor: pointer; }
+.ann-pages[data-tool="move"] svg, .ann-pages[data-tool="view"] svg { touch-action: auto; }
+.ann-marker { cursor: help; }
+.ann-notes h3 { margin: 10px 0 4px; font-size: 16px; color: var(--granza-lomo, #86102c); }
+.ann-notes ol { margin: 0; padding: 10px 12px 10px 34px; background: #fbe7ec; border-radius: var(--radius-sm); }
+.ann-notes li { margin: 4px 0; }
+@media (max-width: 720px) {
+  .ann-pages { padding: 8px; }
+  .ann-toolbar .viewer-name { flex-basis: 100%; }
+}
+
+/* 12.70: mensajes directos. Conversación en burbujas (las propias a la derecha, en la tinta del curso). */
+.message-thread { display: flex; flex-direction: column; gap: 10px; max-height: min(60vh, 640px); overflow-y: auto; padding: 16px; margin: 0 0 16px; background: var(--surface); border-radius: var(--radius); box-shadow: 0 2px 0 rgba(17, 26, 46, 0.1); }
+.message { max-width: min(78%, 620px); align-self: flex-start; padding: 10px 14px; border-radius: 12px 12px 12px 4px; background: #eef1f5; color: var(--tinta); }
+.message.is-mine { align-self: flex-end; border-radius: 12px 12px 4px 12px; background: var(--tomo); color: #fff; }
+.message.is-mine .message-meta { color: rgba(255, 255, 255, 0.86); }
+.message.is-mine a { color: #fff; }
+.message-meta { margin: 0 0 4px; font-size: 12px; color: var(--ink-faint); }
+.message-body .body-text.rich p:last-child { margin-bottom: 0; }
+.message-empty { margin: auto; }
+.message-form { max-width: 820px; }
+.message-threads { list-style: none; margin: 16px 0 0; padding: 0; display: grid; gap: 8px; }
+.message-thread-item { width: 100%; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 12px; text-align: left; padding: 12px 16px; background: var(--surface); border: 0; border-radius: var(--radius); box-shadow: 0 2px 0 rgba(17, 26, 46, 0.1); cursor: pointer; font: inherit; color: var(--tinta); }
+.message-thread-item:hover { box-shadow: 0 2px 0 var(--tomo); }
+.message-thread-item.is-new { background: var(--tomo-papel); }
+.message-thread-name { font-weight: 700; }
+.message-thread-last { grid-column: 1; color: var(--ink-soft); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.message-thread-date { grid-column: 2; grid-row: 1; font-size: 12px; color: var(--ink-faint); }
+.message-recipient-list { max-height: 260px; overflow-y: auto; display: grid; gap: 2px; margin-top: 6px; padding-left: 8px; }
+
+/* 12.71: actividades H5P dentro de un material. El marco crece con el contenido (h5p-jugador.js avisa su altura). */
+.h5p-box { margin: 12px 0; padding: 12px; border-radius: var(--radius); background: var(--tomo-papel); }
+.h5p-head { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; }
+.h5p-best { color: var(--tinta); }
+.h5p-stage { margin-top: 12px; }
+.h5p-frame { display: block; width: 100%; height: 480px; border: 0; border-radius: var(--radius-sm); background: #fff; }
