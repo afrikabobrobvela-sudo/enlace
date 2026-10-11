@@ -170,6 +170,10 @@ export const courses = sqliteTable(
     cover: text('cover'),
     coverUpdated: text('cover_updated'),
     theme: integer('theme').notNull().default(0),
+    // Migración 0039 (12.67): configuración de constancias en JSON ('' = sin constancias; ver src/server/constancias.js).
+    certificate: text('certificate').notNull().default(''),
+    // Migración 0040 (12.68): código para unirse ('' = sin código; índice único parcial). Nunca sale en las respuestas del curso.
+    joinCode: text('join_code').notNull().default(''),
   },
   (t) => [index('aula_courses_owner').on(t.owner)],
 );
@@ -857,4 +861,28 @@ export const storage = sqliteTable(
     countedAt: text('counted_at').notNull(),
   },
   () => [check('aula_storage_id_check', sql`id = 1`)],
+);
+
+/**
+ * Migración 0039 (12.67): constancias emitidas. El folio (id) aparece en el PDF y en su código QR, que lleva a la página
+ * pública /constancia/<folio>. Copia nombre, curso, horas y firmante al emitirla: no cambia si después se edita el curso.
+ * Sin llaves foráneas a propósito: la verificación debe seguir funcionando aunque se elimine el curso.
+ */
+export const certificates = sqliteTable(
+  'aula_certificates',
+  {
+    id: text('id').primaryKey(),
+    course: text('course').notNull(),
+    memberId: text('member_id').notNull(),
+    userId: text('user_id'),
+    name: text('name').notNull(),
+    courseName: text('course_name').notNull(),
+    hours: real('hours'),
+    grade: real('grade'),
+    signer: text('signer').notNull().default(''),
+    issuedAt: text('issued_at').notNull(),
+    issuedBy: text('issued_by').notNull(),
+    revokedAt: text('revoked_at'),
+  },
+  (t) => [uniqueIndex('aula_certificates_member').on(t.course, t.memberId)],
 );
