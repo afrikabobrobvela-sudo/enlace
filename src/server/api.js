@@ -56,6 +56,7 @@ import { joinRoutes } from './unirse.js';
 import { VISIBLE_TO_STUDENT, annotationRoutes } from './anotaciones.js';
 import { messageRoutes } from './mensajes.js';
 import { h5pRoutes } from './h5p.js';
+import { courseUrl, flushPush, gradeNotice, pushRoutes, pushSql, pushToMembers, pushToTeachers } from './push.js';
 import { clearSessionCookie, identity, lastLogins, revokeAllStatements } from './auth.js';
 import {
   assertAvailable,
@@ -138,7 +139,7 @@ function assertExamRoute(route, url, user) {
   if (!allowed) fail(ACTIVE_EXAM_MESSAGE, 423, { activeExam: user.activeExam });
 }
 
-export async function api(request, env) {
+export async function api(request, env, exec) {
   try {
     const user = await identity(request, env);
     const url = new URL(request.url);
@@ -149,9 +150,10 @@ export async function api(request, env) {
     }
     if (user.activeExam) assertExamRoute(route, url, user);
     assertHasPhoto(route, user, env);
-    const ctx = { db: env.DB, env, user, url, request };
+    // waitUntil: trabajo después de responder (envío de notificaciones, 12.72); en las pruebas no existe.
+    const ctx = { db: env.DB, env, user, url, request, waitUntil: exec?.waitUntil ? (promise) => exec.waitUntil(promise) : null };
     const handler =
-      routes[route] || attendanceRoutes[route] || gradingRoutes[route] || directoryRoutes[route] || privacyRoutes[route] || periodRoutes[route] || dashboardRoutes[route] || reportRoutes[route] || demoRoutes[route] || backupRoutes[route] || userRoutes[route] || bankRoutes[route] || sectionRoutes[route] || photoRoutes[route] || digestRoutes[route] || accessRoutes[route] || specialAccessRoutes[route] || forumRoutes[route] || importRoutes[route] || coverRoutes[route] || certificateRoutes[route] || joinRoutes[route] || annotationRoutes[route] || messageRoutes[route] || h5pRoutes[route];
+      routes[route] || attendanceRoutes[route] || gradingRoutes[route] || directoryRoutes[route] || privacyRoutes[route] || periodRoutes[route] || dashboardRoutes[route] || reportRoutes[route] || demoRoutes[route] || backupRoutes[route] || userRoutes[route] || bankRoutes[route] || sectionRoutes[route] || photoRoutes[route] || digestRoutes[route] || accessRoutes[route] || specialAccessRoutes[route] || forumRoutes[route] || importRoutes[route] || coverRoutes[route] || certificateRoutes[route] || joinRoutes[route] || annotationRoutes[route] || messageRoutes[route] || h5pRoutes[route] || pushRoutes[route];
     if (handler) return await handler(ctx);
     if (request.method === 'GET' && url.pathname.startsWith('/api/file/')) return await downloadFile(ctx, url.pathname.slice(10));
     if (request.method === 'GET' && url.pathname.startsWith('/api/photo/')) return await servePhoto(ctx, url.pathname.slice(11));
@@ -1252,7 +1254,8 @@ const routes = {
 
   // ---- Contenido, actividades y entregas ----
 
-  'POST /api/record': async ({ db, user, request }) => {
+  'POST /api/record': async (ctx) => {
+    const { db, user, request } = ctx;
     const body = await readJson(request);
     const a = await access(db, user, body.course);
     const kind = body.kind;
@@ -1293,6 +1296,22 @@ const routes = {
         input,
         validateFiles: (ids, scope) => validateFiles(db, ids, body.course, user, scope),
       });
+      // Notificación (12.72) a quienes enseñan. Misma etiqueta por actividad: el teléfono las junta en una sola.
+      const task = await one(db, 'SELECT title FROM aula_tasks WHERE id=?', input.task);
+      const pushed = await pushToTeachers(
+        db,
+        body.course,
+        {
+          title: `${created ? 'Entrega nueva' : 'Entrega actualizada'}: ${task?.title || 'actividad'}`,
+          body: `${user.name} · ${a.course.name}`,
+          url: courseUrl(body.course, 'task', input.task),
+          tag: `entregas:${input.task}`,
+        },
+        user.id,
+      )
+        .run()
+        .catch(() => null);
+      await flushPush(ctx, pushed);
       return json(record, created ? 201 : 200);
     }
     if (!CONTENT_KINDS.includes(kind)) fail('Tipo de elemento no permitido.');
@@ -1615,9 +1634,11 @@ const routes = {
     return json({ ok: true });
   },
 
-  'POST /api/grade': async ({ db, user, request }) => {
+  'POST /api/grade': async (ctx) => {
+    const { db, user, request } = ctx;
     const body = await readJson(request);
-    requireTeacher(await access(db, user, body.course));
+    const a = await access(db, user, body.course);
+    requireTeacher(a);
     return json(
       await saveGrade(db, {
         course: body.course,
@@ -1630,17 +1651,31 @@ const routes = {
         publish: body.publish !== false,
         rubric: body.rubric,
         team: body.team === true,
+        // Notificación (12.72): «Calificación publicada», sin la calificación.
+        onPublished: async (members, task) =>
+          flushPush(ctx, await pushToMembers(db, body.course, members, gradeNotice(a.course, task)).run().catch(() => null)),
       }),
     );
   },
 
   // Publica de una vez todas las calificaciones en borrador de una actividad.
-  'POST /api/grades/publish': async ({ db, user, request }) => {
+  'POST /api/grades/publish': async (ctx) => {
+    const { db, user, request } = ctx;
     const body = await readJson(request);
-    requireTeacher(await access(db, user, body.course));
-    await loadTask(db, body.task, body.course);
+    const a = await access(db, user, body.course);
+    requireTeacher(a);
+    const task = await loadTask(db, body.task, body.course);
     const now = nowIso();
-    const [, result] = await db.batch([
+    const notice = gradeNotice(a.course, task);
+    const [pushed, , result] = await db.batch([
+      // Notificación (12.72) a quienes tienen un borrador con calificación (antes de publicarlo).
+      db
+        .prepare(
+          pushSql(`SELECT DISTINCT m.user_id, ? AS title, ? AS body, ? AS url, ? AS tag FROM aula_submissions s
+            JOIN aula_members m ON m.id=s.member AND m.user_id IS NOT NULL
+            WHERE s.course=? AND s.task=? AND s.published=0 AND s.grade IS NOT NULL`),
+        )
+        .bind(notice.title, notice.body, notice.url, notice.tag, body.course, body.task),
       // Historial: cada borrador publicado queda registrado.
       db
         .prepare(
@@ -1651,6 +1686,7 @@ const routes = {
         .bind(user.id, now, body.course, body.task),
       db.prepare('UPDATE aula_submissions SET published=1,revision=revision+1,updated=? WHERE course=? AND task=? AND published=0').bind(now, body.course, body.task),
     ]);
+    await flushPush(ctx, pushed);
     return json({ published: result.meta.changes });
   },
 

@@ -932,3 +932,40 @@ export const messageThreads = sqliteTable('aula_message_threads', {
   studentReadAt: text('student_read_at').notNull().default(''),
   teacherReadAt: text('teacher_read_at').notNull().default(''),
 });
+
+/**
+ * Migración 0044 (12.72): notificaciones Web Push. `aula_push_subscriptions` (una por navegador, ligada a la sesión
+ * `sid` de aula_logins con la que se activó), `aula_push_queue` (avisos por enviar, uno por navegador) y
+ * `aula_push_meta` (llave VAPID cifrada con SESSION_SECRET y el día de los últimos recordatorios).
+ */
+export const pushSubscriptions = sqliteTable(
+  'aula_push_subscriptions',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id').notNull(),
+    sid: text('sid').notNull(),
+    endpoint: text('endpoint').notNull(),
+    p256dh: text('p256dh').notNull(),
+    auth: text('auth').notNull(),
+    origin: text('origin').notNull(),
+    created: text('created').notNull(),
+    updated: text('updated').notNull(),
+  },
+  (t) => [uniqueIndex('aula_push_subscriptions_endpoint').on(t.endpoint), index('aula_push_subscriptions_user').on(t.userId)],
+);
+
+export const pushQueue = sqliteTable('aula_push_queue', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  endpoint: text('endpoint').notNull(),
+  p256dh: text('p256dh').notNull(),
+  auth: text('auth').notNull(),
+  origin: text('origin').notNull(),
+  payload: text('payload').notNull(),
+  expires: text('expires').notNull(),
+  created: text('created').notNull(),
+});
+
+export const pushMeta = sqliteTable('aula_push_meta', {
+  key: text('key').primaryKey(),
+  value: text('value').notNull(),
+});

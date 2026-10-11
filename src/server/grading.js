@@ -2,6 +2,7 @@
 import { access, requireTeacher } from './access.js';
 import { categoryGradeRecord, loadTask, parseTerms, rubricRecord } from './gradebook.js';
 import { all, fail, json, nowIso, one, optionalText, readJson, run, text } from './http.js';
+import { flushPush, gradeNotice, pushSql } from './push.js';
 
 const STALE = 'Recarga la configuración de calificaciones antes de editar.';
 const MAX_COLUMNS = 1000;
@@ -55,9 +56,11 @@ export const gradingRoutes = {
   // Calificación en bloque (12.32): la misma calificación (y el comentario, si se escribe) a los alumnos elegidos de una
   // actividad. Sin `replace` solo toca a quienes aún no tienen calificación. Historial y escritura en un solo batch;
   // una fila sin cambios no se escribe ni se registra.
-  'POST /api/grades/bulk': async ({ db, user, request }) => {
+  'POST /api/grades/bulk': async (ctx) => {
+    const { db, user, request } = ctx;
     const body = await readJson(request);
-    requireTeacher(await access(db, user, body.course));
+    const a = await access(db, user, body.course);
+    requireTeacher(a);
     const task = await loadTask(db, body.task, body.course);
     const grade = typeof body.grade === 'number' ? body.grade : Number(String(body.grade ?? '').trim().replace(',', '.') || NaN);
     if (!Number.isFinite(grade) || grade < 0 || grade > 10) fail('Escribe una calificación de 0 a 10.');
@@ -77,7 +80,17 @@ export const gradingRoutes = {
     const now = nowIso();
     // ?1 curso, ?2 actividad, ?3 calificación, ?4 publicada, ?5 comentario, ?6 docente, ?7 ahora, ?8 alumnos, ?9 reemplazar
     const unchanged = (s) => `(${s}.grade IS ?3 AND ${s}.published=?4 AND (?5='' OR ${s}.feedback=?5))`;
-    const [, result] = await db.batch([
+    const notice = gradeNotice(a.course, task);
+    const [pushed, , result] = await db.batch([
+      // Notificación (12.72), antes de escribir: a quien recibe una calificación publicada que antes no veía.
+      db
+        .prepare(
+          pushSql(`SELECT DISTINCT m.user_id, ?10 AS title, ?11 AS body, ?12 AS url, ?13 AS tag
+            FROM aula_members m LEFT JOIN aula_submissions s ON s.task=?2 AND s.member=m.id
+            WHERE ?4=1 AND m.course=?1 AND m.role='student' AND m.user_id IS NOT NULL AND m.id IN (SELECT value FROM json_each(?8))
+              AND (?9 OR s.grade IS NULL) AND (s.id IS NULL OR s.published=0 OR s.grade IS NOT ?3)`),
+        )
+        .bind(task.course, task.id, grade, publish, feedback, user.id, now, JSON.stringify(ids), replace, notice.title, notice.body, notice.url, notice.tag),
       db
         .prepare(
           `INSERT INTO aula_grade_history (id,course,task,member,old_grade,new_grade,old_published,new_published,feedback_changed,reason,changed_by,changed_at)
@@ -103,6 +116,7 @@ export const gradingRoutes = {
         )
         .bind(task.course, task.id, grade, publish, feedback, user.id, now, JSON.stringify(ids), replace),
     ]);
+    await flushPush(ctx, pushed);
     return json({ graded: result.meta.changes, skipped: ids.length - result.meta.changes });
   },
 

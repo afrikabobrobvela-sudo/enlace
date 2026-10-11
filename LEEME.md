@@ -5,6 +5,20 @@ No es el código de D2L Brightspace ni una plataforma oficial de la BUAP.
 
 Esta versión se despliega en **tu propia cuenta de Cloudflare** (Workers + D1 + R2, plan gratuito) y ya no depende de ChatGPT Sites.
 
+## Novedades de la versión 12.72 (notificaciones en el celular y la computadora)
+
+- **Avisos aunque Enlace esté cerrado**, como los de una aplicación, sin instalar nada de la tienda. Cada persona los activa en su dispositivo: en *Mis cursos* aparece una invitación («Activar» / «Ahora no») y siempre están en **Mi perfil → Notificaciones en este dispositivo** (activar, «Enviar una de prueba» y desactivar).
+- **Qué llega**:
+  - **Al alumno**: calificación publicada (al guardarla publicada, al publicar los borradores o en bloque), mensaje de su docente, noticia urgente, pase de lista abierto, **inasistencia registrada** (al marcarla a mano o al cerrar el pase de lista sin que se haya registrado) y actividades que **vencen mañana** sin entregar (todos los días a las 6:00 p. m.).
+  - **Al docente**: mensaje de un alumno y entregas nuevas o actualizadas (las de una misma actividad se juntan en un solo aviso en el teléfono).
+- El aviso dice **qué pasó y en qué curso**; nunca muestra calificaciones ni el texto de los mensajes. Al tocarlo se abre esa pantalla de Enlace.
+- **Noticia urgente**: la casilla del editor de noticias ahora dice «Avisar ahora a los alumnos» y funciona aunque no esté configurado el correo (se envía como notificación y, si hay correo, también por correo).
+- **Dónde funcionan**: Android (Chrome, Edge, Samsung Internet), computadoras (Chrome, Edge, Firefox, Safari) y **iPhone/iPad con iOS 16.4 o más reciente solo si Enlace se agrega a la pantalla de inicio** (Safari → Compartir → «Agregar a pantalla de inicio»; Enlace se lo explica a quien usa iPhone).
+- **Privacidad**: cada dispositivo queda ligado a la sesión con la que se activó: al cerrar sesión (o «Cerrar sesión en todos mis dispositivos», o suspender la cuenta) deja de recibir avisos. Las calificaciones importadas desde un archivo y los pases de lista importados no generan avisos.
+- **Sin configuración**: Enlace crea su propia llave de notificaciones la primera vez y la guarda cifrada con `SESSION_SECRET`. Si algún día cambias `SESSION_SECRET`, se crea otra y cada persona las vuelve a tener al abrir Enlace. Los servicios que entregan los avisos (Google, Apple, Mozilla, Microsoft) son gratuitos.
+- **Tarea programada nueva** cada 5 minutos (`"*/5 * * * *"` en `wrangler.toml`): envía los avisos que no alcanzaron a salir al momento (por ejemplo, un mensaje a un grupo grande) y los recordatorios de «vence mañana». No la cambies: el resumen por correo sigue en la otra.
+- **Migración nueva** (`0044_notificaciones.sql`): solo agrega tres tablas.
+
 ## Novedades de la versión 12.71 (actividades interactivas H5P)
 
 - **Actividades H5P dentro de los materiales.** Crea la actividad en [Lumi](https://app.lumi.education) (gratis, para Windows, Mac y Linux) o en h5p.com, descárgala como archivo **.h5p** y súbela como archivo de un material. El material muestra **«Abrir actividad interactiva»** y se juega dentro de Enlace, también en el celular.

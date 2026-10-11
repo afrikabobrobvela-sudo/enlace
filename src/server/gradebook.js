@@ -687,7 +687,9 @@ async function rubricSnapshot(db, task, input) {
   return JSON.stringify({ title: row.title, scores, items, total, max: top * items.length });
 }
 
-export async function saveGrade(db, { course, grader, taskId, memberId, revision, grade, feedback, publish = true, rubric, team = false }) {
+// `onPublished(memberIds, task)` (12.72): después de guardar, con los alumnos cuya calificación quedó publicada y es
+// nueva para ellos (no estaba publicada o cambió); la ruta lo usa para la notificación.
+export async function saveGrade(db, { course, grader, taskId, memberId, revision, grade, feedback, publish = true, rubric, team = false, onPublished }) {
   const task = await loadTask(db, taskId, course);
   const member = await one(db, 'SELECT * FROM aula_members WHERE id=? AND course=?', memberId, course);
   if (!member) fail('Alumno no encontrado.');
@@ -764,6 +766,10 @@ export async function saveGrade(db, { course, grader, taskId, memberId, revision
   );
   const saved = await one(db, 'SELECT * FROM aula_submissions WHERE task=? AND member=?', task.id, member.id);
   if (saved.graded_at !== now) fail('Esta calificación cambió. Recarga antes de guardar.', 409);
+  if (publish && grade !== null && onPublished) {
+    const fresh = targets.filter((m) => !before.get(m.id)?.published || before.get(m.id).grade !== grade).map((m) => m.id);
+    if (fresh.length) await onPublished(fresh, task);
+  }
   if (targets.length < 2) return submissionRecord(saved);
   // Por equipo, también los registros de los demás integrantes, para que la interfaz los actualice sin recargar.
   const others = await all(

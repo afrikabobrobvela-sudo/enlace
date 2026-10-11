@@ -3,6 +3,7 @@
 // escribe en la suya. Los mensajes nuevos llegan a la campana (dashboard.js) y al resumen por correo (digest.js).
 import { access } from './access.js';
 import { all, fail, json, nowIso, one, readJson, run, text } from './http.js';
+import { courseUrl, flushPush, pushToMembers, pushToTeachers } from './push.js';
 
 const MAX_RECIPIENTS = 1000;
 const MAX_BODY = 4000;
@@ -74,7 +75,8 @@ export const messageRoutes = {
     return json({ member: { id: member.id, name: member.name }, messages: rows });
   },
 
-  async 'POST /api/messages'({ db, user, request }) {
+  async 'POST /api/messages'(ctx) {
+    const { db, user, request } = ctx;
     const body = await readJson(request);
     const a = await access(db, user, body.course);
     const message = text(body.body, MAX_BODY);
@@ -88,7 +90,7 @@ export const messageRoutes = {
         new Date(Date.now() - 3_600_000).toISOString(),
       );
       if (recent.n >= STUDENT_PER_HOUR) fail('Enviaste muchos mensajes en poco tiempo. Espera un rato antes de escribir de nuevo.', 429);
-      await db.batch([
+      const [, , pushed] = await db.batch([
         db
           .prepare('INSERT INTO aula_messages (id, course, member, from_teacher, author, author_name, body, created) VALUES (?,?,?,0,?,?,?,?)')
           .bind(crypto.randomUUID(), a.course.id, m.id, user.id, m.name, message, now),
@@ -98,7 +100,10 @@ export const messageRoutes = {
              ON CONFLICT(member) DO UPDATE SET student_read_at=excluded.student_read_at`,
           )
           .bind(m.id, a.course.id, now),
+        // Notificación (12.72) a quienes enseñan: quién escribió, sin el contenido.
+        pushToTeachers(db, a.course.id, { title: `Mensaje de ${m.name}`, body: a.course.name, url: courseUrl(a.course.id, 'messages', m.id), tag: `mensaje:${m.id}` }, user.id),
       ]);
+      await flushPush(ctx, pushed);
       return json({ sent: 1 }, 201);
     }
     const ids = Array.isArray(body.members) ? [...new Set(body.members.map(String))] : [];
@@ -119,6 +124,15 @@ export const messageRoutes = {
     );
     const sent = result.meta?.changes ?? 0;
     if (!sent) fail('Ninguno de esos alumnos sigue inscrito. Recarga la página.', 404);
+    const pushed = await pushToMembers(db, a.course.id, ids, {
+      title: `Mensaje de ${String(user.name || 'tu docente').slice(0, 80)}`,
+      body: a.course.name,
+      url: courseUrl(a.course.id, 'messages'),
+      tag: `mensaje:${a.course.id}`,
+    })
+      .run()
+      .catch(() => null); // la notificación nunca impide el mensaje
+    await flushPush(ctx, pushed);
     return json({ sent }, 201);
   },
 };
