@@ -82,17 +82,20 @@ function renderMessageThreads(course, { threads }) {
     }`;
 }
 
-function newMessageModal() {
+/** `chosen`: alumnos ya elegidos (por ejemplo, desde Participación); `draft`: texto inicial del mensaje. */
+function newMessageModal(chosen = null, draft = '') {
   const students = typeof studentsInView === 'function' ? studentsInView() : current.members.filter((m) => m.role === 'student');
   if (!students.length) return toast('Todavía no hay alumnos en este curso (o en la sección elegida).');
+  const picked = chosen ? new Set(chosen) : null;
+  const isPicked = (m) => !picked || picked.has(m.id);
   modal(
     'Nuevo mensaje',
-    `<fieldset class="message-recipients"><legend>Para</legend>
-       <label class="check-label"><input type="checkbox" data-message-all checked> Todos (${students.length} ${students.length === 1 ? 'alumno' : 'alumnos'}${typeof selectedSections === 'function' && selectedSections().length ? ' de la sección elegida' : ''})</label>
+    `<fieldset class="message-recipients"><legend>Para${picked ? ` (${students.filter(isPicked).length} elegidos)` : ''}</legend>
+       <label class="check-label"><input type="checkbox" data-message-all ${students.every(isPicked) ? 'checked' : ''}> Todos (${students.length} ${students.length === 1 ? 'alumno' : 'alumnos'}${typeof selectedSections === 'function' && selectedSections().length ? ' de la sección elegida' : ''})</label>
        <div class="message-recipient-list">${students
-         .map((m) => `<label class="check-label"><input type="checkbox" name="to" value="${esc(m.id)}" checked> ${esc(m.name)}</label>`)
+         .map((m) => `<label class="check-label"><input type="checkbox" name="to" value="${esc(m.id)}" ${isPicked(m) ? 'checked' : ''}> ${esc(m.name)}</label>`)
          .join('')}</div></fieldset>
-     <label>Mensaje<textarea name="body" required maxlength="4000" rows="5"></textarea></label>
+     <label>Mensaje<textarea name="body" required maxlength="4000" rows="5">${esc(draft)}</textarea></label>
      <p class="muted">Cada alumno lo recibe en su conversación privada (nadie ve a quién más se envió) y le llega un aviso en la campana y en su resumen por correo.</p>`,
     async (form) => {
       const members = form.getAll('to');

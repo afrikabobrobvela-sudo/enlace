@@ -123,5 +123,14 @@ check(byId.dani.level === 'medio' && byId.dani.missing.map((t) => t.id).join() =
 check(byId.ana.level === '' && byId.ana.missing.length === 0, 'Ana sin alertas; la tarea oculta y la que no vence no cuentan');
 check(report[0].member.id === 'beto' && report.at(-1).member.id === 'ana', 'Ordenado de mayor a menor riesgo');
 check(run('riskReport({ ...riskInput, attendance: null })').find((r) => r.member.id === 'dani').level === '', 'Sin datos de asistencia no se inventa alerta');
+// 12.73: sin entrar al curso en 7 días (o nunca, contando desde la creación del curso).
+context.seen = new Map([['ana', '2026-09-30T10:00:00Z'], ['beto', '2026-09-20T10:00:00Z'], ['caro', null], ['dani', '2026-09-29T00:00:00Z']]);
+const idle = Object.fromEntries(run("riskReport({ ...riskInput, lastSeen: seen, since: '2026-08-15T00:00:00Z' })").map((r) => [r.member.id, r]));
+check(idle.beto.flags[0] === 'ingreso' && idle.beto.idleDays === 11, 'Beto: 11 días sin entrar');
+check(idle.caro.flags.join() === 'ingreso,promedio' && idle.caro.level === 'alto', 'Caro: nunca entró (desde que se creó el curso) y promedio bajo');
+check(idle.ana.level === '' && idle.dani.flags.join() === 'asistencia', 'Ana y Dani entraron hace poco');
+const nuevo = Object.fromEntries(run("riskReport({ ...riskInput, lastSeen: seen, since: '2026-09-28T00:00:00Z' })").map((r) => [r.member.id, r]));
+check(!nuevo.caro.flags.includes('ingreso'), 'Curso de hace 3 días: no haber entrado todavía no es alerta');
+check(!run('riskReport(riskInput)').some((r) => r.flags.includes('ingreso')), 'Sin datos de ingresos no se inventa alerta');
 
-console.log(`PASS: ${checks} verificaciones de interfaz — firma del QR igual a la del servidor, ZIP válido para Python y reglas de riesgo.`);
+console.log(`PASS: ${checks} verificaciones de interfaz — firma del QR igual a la del servidor, ZIP válido para Python y reglas de riesgo (también días sin entrar).`);

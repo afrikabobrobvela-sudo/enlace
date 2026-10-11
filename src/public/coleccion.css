@@ -638,6 +638,29 @@ dialog.annotator:not([open]) { display: none; }
 .push-steps { margin: 6px 0 0; padding-left: 22px; }
 .push-steps li { margin: 4px 0; }
 
+/* 12.73: participación. Contadores que filtran la lista y acciones sobre los alumnos elegidos. */
+.risk-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin: 16px 0; }
+.risk-tile { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-height: 88px; padding: 12px 14px; text-align: left; font: inherit; color: var(--tinta); background: var(--surface); border: 2px solid transparent; border-radius: var(--radius); box-shadow: 0 2px 0 rgba(17, 26, 46, 0.1); cursor: pointer; }
+.risk-tile strong { font-size: 28px; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.risk-tile span { font-weight: 600; line-height: 1.25; }
+.risk-tile small { color: var(--ink-faint); font-size: 12px; }
+.risk-tile.has-alert strong { color: #b42318; }
+.risk-tile:hover { box-shadow: 0 2px 0 var(--tomo); }
+.risk-tile.is-on { border-color: var(--tomo); background: var(--tomo-papel); }
+.risk-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 20px; margin: 4px 0 12px; }
+.risk-actions[hidden] { display: none; }
+.risk-why { margin-top: 4px; font-size: 13px; color: var(--ink-soft); }
+.risk-idle { color: #b42318; font-weight: 600; }
+.risk-table .risk-pick { width: 44px; }
+.risk-table .risk-pick input { width: 20px; height: 20px; }
+.risk-criteria { margin-top: 12px; font-size: 13px; }
+@media (max-width: 720px) {
+  .risk-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .risk-tile { min-height: 0; padding: 10px 12px; }
+  .risk-tile strong { font-size: 22px; }
+  .risk-tile small { display: none; }
+}
+
 /* 12.71: actividades H5P dentro de un material. El marco crece con el contenido (h5p-jugador.js avisa su altura). */
 .h5p-box { margin: 12px 0; padding: 12px; border-radius: var(--radius); background: var(--tomo-papel); }
 .h5p-head { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; }

@@ -5,6 +5,16 @@ No es el código de D2L Brightspace ni una plataforma oficial de la BUAP.
 
 Esta versión se despliega en **tu propia cuenta de Cloudflare** (Workers + D1 + R2, plan gratuito) y ya no depende de ChatGPT Sites.
 
+## Novedades de la versión 12.73 (panel de participación)
+
+- **«Progreso» ahora se llama «Participación»** (*Más → Participación*) y junta en una pantalla lo que antes estaba repartido:
+  - **Último ingreso** de cada alumno al curso («Hoy», «Hace 10 días», «Nunca ha entrado» o «Todavía sin cuenta» si nunca entró a Enlace con el correo con que lo inscribiste).
+  - Asistencia, actividades vencidas sin entregar, entregas, contenido completado y promedio parcial, como antes.
+- **Nuevo criterio de riesgo: 7 días sin entrar al curso** (o nunca, contando desde que se creó el curso, así que un curso nuevo no marca a nadie). Cada alumno en riesgo muestra **por qué** («Sin entrar en 7 días · 2 o más vencidas sin entregar»).
+- **Contadores arriba** («Requieren atención», «Sin entrar en 7 días», «2 o más vencidas sin entregar», «Asistencia baja», «Promedio menor a 6», «Todo el grupo»): al tocar uno, la lista muestra solo a esos alumnos.
+- **Escribirles desde ahí**: elige alumnos (o «Elegir a todos los de la lista») y toca **«Escribir a N alumnos»**. Se abre el mensaje directo con ellos ya elegidos y un texto sugerido según el filtro (lo puedes cambiar). Cada alumno lo recibe en su conversación privada, con notificación. También hay un botón **«Escribir»** en cada fila.
+- La exportación a Excel agrega los motivos y el último ingreso.
+
 ## Novedades de la versión 12.72 (notificaciones en el celular y la computadora)
 
 - **Avisos aunque Enlace esté cerrado**, como los de una aplicación, sin instalar nada de la tienda. Cada persona los activa en su dispositivo: en *Mis cursos* aparece una invitación («Activar» / «Ahora no») y siempre están en **Mi perfil → Notificaciones en este dispositivo** (activar, «Enviar una de prueba» y desactivar).
