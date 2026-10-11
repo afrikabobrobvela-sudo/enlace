@@ -34,7 +34,7 @@ const NAV_NAMES = {
   messages: 'Mensajes',
   groups: 'Grupos',
   members: 'Alumnos',
-  progress: 'Progreso',
+  progress: 'Participación',
   admin: 'Administración del curso',
 };
 // En la barra inferior solo caben nombres cortos.
