@@ -886,3 +886,20 @@ export const certificates = sqliteTable(
   },
   (t) => [uniqueIndex('aula_certificates_member').on(t.course, t.memberId)],
 );
+
+/**
+ * Migración 0041 (12.69): anotaciones del docente sobre un archivo de entrega (PDF o imagen). `data` guarda, por página,
+ * trazos de pluma, recuadros resaltados y comentarios numerados, en coordenadas relativas al ancho de la página
+ * (ver src/server/anotaciones.js). El alumno las ve cuando la calificación de esa entrega está publicada.
+ */
+export const annotations = sqliteTable(
+  'aula_annotations',
+  {
+    fileId: text('file_id').primaryKey(),
+    course: text('course').notNull(),
+    data: text('data').notNull(),
+    updated: text('updated').notNull(),
+    updatedBy: text('updated_by').notNull(),
+  },
+  (t) => [index('aula_annotations_course').on(t.course)],
+);

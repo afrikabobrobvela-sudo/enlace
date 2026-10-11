@@ -53,6 +53,7 @@ import { quizForStudent, quizWithAccess, quizWithSectionDates, sectionIdsByName,
 import { gradingRoutes } from './grading.js';
 import { certificateRoutes } from './constancias.js';
 import { joinRoutes } from './unirse.js';
+import { VISIBLE_TO_STUDENT, annotationRoutes } from './anotaciones.js';
 import { clearSessionCookie, identity, lastLogins, revokeAllStatements } from './auth.js';
 import {
   assertAvailable,
@@ -148,7 +149,7 @@ export async function api(request, env) {
     assertHasPhoto(route, user, env);
     const ctx = { db: env.DB, env, user, url, request };
     const handler =
-      routes[route] || attendanceRoutes[route] || gradingRoutes[route] || directoryRoutes[route] || privacyRoutes[route] || periodRoutes[route] || dashboardRoutes[route] || reportRoutes[route] || demoRoutes[route] || backupRoutes[route] || userRoutes[route] || bankRoutes[route] || sectionRoutes[route] || photoRoutes[route] || digestRoutes[route] || accessRoutes[route] || specialAccessRoutes[route] || forumRoutes[route] || importRoutes[route] || coverRoutes[route] || certificateRoutes[route] || joinRoutes[route];
+      routes[route] || attendanceRoutes[route] || gradingRoutes[route] || directoryRoutes[route] || privacyRoutes[route] || periodRoutes[route] || dashboardRoutes[route] || reportRoutes[route] || demoRoutes[route] || backupRoutes[route] || userRoutes[route] || bankRoutes[route] || sectionRoutes[route] || photoRoutes[route] || digestRoutes[route] || accessRoutes[route] || specialAccessRoutes[route] || forumRoutes[route] || importRoutes[route] || coverRoutes[route] || certificateRoutes[route] || joinRoutes[route] || annotationRoutes[route];
     if (handler) return await handler(ctx);
     if (request.method === 'GET' && url.pathname.startsWith('/api/file/')) return await downloadFile(ctx, url.pathname.slice(10));
     if (request.method === 'GET' && url.pathname.startsWith('/api/photo/')) return await servePhoto(ctx, url.pathname.slice(11));
@@ -761,7 +762,17 @@ const routes = {
           ...(m.photo && (m.role === 'teacher' || m.user_id === viewer) ? { photo: m.photo } : {}),
         }));
 
-    let files = await all(db, 'SELECT id,course,owner,scope,name,size,mime,created FROM aula_files WHERE course=?', courseId);
+    // Con la fecha de las anotaciones del docente (12.69) en la misma consulta: todas para quien enseña; para el
+    // alumno, solo las de sus entregas con la calificación publicada (ninguna en la vista de alumno: ?2 es null).
+    let files = await all(
+      db,
+      `SELECT f.id,f.course,f.owner,f.scope,f.name,f.size,f.mime,f.created,
+         (SELECT a.updated FROM aula_annotations a WHERE a.file_id=f.id ${teach ? '' : `AND ${VISIBLE_TO_STUDENT}`}) AS annotated_at
+       FROM aula_files f WHERE f.course=?1`,
+      ...(teach ? [courseId] : [courseId, viewer]),
+    );
+    const annotated = files.filter((f) => f.annotated_at).map((f) => ({ file_id: f.id, updated: f.annotated_at }));
+    files = files.map(({ annotated_at: _annotated, ...f }) => f);
     if (!teach) {
       const shared = new Set(records.filter((r) => ['module', 'material', 'task'].includes(r.kind)).flatMap((r) => r.data.fileIds || []));
       files = files.filter((f) => (viewer && f.owner === viewer) || (f.scope === 'material' && shared.has(f.id)));
@@ -786,6 +797,7 @@ const routes = {
       });
     }
     return json({
+      annotated,
       course: publicCourse(a.course),
       canTeach: teach,
       // canPreview: quien enseña puede alternar entre su vista y la de alumno.

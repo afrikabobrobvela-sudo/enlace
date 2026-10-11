@@ -176,7 +176,7 @@ function renderTask() {
     const ext = extensionOf(t.id, m.id);
     const team = teamFor(t, m.id);
     return `<tr><td><span class="person">${avatarHtml(m)}<span>${esc(m.name)}</span></span>${t.data.groupCategory ? `<div class="table-subtext">${team ? esc(team.data.title) : 'Sin equipo'}</div>` : ''}${ext ? `<div class="table-subtext special-note">Acceso especial: ${esc(specialSummary({ start: ext.data.start, due: ext.data.due, end: ext.data.end }))}</div>` : ''}</td>${courseSections().length ? `<td>${esc(sectionName(m.section) || '—')}</td>` : ''}<td${needsReview(s) ? ' class="status-review"' : ''}>${s ? s.data.manual ? 'Captura manual' : `${s.data.late ? 'Entrega tardía' : 'Entregado'}${needsReview(s) ? ' · sin revisar' : ''}` : 'Sin entrega'}</td><td>${s?.data.grade ?? '—'}</td><td><button class="table-link" data-action="review" data-id="${t.id}" data-member="${m.id}">Evaluar →</button> <button type="button" class="text-btn" data-special-access="task" data-id="${esc(t.id)}" data-member="${esc(m.id)}">${ext ? 'Cambiar acceso' : 'Acceso especial'}</button></td></tr>`;
-  }).join('') || '<tr><td colspan="4">Inscribe alumnos para revisar sus entregas.</td></tr>'}</tbody></table></div>` : `${own ? `<section class="panel"><h2>Tu entrega</h2><p class="deadline">${fmt(own.data.submitted)}${own.data.submitted ? ` <button type="button" class="text-btn" data-receipt="${esc(own.id)}">Comprobante</button>` : ''}</p>${richText(own.data.body)}${fileLinks(own.data.fileIds)}<p>Calificación: <b>${own.data.grade ?? 'Pendiente'}</b></p>${richText(own.data.feedback)}${rubricResultHtml(own.data.rubricScores)}</section>` : ''}${t.data.forum ? '' : `<div class="toolbar">${button(own ? 'Actualizar entrega' : 'Realizar entrega', 'submit', t.id)}</div>`}`}`;
+  }).join('') || '<tr><td colspan="4">Inscribe alumnos para revisar sus entregas.</td></tr>'}</tbody></table></div>` : `${own ? `<section class="panel"><h2>Tu entrega</h2><p class="deadline">${fmt(own.data.submitted)}${own.data.submitted ? ` <button type="button" class="text-btn" data-receipt="${esc(own.id)}">Comprobante</button>` : ''}</p>${richText(own.data.body)}${fileLinks(own.data.fileIds)}${typeof annotateButtonsHtml === 'function' ? annotateButtonsHtml(own.data.fileIds) : ''}<p>Calificación: <b>${own.data.grade ?? 'Pendiente'}</b></p>${richText(own.data.feedback)}${rubricResultHtml(own.data.rubricScores)}</section>` : ''}${t.data.forum ? '' : `<div class="toolbar">${button(own ? 'Actualizar entrega' : 'Realizar entrega', 'submit', t.id)}</div>`}`}`;
   if (teaches()) enhanceTaskGradeRoster(t, subs);
 }
 
@@ -450,7 +450,7 @@ function renderReview() {
       ${previewable.length ? '<div class="inline-preview" id="inlinePreview"></div>' : ''}
       ${s?.data.body || !s?.data.submitted ? `<p class="submitted-text">${esc(s?.data.body || 'Puedes registrar una calificación manual, por ejemplo, de un examen escrito.')}</p>` : ''}
       ${s?.data.submitted ? `<p><button type="button" class="text-btn" data-receipt="${esc(s.id)}">Ver comprobante y folio</button></p>` : ''}
-      ${fileLinks(files)}</section>
+      ${fileLinks(files)}${typeof annotateButtonsHtml === 'function' ? annotateButtonsHtml(files, true) : ''}</section>
     <form class="review-panel real-form" id="reviewForm"><h2>Evaluación</h2>
       ${s && s.data.published === false ? '<p class="draft-note">Borrador: el alumno todavía no ve esta calificación.</p>' : ''}
       ${rubricWidgetHtml(t, s)}${field('Calificación / 10', 'grade', s?.data.grade ?? '', 'number', 'min="0" max="10" step="0.01" required')}

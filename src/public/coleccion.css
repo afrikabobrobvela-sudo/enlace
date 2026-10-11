@@ -578,3 +578,29 @@ footer a { padding-block: 4px; }
 .join-link { margin: 0 0 8px; overflow-wrap: anywhere; }
 .join-qr { width: 200px; max-width: 100%; }
 .join-qr svg { display: block; width: 100%; height: auto; }
+
+/* 12.69: anotar entregas. Diálogo a pantalla completa con las páginas y su capa de marcas (anotar.js). */
+.annotate-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0 12px; }
+dialog.annotator { width: 100vw; height: 100dvh; max-width: none; max-height: none; margin: 0; padding: 0; border: 0; background: #e9edf2; display: flex; flex-direction: column; }
+dialog.annotator:not([open]) { display: none; }
+.ann-toolbar { position: sticky; top: 0; z-index: 2; flex-wrap: wrap; gap: 8px; }
+.ann-group { display: inline-flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.ann-toolbar [aria-pressed="true"] { background: #fff; color: var(--tinta); font-weight: 800; }
+.ann-help { margin: 0; padding: 8px 16px; font-size: 14px; color: var(--ink-soft); background: #fff; border-bottom: 1px solid var(--line); }
+.ann-pages { flex: 1; overflow: auto; padding: 16px; }
+.ann-page { max-width: 1000px; margin: 0 auto 24px; }
+.ann-sheet { position: relative; background: #fff; box-shadow: 0 2px 0 rgba(17, 26, 46, 0.14); }
+.ann-canvas { display: block; width: 100%; height: auto; }
+.ann-sheet svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.ann-pages[data-tool="pen"] svg, .ann-pages[data-tool="box"] svg { touch-action: none; cursor: crosshair; }
+.ann-pages[data-tool="text"] svg { cursor: copy; }
+.ann-pages[data-tool="erase"] svg [data-i] { cursor: pointer; }
+.ann-pages[data-tool="move"] svg, .ann-pages[data-tool="view"] svg { touch-action: auto; }
+.ann-marker { cursor: help; }
+.ann-notes h3 { margin: 10px 0 4px; font-size: 16px; color: var(--granza-lomo, #86102c); }
+.ann-notes ol { margin: 0; padding: 10px 12px 10px 34px; background: #fbe7ec; border-radius: var(--radius-sm); }
+.ann-notes li { margin: 4px 0; }
+@media (max-width: 720px) {
+  .ann-pages { padding: 8px; }
+  .ann-toolbar .viewer-name { flex-basis: 100%; }
+}

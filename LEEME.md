@@ -1,9 +1,19 @@
-# Enlace · versión 12.68
+# Enlace · versión 12.69
 
 Plataforma académica independiente para docentes y alumnos de cualquier academia (nació en la Academia de Física de la BUAP), con interfaz inspirada en Brightspace.
 No es el código de D2L Brightspace ni una plataforma oficial de la BUAP.
 
 Esta versión se despliega en **tu propia cuenta de Cloudflare** (Workers + D1 + R2, plan gratuito) y ya no depende de ChatGPT Sites.
+
+## Novedades de la versión 12.69 (anotar entregas)
+
+- **Corrige sobre el archivo del alumno.** En la pantalla para calificar una entrega, cada PDF o foto tiene el botón **«Anotar»**. Se abre a pantalla completa con:
+  - **Pluma** para marcar o subrayar, **Resaltar** (arrastra un recuadro amarillo), **Comentario** (toca donde va y escribe; aparece un número en la página y el texto abajo) y **Borrar** (toca una marca), con **Deshacer**.
+  - **Desplazar**, para mover la página en el celular o la tableta sin dibujar.
+  - **Guardar** y **Descargar con correcciones** (un PDF con las marcas y, al pie de cada página, sus comentarios).
+- **El alumno las ve cuando publicas la calificación**: en su entrega aparece «Ver correcciones» y puede descargar el PDF corregido. Mientras la calificación sea borrador, no ve nada. Nunca ve las de otros.
+- Funciona con PDF (hasta 60 páginas) y con fotos (JPG, PNG, WebP). Las marcas no cambian el archivo original.
+- **Migración nueva** (`0041_anotaciones.sql`): solo agrega una tabla.
 
 ## Novedades de la versión 12.68 (código para unirse y cursos a tu ritmo)
 
