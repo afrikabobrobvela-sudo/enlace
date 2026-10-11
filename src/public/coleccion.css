@@ -624,6 +624,20 @@ dialog.annotator:not([open]) { display: none; }
 .message-thread-date { grid-column: 2; grid-row: 1; font-size: 12px; color: var(--ink-faint); }
 .message-recipient-list { max-height: 260px; overflow-y: auto; display: grid; gap: 2px; margin-top: 6px; padding-left: 8px; }
 
+/* 12.72: notificaciones. Invitación en «Mis cursos» (una vez por dispositivo) y su sección en «Mi perfil». */
+.push-invite { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 24px; margin: 0 0 20px; padding: 16px 20px; background: var(--surface); border-radius: var(--radius); box-shadow: 0 2px 0 rgba(17, 26, 46, 0.1); }
+.push-invite > div:first-child { flex: 1 1 320px; min-width: 0; }
+.push-invite h2 { margin: 0 0 4px; font-size: 18px; }
+.push-invite p { margin: 0; color: var(--ink-soft); }
+.push-invite .action-row { margin: 0; }
+.push-profile { margin: 16px 0; padding: 14px 16px; border-radius: var(--radius-sm); background: #f3f5f8; }
+.push-profile h3 { margin: 0 0 6px; font-size: 16px; }
+.push-profile p { margin: 6px 0; }
+.push-profile .push-state.is-on { color: var(--tinta); }
+.push-profile .push-state.is-on::before { content: '● '; color: #0a6e60; }
+.push-steps { margin: 6px 0 0; padding-left: 22px; }
+.push-steps li { margin: 4px 0; }
+
 /* 12.71: actividades H5P dentro de un material. El marco crece con el contenido (h5p-jugador.js avisa su altura). */
 .h5p-box { margin: 12px 0; padding: 12px; border-radius: var(--radius); background: var(--tomo-papel); }
 .h5p-head { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; }

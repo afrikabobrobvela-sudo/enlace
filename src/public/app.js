@@ -277,7 +277,7 @@ document.addEventListener('change', (event) => {
 function noticeCards() {
   // Una noticia programada lleva la fecha en que se publica (así la ven los alumnos) y, para el docente, la marca.
   const shownAt = n => (n.data.publishAt && n.data.publishAt > n.created ? n.data.publishAt : n.created);
-  return records('notice').map(n => `<article class="notice"><h3>${esc(n.data.title)}${sectionTag(n)}${teaches() && n.data.visible === false ? ' <span class="role-pill">Oculta</span>' : teaches() && scheduledFor(n) ? ' <span class="role-pill scheduled-pill">Programada</span>' : ''}${teaches() && n.data.emailedAt ? ' <span class="role-pill">Enviada por correo</span>' : ''}</h3><p class="deadline">${fmt(shownAt(n))}</p>${richText(n.data.body)}${teaches() ? button('Editar', 'edit-notice', n.id, 'text-btn') : ''}</article>`).join('') || '<p class="muted">No hay noticias publicadas.</p>';
+  return records('notice').map(n => `<article class="notice"><h3>${esc(n.data.title)}${sectionTag(n)}${teaches() && n.data.visible === false ? ' <span class="role-pill">Oculta</span>' : teaches() && scheduledFor(n) ? ' <span class="role-pill scheduled-pill">Programada</span>' : ''}${teaches() && n.data.emailedAt ? ' <span class="role-pill">Enviada a los alumnos</span>' : ''}</h3><p class="deadline">${fmt(shownAt(n))}</p>${richText(n.data.body)}${teaches() ? button('Editar', 'edit-notice', n.id, 'text-btn') : ''}</article>`).join('') || '<p class="muted">No hay noticias publicadas.</p>';
 }
 function renderNotices() {
   $('#main').innerHTML = `<div class="heading"><h1>Noticias</h1>${teaches() ? button('Crear publicación', 'new-notice') : ''}</div><section class="panel">${noticeCards()}</section>`;
@@ -698,21 +698,24 @@ document.addEventListener('change', async (e) => {
     box.disabled = false;
   }
 });
-/** Noticia: enviarla también por correo en ese momento (una sola vez). */
+/** Noticia urgente: avisar a los alumnos en ese momento (una sola vez), con notificación y, si está configurado, correo. */
 function noticeEmailHtml(old) {
-  if (!me.mailEnabled)
-    return '';
   if (old?.data.emailedAt)
-    return `<p class="real-status">Enviada por correo a los alumnos el ${esc(fmt(old.data.emailedAt))}.</p>`;
-  return `<label class="check-label"><input type="checkbox" name="emailNow"> Enviar también por correo ahora a los alumnos a los que va dirigida</label><p class="muted">Úsalo solo para avisos urgentes (cambio de salón, clase suspendida): se envía una sola vez. Lo demás llega en el resumen diario.</p>`;
+    return `<p class="real-status">Enviada a los alumnos el ${esc(fmt(old.data.emailedAt))}.</p>`;
+  const how = me.mailEnabled ? 'por correo y como notificación en su celular' : 'como notificación en su celular';
+  return `<label class="check-label"><input type="checkbox" name="emailNow"> Avisar ahora a los alumnos a los que va dirigida (${how})</label><p class="muted">Úsalo solo para avisos urgentes (cambio de salón, clase suspendida): se envía una sola vez. Lo demás llega en la campana${me.mailEnabled ? ' y en el resumen diario' : ''}.</p>`;
 }
 async function emailNotice(saved) {
   try {
     const r = await request('/api/notice/email', { course: current.course.id, id: saved.id });
-    return r.error && !r.sent ? `Guardada, pero no se envió por correo: ${r.error}` : `Guardada y enviada por correo a ${r.sent} ${r.sent === 1 ? 'alumno' : 'alumnos'}.${r.skipped ? ` ${r.skipped} quedaron sin enviar: ${r.error || ''}` : ''}`;
+    const parts = [];
+    if (r.sent) parts.push(`por correo a ${r.sent} ${r.sent === 1 ? 'alumno' : 'alumnos'}`);
+    if (r.notified) parts.push(`como notificación a ${r.notified} ${r.notified === 1 ? 'dispositivo' : 'dispositivos'}`);
+    if (!parts.length) return `Guardada, pero no se pudo avisar: ${r.error || 'nadie la recibió'}`;
+    return `Guardada y enviada ${parts.join(' y ')}.${r.skipped ? ` ${r.skipped} correos quedaron sin enviar: ${r.error || ''}` : ''}`;
   }
   catch (error) {
-    return `Guardada, pero no se envió por correo: ${error.message}`;
+    return `Guardada, pero no se pudo avisar a los alumnos: ${error.message}`;
   }
 }
 function simpleRecord(kind, old) {
@@ -1241,10 +1244,12 @@ document.addEventListener('click', async (e) => {
       case 'profile':
         if (!me)
           return;
-        modal('Mi perfil', profilePhotoHtml() + (me.role === 'student' ? `<p><strong>${esc(me.name)}</strong></p>` : field('Nombre', 'name', me.name, 'text', 'required')) + `<p>${esc(me.email)}</p>${emailDigestHtml()}<p>Enlace no guarda contraseñas: entras con este correo a través de Microsoft o de Google.</p><p><button type="button" class="secondary" data-action="logout">Cerrar sesión</button></p><p>¿Perdiste un teléfono o entraste en una computadora ajena? <button type="button" class="text-btn" data-action="logout-all">Cerrar sesión en todos mis dispositivos</button></p>`, me.role === 'student' ? null : async (f) => {
+        modal('Mi perfil', profilePhotoHtml() + (me.role === 'student' ? `<p><strong>${esc(me.name)}</strong></p>` : field('Nombre', 'name', me.name, 'text', 'required')) + `<p>${esc(me.email)}</p>${emailDigestHtml()}${typeof pushProfileHtml === 'function' ? pushProfileHtml() : ''}<p>Enlace no guarda contraseñas: entras con este correo a través de Microsoft o de Google.</p><p><button type="button" class="secondary" data-action="logout">Cerrar sesión</button></p><p>¿Perdiste un teléfono o entraste en una computadora ajena? <button type="button" class="text-btn" data-action="logout-all">Cerrar sesión en todos mis dispositivos</button></p>`, me.role === 'student' ? null : async (f) => {
           await request('/api/profile', { name: f.get('name') });
           me = await request('/api/me');
         });
+        if (typeof fillPushProfile === 'function')
+          fillPushProfile();
         break;
       case 'export-grades':
         exportGrades();
@@ -1303,6 +1308,9 @@ async function init() {
     if (typeof joinFromLink === 'function')
       await joinFromLink();
     await openStartRoute();
+    // Notificaciones (12.72): si ya estaban permitidas, se ligan a esta sesión.
+    if (typeof syncPush === 'function')
+      syncPush();
   }
   catch (e) {
     if (e.status === 401) {
@@ -1314,7 +1322,7 @@ async function init() {
   }
 }
 // App instalable (PWA): el service worker nunca guarda datos de la API.
-if (globalThis.navigator?.serviceWorker && location.protocol === 'https:')
+if (globalThis.navigator?.serviceWorker && globalThis.isSecureContext)
   navigator.serviceWorker.register('/sw.js').catch(() => {});
 /** Pantalla de aceptación del aviso de privacidad; al aceptar continúa donde iba la persona. */
 function renderPrivacyGate() {

@@ -1,6 +1,7 @@
 // Asistencia: sesiones de clase, registro por alumno y reglas para calcular el porcentaje.
 import { access, requireTeacher, viewAs } from './access.js';
 import { validSection } from './sections.js';
+import { courseUrl, flushPush, pushSql } from './push.js';
 import {
   all,
   base64url,
@@ -146,6 +147,10 @@ async function reconcileLocationFlags(db, session, userId) {
   return clear.length;
 }
 
+/** Notificación de inasistencia (12.72): columnas de pushSql para alumno (m), clase (s) y curso (c). */
+const ABSENCE_NOTICE = `m.user_id, 'Inasistencia registrada' AS title, c.name || ' · clase del ' || strftime('%d/%m/%Y', s.date) AS body,
+  '/#c=' || c.id || '&s=attendance' AS url, 'inasistencia:' || s.id AS tag`;
+
 /**
  * Al terminar un registro (cerrado por el docente o vencido), quien no se registró queda como falta. La marca de
  * «registro por cerrar» es checkin_secret: se abre con el registro y se borra aquí, así cada registro se completa una
@@ -153,7 +158,17 @@ async function reconcileLocationFlags(db, session, userId) {
  */
 async function fillAbsences(db, course, sessionId = null) {
   const now = nowIso();
-  await db.batch([
+  const [pushed] = await db.batch([
+    // Notificación (12.72) a quien queda con falta, antes de escribirla (mismas condiciones que el INSERT).
+    db
+      .prepare(
+        pushSql(`SELECT DISTINCT ${ABSENCE_NOTICE}
+         FROM aula_sessions s JOIN aula_courses c ON c.id=s.course
+         JOIN aula_members m ON m.course=s.course AND m.role='student' AND m.user_id IS NOT NULL AND (s.section='' OR m.section=s.section)
+         WHERE s.course=?1 AND s.checkin_secret IS NOT NULL AND (s.id=?3 OR (?3 IS NULL AND s.checkin_until<?2))
+           AND NOT EXISTS (SELECT 1 FROM aula_attendance x WHERE x.session=s.id AND x.member=m.id)`),
+      )
+      .bind(course, now, sessionId),
     db
       .prepare(
         `INSERT INTO aula_attendance (session,member,status,note,updated_by,updated)
@@ -167,6 +182,7 @@ async function fillAbsences(db, course, sessionId = null) {
       .prepare('UPDATE aula_sessions SET checkin_secret=NULL WHERE course=?1 AND checkin_secret IS NOT NULL AND (id=?3 OR (?3 IS NULL AND checkin_until<?2))')
       .bind(course, now, sessionId),
   ]);
+  return pushed;
 }
 
 async function qrSignature(secret, code, window) {
@@ -251,7 +267,8 @@ async function sessionOf(db, id, course) {
 }
 
 export const attendanceRoutes = {
-  'GET /api/attendance': async ({ db, user, url }) => {
+  'GET /api/attendance': async (ctx) => {
+    const { db, user, url } = ctx;
     const course = url.searchParams.get('course');
     const a = await access(db, user, course);
     const { teach, viewer, member } = await viewAs(db, a, user, url);
@@ -259,7 +276,7 @@ export const attendanceRoutes = {
       (await one(db, 'SELECT min_percent, lates_per_absence, excused_counts FROM aula_attendance_settings WHERE course=?', course)) ||
       DEFAULT_SETTINGS;
     // Registros que vencieron sin que el docente los cerrara: quien no se registró queda como falta.
-    if (!a.course?.archived_at) await fillAbsences(db, course);
+    if (!a.course?.archived_at) await flushPush(ctx, await fillAbsences(db, course));
     // El alumno solo ve las clases de todo el curso y las de su sección.
     const sessions = await all(
       db,
@@ -360,7 +377,8 @@ export const attendanceRoutes = {
   },
 
   // Guarda uno o varios registros (un toque en la lista o "todos presentes") en una sola consulta.
-  'POST /api/attendance/mark': async ({ db, user, request }) => {
+  'POST /api/attendance/mark': async (ctx) => {
+    const { db, user, request } = ctx;
     const body = await readJson(request);
     requireTeacher(await access(db, user, body.course));
     const session = await sessionOf(db, body.session, body.course);
@@ -381,18 +399,28 @@ export const attendanceRoutes = {
       marks,
     );
     if (valid.n !== byMember.size) fail(session.section ? 'Hay alumnos que no pertenecen a la sección de esta clase.' : 'Hay alumnos que no pertenecen a este curso.');
-    await run(
-      db,
-      `INSERT INTO aula_attendance (session,member,status,note,updated_by,updated)
-       SELECT ?1, json_extract(j.value,'$.member'), json_extract(j.value,'$.status'), json_extract(j.value,'$.note'), ?2, ?3
-       FROM json_each(?4) j WHERE true
-       ON CONFLICT(session,member) DO UPDATE SET status=excluded.status, note=excluded.note,
-         updated_by=excluded.updated_by, updated=excluded.updated`,
-      body.session,
-      user.id,
-      nowIso(),
-      marks,
-    );
+    const [pushed] = await db.batch([
+      // Notificación (12.72), antes de guardar: a quien pasa a tener falta en esta clase (y antes no la tenía).
+      db
+        .prepare(
+          pushSql(`SELECT DISTINCT ${ABSENCE_NOTICE}
+           FROM json_each(?2) j JOIN aula_sessions s ON s.id=?1 JOIN aula_courses c ON c.id=s.course
+           JOIN aula_members m ON m.id=json_extract(j.value,'$.member') AND m.course=s.course AND m.user_id IS NOT NULL
+           WHERE json_extract(j.value,'$.status')='absent'
+             AND NOT EXISTS (SELECT 1 FROM aula_attendance x WHERE x.session=s.id AND x.member=m.id AND x.status='absent')`),
+        )
+        .bind(body.session, marks),
+      db
+        .prepare(
+          `INSERT INTO aula_attendance (session,member,status,note,updated_by,updated)
+           SELECT ?1, json_extract(j.value,'$.member'), json_extract(j.value,'$.status'), json_extract(j.value,'$.note'), ?2, ?3
+           FROM json_each(?4) j WHERE true
+           ON CONFLICT(session,member) DO UPDATE SET status=excluded.status, note=excluded.note,
+             updated_by=excluded.updated_by, updated=excluded.updated`,
+        )
+        .bind(body.session, user.id, nowIso(), marks),
+    ]);
+    await flushPush(ctx, pushed);
     return json({ saved: byMember.size });
   },
 
@@ -458,9 +486,11 @@ export const attendanceRoutes = {
 
   // El docente abre el registro: se genera un código nuevo, un secreto para firmar el QR y, si se pide, un PIN.
   // Con mode='code' el código se escribe en el pizarrón y puede revisarse la ubicación del salón (del teléfono del docente).
-  'POST /api/attendance/checkin/open': async ({ db, user, request }) => {
+  'POST /api/attendance/checkin/open': async (ctx) => {
+    const { db, user, request } = ctx;
     const body = await readJson(request);
-    requireTeacher(await access(db, user, body.course));
+    const a = await access(db, user, body.course);
+    requireTeacher(a);
     const session = await sessionOf(db, body.session, body.course);
     const mode = body.mode === 'code' ? 'code' : 'qr';
     const minutes = Number(body.minutes ?? 15);
@@ -505,6 +535,19 @@ export const attendanceRoutes = {
       }
     }
     if (!code) fail('No se pudo abrir el registro. Inténtalo de nuevo.', 503);
+    // Notificación (12.72) a los alumnos de la clase (su sección o todo el curso).
+    const pushed = await run(
+      db,
+      pushSql(`SELECT DISTINCT m.user_id, 'Pase de lista abierto' AS title, ? AS body, ? AS url, ? AS tag FROM aula_members m
+        WHERE m.course=? AND m.role='student' AND m.user_id IS NOT NULL AND (?='' OR m.section=?)`),
+      `${a.course.name} · regístrate en los próximos ${minutes} min`,
+      courseUrl(body.course, 'attendance'),
+      `pase:${session.id}`,
+      body.course,
+      session.section || '',
+      session.section || '',
+    ).catch(() => null);
+    await flushPush(ctx, pushed);
     return json({
       code, secret, pin, until, started: started.toISOString(), late_minutes: lateMinutes, serverNow: Date.now(), windowMs: WINDOW_MS,
       mode, radius, strict: mode === 'code' && body.strict === true, located: Boolean(place),
@@ -575,12 +618,13 @@ export const attendanceRoutes = {
     return json({ ok: true });
   },
 
-  'POST /api/attendance/checkin/close': async ({ db, user, request }) => {
+  'POST /api/attendance/checkin/close': async (ctx) => {
+    const { db, user, request } = ctx;
     const body = await readJson(request);
     requireTeacher(await access(db, user, body.course));
     const session = await sessionOf(db, body.session, body.course);
     await reconcileLocationFlags(db, session, user.id);
-    await fillAbsences(db, body.course, session.id);
+    const pushed = await fillAbsences(db, body.course, session.id);
     // La ubicación del salón solo se necesita mientras el registro está abierto.
     await run(
       db,
@@ -589,6 +633,7 @@ export const attendanceRoutes = {
       body.session,
       body.course,
     );
+    await flushPush(ctx, pushed);
     return json({ ok: true });
   },
 

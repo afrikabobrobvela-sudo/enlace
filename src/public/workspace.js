@@ -44,6 +44,7 @@ function workspaceHome() {
   decorateCourseVisibility();
   filterCourses(); // oculta los archivados en la vista inicial
   shelfArrival();
+  if (typeof showPushInvite === 'function') showPushInvite();
   renderHomeDashboard();
   maybeAskClassification();
 }

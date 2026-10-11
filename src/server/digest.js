@@ -7,6 +7,7 @@ import { all, fail, json, nowIso, one, readJson, run } from './http.js';
 import { dailyLimit, mailBody, mailConfigured, mailProvider, mailQuota, sendMails } from './mail.js';
 import { forSection, isPublished, publishedSql, sectionSql, specialRecordSql, specialTaskSql } from './published.js';
 import { forumActivitySql, threadTitleSql } from './foros.js';
+import { courseUrl, flushPush, pushToMembers } from './push.js';
 import { conditionsSql, recordConditionsSql } from './condiciones.js';
 
 const HOUR = 3_600_000;
@@ -197,40 +198,57 @@ export const digestRoutes = {
   },
 
   /**
-   * Noticia urgente: el docente la envía por correo en ese momento a los alumnos a los que va dirigida (su sección),
-   * una sola vez. Respeta a quien apagó los correos y el cupo del día.
+   * Noticia urgente: el docente la envía en ese momento a los alumnos a los que va dirigida (su sección), una sola
+   * vez: como notificación (12.72) a todos los que la activaron y por correo si está configurado (respeta a quien
+   * apagó los correos y el cupo del día).
    */
-  'POST /api/notice/email': async ({ db, env, user, request }) => {
+  'POST /api/notice/email': async (ctx) => {
+    const { db, env, user, request } = ctx;
     const body = await readJson(request);
     const a = await access(db, user, body.course);
     requireTeacher(a);
-    if (!mailConfigured(env)) fail('El correo de avisos todavía no está configurado. Pídelo a la administración.', 409);
     const row = await one(db, "SELECT * FROM aula_records WHERE id=? AND course=? AND kind='notice' AND deleted_at IS NULL", String(body.id ?? ''), body.course);
     if (!row) fail('Noticia no encontrada.', 404);
     const notice = { ...row, data: JSON.parse(row.data) };
-    if (!isPublished(notice)) fail('La noticia debe estar visible y publicada para enviarla por correo.', 409);
-    if (notice.data.emailedAt) fail(`Esta noticia ya se envió por correo (${when(notice.data.emailedAt)}).`, 409);
+    if (!isPublished(notice)) fail('La noticia debe estar visible y publicada para enviarla.', 409);
+    if (notice.data.emailedAt) fail(`Esta noticia ya se envió a los alumnos (${when(notice.data.emailedAt)}).`, 409);
     const students = (
       await all(
         db,
-        `SELECT u.email, u.name, m.section FROM aula_members m JOIN aula_users u ON u.id=m.user_id
-         WHERE m.course=? AND m.role='student' AND u.email_digest=1 AND u.suspended_at IS NULL`,
+        `SELECT m.id, u.email, u.name, m.section, u.email_digest FROM aula_members m JOIN aula_users u ON u.id=m.user_id
+         WHERE m.course=? AND m.role='student' AND u.suspended_at IS NULL`,
         body.course,
       )
     ).filter((s) => forSection(notice.data.sections, s.section));
-    if (!students.length) fail('No hay alumnos con cuenta que reciban correos en esta noticia.', 409);
-    if (students.length > (await mailQuota(db, env))) fail(`Hoy ya no alcanza el cupo de correos para ${students.length} alumnos. Inténtalo mañana.`, 429);
-    const plain = String(notice.data.body || '').replace(/\$\$?([^$]*)\$\$?/g, '$1').replace(/[*_#>`]/g, '').slice(0, 4000);
-    const messages = students.map((s) => ({
-      to: s.email,
-      subject: `${a.course.name}: ${notice.data.title}`,
-      ...mailBody({ title: notice.data.title, intro: plain, groups: [], url: env.ENLACE_URL || '', footer: `Noticia de ${a.course.name} en Enlace. ${FOOTER}` }),
-    }));
-    const result = await sendMails(db, env, messages);
-    if (result.sent.length) {
+    if (!students.length) fail('No hay alumnos con cuenta a los que vaya dirigida esta noticia.', 409);
+    const readers = students.filter((s) => s.email_digest === 1);
+    const mail = mailConfigured(env) && readers.length;
+    if (mail && readers.length > (await mailQuota(db, env))) fail(`Hoy ya no alcanza el cupo de correos para ${readers.length} alumnos. Inténtalo mañana.`, 429);
+    const pushed = await pushToMembers(db, body.course, students.map((s) => s.id), {
+      title: notice.data.title,
+      body: `Noticia de ${a.course.name}`,
+      url: courseUrl(body.course, 'notices'),
+      tag: `noticia:${row.id}`,
+    })
+      .run()
+      .catch(() => null);
+    let result = { sent: [], skipped: [], error: null };
+    if (mail) {
+      const plain = String(notice.data.body || '').replace(/\$\$?([^$]*)\$\$?/g, '$1').replace(/[*_#>`]/g, '').slice(0, 4000);
+      const messages = readers.map((s) => ({
+        to: s.email,
+        subject: `${a.course.name}: ${notice.data.title}`,
+        ...mailBody({ title: notice.data.title, intro: plain, groups: [], url: env.ENLACE_URL || '', footer: `Noticia de ${a.course.name} en Enlace. ${FOOTER}` }),
+      }));
+      result = await sendMails(db, env, messages);
+    }
+    const notified = pushed?.meta?.changes || 0;
+    if (result.sent.length || notified) {
       await run(db, "UPDATE aula_records SET data=json_set(data,'$.emailedAt',?) WHERE id=?", nowIso(), row.id);
     }
-    return json({ sent: result.sent.length, skipped: result.skipped.length, error: result.error });
+    await flushPush(ctx, pushed);
+    if (!mail && !notified) fail('Ningún alumno de esta noticia tiene activadas las notificaciones y el correo de avisos no está configurado.', 409);
+    return json({ sent: result.sent.length, skipped: result.skipped.length, error: result.error, notified });
   },
 
   // ---- Administración ----

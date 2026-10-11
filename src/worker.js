@@ -11,6 +11,7 @@ import { runDigest } from './server/digest.js';
 import { serveSebConfig } from './server/seb.js';
 import { serveCertificatePage } from './server/constancias.js';
 import { serveH5p } from './server/h5p.js';
+import { PUSH_CRON, runPush } from './server/push.js';
 
 const TYPES = {
   html: 'text/html; charset=utf-8',
@@ -33,13 +34,15 @@ function body(name) {
 }
 
 export default {
-  // Resumen diario de avisos por correo (el horario está en [triggers] de wrangler.toml).
+  // Tareas programadas ([triggers] de wrangler.toml): cada 5 minutos, las notificaciones pendientes (12.72); la otra,
+  // el resumen diario de avisos por correo.
   async scheduled(event, env, ctx) {
-    ctx.waitUntil(runDigest(env.DB, env).catch((error) => console.error('aula-mail resumen', error)));
+    if (event.cron === PUSH_CRON) ctx.waitUntil(runPush(env).catch((error) => console.error('aula-push programado', error)));
+    else ctx.waitUntil(runDigest(env.DB, env).catch((error) => console.error('aula-mail resumen', error)));
   },
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     const url = new URL(request.url);
-    if (url.pathname.startsWith('/api/')) return api(request, env);
+    if (url.pathname.startsWith('/api/')) return api(request, env, ctx);
     if (url.pathname.startsWith('/auth/')) return auth(request, env);
     // Configuración de Safe Exam Browser de una evaluación (SEB la descarga sin sesión; 12.28).
     const seb = url.pathname.match(/^\/seb\/([A-Za-z0-9-]{1,64})\.seb$/);
