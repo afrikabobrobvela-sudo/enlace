@@ -903,3 +903,29 @@ export const annotations = sqliteTable(
   },
   (t) => [index('aula_annotations_course').on(t.course)],
 );
+
+/**
+ * Migración 0042 (12.70): mensajes directos. Una conversación por inscripción (`member`) entre el alumno y quienes
+ * enseñan en el curso; `from_teacher` dice quién escribió. `aula_message_threads` guarda hasta cuándo leyó cada lado.
+ */
+export const messages = sqliteTable(
+  'aula_messages',
+  {
+    id: text('id').primaryKey(),
+    course: text('course').notNull(),
+    member: text('member').notNull(),
+    fromTeacher: integer('from_teacher').notNull(),
+    author: text('author').notNull(),
+    authorName: text('author_name').notNull(),
+    body: text('body').notNull(),
+    created: text('created').notNull(),
+  },
+  (t) => [index('aula_messages_member').on(t.member, t.created), index('aula_messages_course').on(t.course, t.created)],
+);
+
+export const messageThreads = sqliteTable('aula_message_threads', {
+  member: text('member').primaryKey(),
+  course: text('course').notNull(),
+  studentReadAt: text('student_read_at').notNull().default(''),
+  teacherReadAt: text('teacher_read_at').notNull().default(''),
+});

@@ -137,7 +137,9 @@ function render() {
     progress: renderProgress,
     admin: renderAdmin,
     trash: renderTrash,
-    notices: renderNotices
+    notices: renderNotices,
+    // 12.70 (mensajes.js); con función flecha para que las pruebas que no cargan ese archivo no fallen al armar el mapa.
+    messages: () => renderMessages()
   };
   (routes[section] || renderHub)();
 }

@@ -1,9 +1,19 @@
-# Enlace · versión 12.69
+# Enlace · versión 12.70
 
 Plataforma académica independiente para docentes y alumnos de cualquier academia (nació en la Academia de Física de la BUAP), con interfaz inspirada en Brightspace.
 No es el código de D2L Brightspace ni una plataforma oficial de la BUAP.
 
 Esta versión se despliega en **tu propia cuenta de Cloudflare** (Workers + D1 + R2, plan gratuito) y ya no depende de ChatGPT Sites.
+
+## Novedades de la versión 12.70 (mensajes directos)
+
+- **Mensajes privados** en cada curso, en *Más → Mensajes*:
+  - **Tú** ves la lista de conversaciones (las que tienen mensajes sin leer, resaltadas y con su número) y respondes en cada una. Con **«Nuevo mensaje»** escribes a un alumno, a varios o a todo el grupo (respeta el filtro de sección): cada uno lo recibe en su conversación privada, sin ver a quién más se envió.
+  - **El alumno** tiene una sola conversación con los docentes del curso y puede escribirte cuando lo necesite (con un tope de 30 mensajes por hora para evitar abusos).
+  - Tus co-docentes también ven las conversaciones del curso.
+- **Avisos**: cada mensaje nuevo aparece en la **campana** («Mensaje de …», un aviso por conversación) y en el **resumen diario por correo** («Tienes N mensajes nuevos»).
+- Los mensajes admiten el mismo formato que el resto de Enlace (negritas, listas, enlaces y fórmulas).
+- **Migración nueva** (`0042_mensajes.sql`): solo agrega dos tablas.
 
 ## Novedades de la versión 12.69 (anotar entregas)
 
