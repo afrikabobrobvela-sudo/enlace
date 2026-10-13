@@ -5,6 +5,13 @@ No es el código de D2L Brightspace ni una plataforma oficial de la BUAP.
 
 Esta versión se despliega en **tu propia cuenta de Cloudflare** (Workers + D1 + R2, plan gratuito) y ya no depende de ChatGPT Sites.
 
+## Novedades de la versión 12.75 (menús desplegables)
+
+- **El filtro «Secciones» ya no se sale de la pantalla.** Cuando el filtro está al inicio de la fila (por ejemplo, en una actividad, junto a «Acceso especial»), su ventana se abre hacia la derecha y se ve completa. Lo revisé en alumnos, actividades, calificaciones, asistencia, participación, equipos y evaluaciones, en computadora, tableta y celular.
+- **Los menús se cierran al tocar afuera** (o con la tecla Esc): «Más», el filtro de secciones, «Más acciones» y los demás menús desplegables. Al abrir uno se cierra el que estaba abierto.
+- **«Más» abierto ya se lee:** antes se ponía en gris claro con letras blancas y la barra se movía.
+- **Nueva flecha** en «Más», «Más acciones» y el filtro de secciones: un ángulo que gira al abrir, en lugar de la «v» suelta.
+
 ## Novedades de la versión 12.74 (código QR por sección)
 
 - **Botón «Código QR para unirse» en el Listado de alumnos** (junto a «Importar lista»). Abre el mismo diálogo que *Administración del curso → Código para unirse*.

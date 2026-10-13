@@ -124,6 +124,34 @@ document.addEventListener('click', (e) => {
     render();
   }
 });
+// Menús desplegables (12.75): se cierran al tocar fuera o con Esc, y abrir uno cierra los demás. Antes «Más» y el
+// filtro de secciones se quedaban abiertos hasta volver a tocar su botón.
+const POPOVER_MENUS = 'details.more-menu, details.section-filter, details.course-picker, details.card-actions, details.more-actions, details.gb-col-menu, details.bank-picker';
+document.addEventListener('click', (e) => {
+  for (const menu of document.querySelectorAll(POPOVER_MENUS)) if (menu.open && !menu.contains(e.target)) menu.open = false;
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  const open = [...document.querySelectorAll(POPOVER_MENUS)].filter((menu) => menu.open);
+  if (!open.length) return;
+  for (const menu of open) menu.open = false;
+  open.at(-1).querySelector('summary')?.focus();
+});
+
+// El panel se alinea a la derecha del botón; si así se saliera por la izquierda de la pantalla (filtro al inicio de
+// la fila, como en Actividades), se alinea a la izquierda (y al revés). `toggle` no burbujea: se escucha en captura.
+document.addEventListener(
+  'toggle',
+  (e) => {
+    const picker = e.target;
+    if (!picker.matches?.('[data-section-picker]') || !picker.open) return;
+    const panel = picker.querySelector('.section-filter-panel');
+    panel.classList.remove('panel-left');
+    const box = panel.getBoundingClientRect();
+    if (box.left < 8) panel.classList.add('panel-left');
+  },
+  true,
+);
 document.addEventListener('input', (e) => {
   if (!e.target.matches('[data-section-search]')) return;
   const term = e.target.value.trim().toLowerCase();
