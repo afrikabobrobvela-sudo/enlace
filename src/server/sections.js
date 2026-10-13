@@ -13,7 +13,7 @@ const key = (name) => name.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase(
 
 export const sectionsOf = (db, course) => all(db, 'SELECT id, name, position FROM aula_sections WHERE course=? ORDER BY position, name', course);
 
-async function sectionOf(db, course, id) {
+export async function sectionOf(db, course, id) {
   const row = await one(db, 'SELECT * FROM aula_sections WHERE id=? AND course=?', String(id ?? ''), course);
   if (!row) fail('Sección no encontrada.', 404);
   return row;

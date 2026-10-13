@@ -749,6 +749,8 @@ export const sections = sqliteTable(
     name: text('name').notNull(),
     position: integer('position').notNull().default(0),
     created: text('created').notNull(),
+    // Migración 0045 (12.74): código para unirse a esta sección ('' = sin código; índice único parcial). Nunca sale al alumno.
+    joinCode: text('join_code').notNull().default(''),
   },
   (t) => [uniqueIndex('aula_sections_course_name').on(t.course, t.name)],
 );

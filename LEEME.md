@@ -5,6 +5,15 @@ No es el código de D2L Brightspace ni una plataforma oficial de la BUAP.
 
 Esta versión se despliega en **tu propia cuenta de Cloudflare** (Workers + D1 + R2, plan gratuito) y ya no depende de ChatGPT Sites.
 
+## Novedades de la versión 12.74 (código QR por sección)
+
+- **Botón «Código QR para unirse» en el Listado de alumnos** (junto a «Importar lista»). Abre el mismo diálogo que *Administración del curso → Código para unirse*.
+- **Cada sección tiene su propio código y QR.** Si el curso tiene secciones, el diálogo pregunta «¿A qué sección se unen?» y empieza en la sección que tengas filtrada en la lista (por ejemplo, 5AV). Quien se une con ese código **queda inscrito directamente en esa sección**. «Todo el curso (sin sección)» es el código general de antes, que sigue funcionando igual.
+- Si un alumno ya estaba en el curso **sin sección** y usa el código de una sección, queda en ella. A quien ya tiene sección no se le cambia (eso solo lo hace el docente).
+- **«Proyectar»** muestra el código y el QR en pantalla completa para el proyector del salón (Esc para salir).
+- Cambiar o desactivar el código de una sección no afecta a las demás ni al código general. Al eliminar una sección, su código deja de servir. Los códigos nunca se envían a los alumnos.
+- **Migración 0045** (no destructiva): agrega la columna `join_code` a `aula_sections`. `npm run configurar` (o el despliegue automático) la aplica después del respaldo.
+
 ## Novedades de la versión 12.73 (panel de participación)
 
 - **«Progreso» ahora se llama «Participación»** (*Más → Participación*) y junta en una pantalla lo que antes estaba repartido:
