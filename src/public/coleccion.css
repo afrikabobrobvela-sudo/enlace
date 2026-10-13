@@ -578,6 +578,14 @@ footer a { padding-block: 4px; }
 .join-link { margin: 0 0 8px; overflow-wrap: anywhere; }
 .join-qr { width: 200px; max-width: 100%; }
 .join-qr svg { display: block; width: 100%; height: auto; }
+.join-section { display: block; margin-bottom: 16px; }
+/* 12.74: «Proyectar» pone el código y el QR en pantalla completa para el proyector del salón. */
+.join-code-box:fullscreen { background: #fff; padding: 6vh 6vw; align-items: center; justify-content: center; flex-wrap: nowrap; gap: 6vw; }
+.join-code-box:fullscreen .action-row { display: none; }
+.join-code-box:fullscreen > div:first-child { flex: 0 1 auto; }
+.join-code-box:fullscreen .join-code { font-size: clamp(40px, 6.5vw, 140px); white-space: nowrap; }
+.join-code-box:fullscreen .join-link, .join-code-box:fullscreen .muted { font-size: clamp(16px, 1.8vw, 28px); }
+.join-code-box:fullscreen .join-qr { width: min(80vh, 44vw); }
 
 /* 12.69: anotar entregas. Diálogo a pantalla completa con las páginas y su capa de marcas (anotar.js). */
 .annotate-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0 12px; }

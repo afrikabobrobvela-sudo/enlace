@@ -78,7 +78,8 @@ assert.equal((await get(url + 'c/content/content.json')).status, 200);
 for (const bad of ['c/../h5p.json', 'c/%2e%2e/x', 'c/no-existe.js', 'x/h5p.json']) assert.equal((await get(url + bad)).status, 404, bad);
 assert.equal((await get('/h5p/' + 'a'.repeat(40) + '.firma/')).status, 404, 'Token falso');
 const [body, sig] = url.split('/')[2].split('.');
-assert.equal((await get(`/h5p/${body}.${sig.slice(0, -2)}xx/`)).status, 404, 'Firma alterada');
+// Se cambia el primer carácter (sus 6 bits cuentan): cambiar los últimos podía dejar los mismos bytes (bits de relleno).
+assert.equal((await get(`/h5p/${body}.${sig[0] === 'A' ? 'B' : 'A'}${sig.slice(1)}/`)).status, 404, 'Firma alterada');
 const vendor = await get('/vendor/h5p-standalone-3.8.2/fonts/h5p-core-30.woff2');
 assert.equal(vendor.headers.get('access-control-allow-origin'), '*', 'Las fuentes del reproductor se pueden leer desde el marco');
 assert.equal((await get('/index.html')).headers.get('access-control-allow-origin'), null);

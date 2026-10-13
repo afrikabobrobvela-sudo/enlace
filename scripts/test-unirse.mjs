@@ -78,4 +78,62 @@ await call('docente', '/api/course/archive', { course: c, archived: true });
 assert.match((await call('dani', '/api/join', { code: actual }, 409)).error, /ya terminó/);
 checks++;
 
-console.log(`PASS: ${checks} verificaciones del código para unirse — solo el docente lo ve y lo cambia, inscripción sin duplicados, sin tocar bajas ni docentes, y nunca sale en las respuestas del curso.`);
+// ---- Código por sección (12.74): quien se une queda en esa sección ----
+const c2 = (await call('docente', '/api/courses', { name: 'Física I', group: '5AV y 5BV' }, 201)).id;
+const s5av = (await call('docente', '/api/sections', { course: c2, name: '5AV' }, 201)).id;
+const s5bv = (await call('docente', '/api/sections', { course: c2, name: '5BV' }, 201)).id;
+const otherCourse = (await call('colega', '/api/courses', { name: 'Ajeno', group: 'X' }, 201)).id;
+const sOther = (await call('colega', '/api/sections', { course: otherCourse, name: 'Z' }, 201)).id;
+assert.deepEqual(await call('docente', `/api/course/join-code?course=${c2}&section=${s5av}`), { code: '', section: s5av });
+await call('docente', `/api/course/join-code?course=${c2}&section=${sOther}`, undefined, 404);
+await call('docente', '/api/course/join-code', { course: c2, section: sOther, enabled: true }, 404);
+await call('ana', '/api/course/join-code', { course: c2, section: s5av, enabled: true }, 403);
+const codeA = (await call('docente', '/api/course/join-code', { course: c2, section: s5av, enabled: true })).code;
+const codeB = (await call('docente', '/api/course/join-code', { course: c2, section: s5bv, enabled: true })).code;
+const codeAll = (await call('docente', '/api/course/join-code', { course: c2, enabled: true })).code;
+assert.equal(new Set([codeA, codeB, codeAll]).size, 3, 'Cada sección y el curso tienen su propio código');
+assert.equal((await call('docente', `/api/course/join-code?course=${c2}&section=${s5av}`)).code, codeA);
+assert.equal((await call('docente', `/api/course/join-code?course=${c2}`)).code, codeAll, 'El código general no cambia');
+checks += 3;
+
+const ema = await call('ema', '/api/join', { code: codeA }, 201);
+assert.deepEqual([ema.course, ema.section, ema.already], [c2, '5AV', false]);
+await call('fer', '/api/join', { code: codeB.toLowerCase() }, 201);
+await call('gabi', '/api/join', { code: codeAll }, 201);
+const sectionOfMember = async (email) => (await call('docente', '/api/course?id=' + c2)).members.find((m) => m.email === email).section;
+assert.equal(await sectionOfMember('ema@example.test'), s5av);
+assert.equal(await sectionOfMember('fer@example.test'), s5bv);
+assert.equal(await sectionOfMember('gabi@example.test'), '', 'El código general deja sin sección');
+// Quien estaba sin sección queda en la del código; quien ya tenía una no se cambia solo.
+const gabi = await call('gabi', '/api/join', { code: codeB });
+assert.deepEqual([gabi.already, gabi.placed, gabi.section], [true, true, '5BV']);
+assert.equal(await sectionOfMember('gabi@example.test'), s5bv);
+const emaAgain = await call('ema', '/api/join', { code: codeB });
+assert.deepEqual([emaAgain.already, emaAgain.placed, emaAgain.section], [true, undefined, '']);
+assert.equal(await sectionOfMember('ema@example.test'), s5av, 'El alumno no se cambia de sección con otro código');
+assert.equal((await call('docente', '/api/join', { code: codeA })).already, true, 'El propietario no se inscribe');
+checks += 8;
+
+// El código de la sección nunca sale en las respuestas del curso (ni al docente ni al alumno).
+for (const who of ['docente', 'ema']) {
+  const body = JSON.stringify(await call(who, '/api/course?id=' + c2)) + JSON.stringify(await call(who, '/api/courses'));
+  assert.equal(body.includes(codeA) || body.includes(codeB), false, `${who} no recibe códigos de sección`);
+}
+assert.equal(JSON.stringify(await call('docente', '/api/members/sources?course=' + c)).includes(codeA), false, 'Ni en «Traer de otro curso»');
+checks += 2;
+
+// Cambiar o quitar el de una sección no toca los demás; al borrar la sección, su código deja de servir.
+const codeA2 = (await call('docente', '/api/course/join-code', { course: c2, section: s5av, enabled: true, regenerate: true })).code;
+assert.notEqual(codeA2, codeA);
+await call('hugo', '/api/join', { code: codeA }, 404);
+await call('docente', '/api/course/join-code', { course: c2, section: s5bv, enabled: false });
+await call('hugo', '/api/join', { code: codeB }, 404);
+assert.equal((await call('hugo', '/api/join', { code: codeA2 }, 201)).section, '5AV');
+assert.equal((await call('docente', `/api/course/join-code?course=${c2}`)).code, codeAll);
+const s5cv = (await call('docente', '/api/sections', { course: c2, name: '5CV' }, 201)).id;
+const codeC = (await call('docente', '/api/course/join-code', { course: c2, section: s5cv, enabled: true })).code;
+await call('docente', '/api/sections/delete', { course: c2, id: s5cv });
+await call('iris', '/api/join', { code: codeC }, 404);
+checks += 4;
+
+console.log(`PASS: ${checks} verificaciones del código para unirse — solo el docente lo ve y lo cambia, inscripción sin duplicados, sin tocar bajas ni docentes, y nunca sale en las respuestas del curso; código por sección.`);
