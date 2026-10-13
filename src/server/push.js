@@ -269,8 +269,9 @@ const localDay = (date) => new Date(+date - MX_OFFSET_HOURS * 3_600_000).toISOSt
 
 /**
  * Una vez al día, a partir de las 18:00 de la Ciudad de México: a cada alumno, las actividades que vencen mañana (día
- * local) y que no ha entregado. Misma regla de visibilidad que «vence pronto» del resumen por correo (sección,
- * acceso especial, condiciones, prórroga y fecha de la sección).
+ * local) y que no ha entregado, y (12.75) las que vencieron en las últimas 24 horas sin que las entregara. Misma regla
+ * de visibilidad que «vence pronto» del resumen por correo (sección, acceso especial, condiciones, prórroga y fecha de
+ * la sección).
  */
 export async function queueDueReminders(db, now = new Date()) {
   const local = new Date(+now - MX_OFFSET_HOURS * 3_600_000);
@@ -287,12 +288,8 @@ export async function queueDueReminders(db, now = new Date()) {
   const from = new Date(Date.parse(today + 'T00:00:00Z') + (24 + MX_OFFSET_HOURS) * 3_600_000).toISOString();
   const to = new Date(Date.parse(from) + 24 * 3_600_000).toISOString();
   const due = "coalesce(nullif(e.due,''), nullif(d.due,''), t.due)";
-  const result = await run(
-    db,
-    pushSql(`SELECT m.user_id, 'Vence mañana: ' || t.title AS title,
-         c.name || ' · a las ' || strftime('%H:%M', ${due}, '-${MX_OFFSET_HOURS} hours') AS body,
-         '/#c=' || c.id || '&s=task&d=' || t.id AS url, 'vence:' || t.id AS tag
-       FROM aula_members m
+  // Mismas reglas de visibilidad y de «sin entregar» para los dos avisos.
+  const pending = (when) => `FROM aula_members m
        JOIN aula_courses c ON c.id=m.course AND c.archived_at IS NULL AND c.student_visible=1
        JOIN aula_tasks t ON t.course=m.course AND t.visible=1 AND t.deleted_at IS NULL AND t.forum IS NULL
        LEFT JOIN aula_extensions e ON e.task=t.id AND e.member=m.id
@@ -300,12 +297,29 @@ export async function queueDueReminders(db, now = new Date()) {
        WHERE m.role='student' AND m.user_id IN (SELECT user_id FROM aula_push_subscriptions)
          AND NOT EXISTS (SELECT 1 FROM aula_deleted_courses x WHERE x.course=c.id)
          AND ${sectionSql('t.sections', 'm.section')} AND ${specialTaskSql('t', 'm.id')} AND ${conditionsSql('t.conditions', 'm.id')}
-         AND ${due} >= ?1 AND ${due} < ?2
-         AND NOT EXISTS (SELECT 1 FROM aula_submissions s WHERE s.task=t.id AND s.member=m.id AND (s.submitted!='' OR s.grade IS NOT NULL))`),
-    from,
-    to,
-  );
-  return result.meta?.changes ?? 0;
+         AND ${when}
+         AND NOT EXISTS (SELECT 1 FROM aula_submissions s WHERE s.task=t.id AND s.member=m.id AND (s.submitted!='' OR s.grade IS NOT NULL))`;
+  // 12.75: lo que venció desde las 18:00 de ayer hasta las 18:00 de hoy (cada actividad entra en un solo día).
+  const sixPm = new Date(Date.parse(today + 'T00:00:00Z') + (REMINDER_HOUR + MX_OFFSET_HOURS) * 3_600_000);
+  const results = await db.batch([
+    db
+      .prepare(
+        pushSql(`SELECT m.user_id, 'Vence mañana: ' || t.title AS title,
+         c.name || ' · a las ' || strftime('%H:%M', ${due}, '-${MX_OFFSET_HOURS} hours') AS body,
+         '/#c=' || c.id || '&s=task&d=' || t.id AS url, 'vence:' || t.id AS tag
+       ${pending(`${due} >= ?1 AND ${due} < ?2`)}`),
+      )
+      .bind(from, to),
+    db
+      .prepare(
+        pushSql(`SELECT m.user_id, 'Sin entregar: ' || t.title AS title,
+         c.name || ' · venció el ' || strftime('%d/%m a las %H:%M', ${due}, '-${MX_OFFSET_HOURS} hours') AS body,
+         '/#c=' || c.id || '&s=task&d=' || t.id AS url, 'vencida:' || t.id AS tag
+       ${pending(`${due} <> '' AND ${due} >= ?1 AND ${due} < ?2`)}`),
+      )
+      .bind(new Date(+sixPm - 24 * 3_600_000).toISOString(), sixPm.toISOString()),
+  ]);
+  return results.reduce((n, r) => n + (r.meta?.changes ?? 0), 0);
 }
 
 /** Tarea programada de cada 5 minutos: recordatorios del día (una vez) y lo que haya quedado en la cola. */

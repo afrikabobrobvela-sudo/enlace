@@ -57,8 +57,11 @@ const NOTICE_LABELS = {
   submission: 'Entregas nuevas',
   post: 'Foro: publicaciones nuevas',
   message: 'Mensaje',
+  absence: 'Inasistencia registrada',
+  due: 'Vence pronto',
+  overdue: 'Vencida sin entregar',
 };
-const NOTICE_TARGET = { notice: 'notices', material: 'content', quiz: 'quiz', task: 'task', grade: 'task', submission: 'task', post: 'thread', message: 'messages' };
+const NOTICE_TARGET = { notice: 'notices', material: 'content', quiz: 'quiz', task: 'task', grade: 'task', submission: 'task', post: 'thread', message: 'messages', absence: 'attendance', due: 'task', overdue: 'task' };
 let noticesCache = null;
 let noticesLoadedAt = 0;
 const NOTICES_EVERY = 5 * 60_000;
@@ -99,10 +102,10 @@ function noticeListHtml(items) {
   if (!shown.length) return `<p class="muted bell-empty">${items.length ? 'Ningún aviso coincide con el filtro.' : 'No hay avisos recientes.'}</p>`;
   return `<ul class="notice-list">${shown
     .map(
-      (i) => `<li><button class="bell-item ${i.fresh ? 'is-new' : ''}" data-notice-key="${esc(i.key || '')}" ${openItemAttrs(i.course, NOTICE_TARGET[i.type], i.id)}>
+      (i) => `<li><button class="bell-item ${i.fresh ? 'is-new' : ''}${i.type === 'overdue' ? ' is-overdue' : ''}" data-notice-key="${esc(i.key || '')}" ${openItemAttrs(i.course, NOTICE_TARGET[i.type], i.id)}>
         <span class="bell-kind">${i.fresh ? '<span class="unread-dot" aria-label="Sin leer"></span>' : ''}${NOTICE_LABELS[i.type] || ''}${i.count > 1 ? ` (${i.count})` : ''}</span>
         <span class="bell-title">${esc(i.title || 'Sin título')}</span>
-        <span class="bell-meta">${esc(i.course_name)} · ${esc(fmt(i.at))}</span></button></li>`,
+        <span class="bell-meta">${esc(i.course_name)} · ${esc(i.due ? `${i.type === 'overdue' ? 'venció' : 'vence'} ${fmt(i.due)}` : fmt(i.at))}</span></button></li>`,
     )
     .join('')}</ul>`;
 }

@@ -5,6 +5,42 @@ No es el código de D2L Brightspace ni una plataforma oficial de la BUAP.
 
 Esta versión se despliega en **tu propia cuenta de Cloudflare** (Workers + D1 + R2, plan gratuito) y ya no depende de ChatGPT Sites.
 
+## Novedades de la versión 12.76 (editor de actividades al estilo Brightspace)
+
+- **Nuevo editor de actividades**, con la misma distribución que Brightspace:
+  - A la izquierda: **Nombre**, **Calificación de** (puntos) y **Fecha de vencimiento** en una fila, **Instrucciones** y el material para los alumnos.
+  - A la derecha, tres tarjetas que se abren y cierran, con un resumen debajo del título:
+    - **Fechas y condiciones de disponibilidad** («Siempre disponible»): fecha de inicio, fecha final, secciones, fechas por sección, condiciones de publicación y acceso especial.
+    - **Envío y finalización** («Envío de archivos»): tipo de asignación (individual o de grupo), tipo de material enviado, archivos permitidos, extensiones y si se conserva el envío más reciente o solo se permite uno.
+    - **Evaluación y comentarios** («No se agregó ninguna rúbrica»): rúbrica, libro de calificaciones y herramientas de anotación.
+  - Abajo, una barra fija con **Guardar y cerrar**, **Guardar** (sigue en el editor), **Cancelar** y el interruptor **Visible / Oculto**.
+- **«Calificación de»** cambia los puntos de la actividad. Si ya hay calificaciones capturadas, Enlace pregunta si se conservan los puntos de cada alumno o su calificación sobre 10.
+- **Barra del editor de texto renovada** (en actividades, contenido, noticias y foros):
+  - Estilo del párrafo (Párrafo, Título, Subtítulo, Cita), negrita, cursiva, listas, video, enlace e imagen.
+  - Menú **＋**: ecuación, fórmula dentro del texto, divisor, símbolos (α, Δ, π, ±, √, ∫, ℏ…) y emoji.
+  - **Enlace rápido** a una actividad, unidad, material, evaluación o foro del curso.
+  - **Pantalla completa** (Esc para salir).
+- Por seguridad, el texto sigue guardándose con marcas sencillas. Por eso no hay subrayado, colores, tipos de letra ni alineación: Enlace no permite HTML libre en el contenido.
+
+## Novedades de la versión 12.75 (avisos de faltas y entregas pendientes, y menús desplegables)
+
+- **Actividades por vencer y sin entregar, en la campana de cada alumno** (aunque no haya activado notificaciones):
+  - **«Vence pronto»**: lo que vence en los próximos 2 días y no ha entregado, con la fecha («vence 14 oct, 11:59 p.m.»).
+  - **«Vencida sin entregar»** (en rojo): lo que venció en los últimos 7 días sin entrega.
+  - Usan las mismas reglas que «Por entregar» de Inicio (prórrogas, fechas por sección, acceso especial, condiciones). Al entregar, el aviso desaparece.
+- **Notificaciones en el celular** (para quien las activó), una vez al día a las 6 p.m.: «Vence mañana» (ya existía) y, nuevo, **«Sin entregar: …»** de lo que venció en las últimas 24 horas sin entrega.
+- **Las faltas ahora sí avisan al alumno.** Antes había dos huecos:
+  - El aviso solo llegaba como notificación del celular o la computadora, y solo a quien la había activado. **Ahora cada falta aparece también en la campana** de Enlace («Inasistencia registrada · Clase del 06/10/2026»), aunque el alumno no haya activado nada. Si la cambias a asistencia, retardo o justificada, desaparece de la campana.
+  - Cuando un pase de lista con QR o código se cerraba solo por tiempo, las faltas de quien no se registró se escribían hasta que alguien abría la asistencia del curso, y hasta entonces no salía ningún aviso. **Ahora Enlace las completa solo cada 5 minutos** y avisa en ese momento.
+- Las faltas que llegan por «Importar» un pase de lista de clases pasadas no llenan la campana: solo aparecen las de clases de los últimos 14 días.
+- Para que el aviso suene en el celular, el alumno debe activar las notificaciones una vez (*Mi perfil → Notificaciones*, o la invitación que sale en Inicio).
+
+
+- **El filtro «Secciones» ya no se sale de la pantalla.** Cuando el filtro está al inicio de la fila (por ejemplo, en una actividad, junto a «Acceso especial»), su ventana se abre hacia la derecha y se ve completa. Lo revisé en alumnos, actividades, calificaciones, asistencia, participación, equipos y evaluaciones, en computadora, tableta y celular.
+- **Los menús se cierran al tocar afuera** (o con la tecla Esc): «Más», el filtro de secciones, «Más acciones» y los demás menús desplegables. Al abrir uno se cierra el que estaba abierto.
+- **«Más» abierto ya se lee:** antes se ponía en gris claro con letras blancas y la barra se movía.
+- **Nueva flecha** en «Más», «Más acciones» y el filtro de secciones: un ángulo que gira al abrir, en lugar de la «v» suelta.
+
 ## Novedades de la versión 12.74 (código QR por sección)
 
 - **Botón «Código QR para unirse» en el Listado de alumnos** (junto a «Importar lista»). Abre el mismo diálogo que *Administración del curso → Código para unirse*.
