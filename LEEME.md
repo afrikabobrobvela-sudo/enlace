@@ -5,6 +5,23 @@ No es el código de D2L Brightspace ni una plataforma oficial de la BUAP.
 
 Esta versión se despliega en **tu propia cuenta de Cloudflare** (Workers + D1 + R2, plan gratuito) y ya no depende de ChatGPT Sites.
 
+## Novedades de la versión 12.76 (editor de actividades al estilo Brightspace)
+
+- **Nuevo editor de actividades**, con la misma distribución que Brightspace:
+  - A la izquierda: **Nombre**, **Calificación de** (puntos) y **Fecha de vencimiento** en una fila, **Instrucciones** y el material para los alumnos.
+  - A la derecha, tres tarjetas que se abren y cierran, con un resumen debajo del título:
+    - **Fechas y condiciones de disponibilidad** («Siempre disponible»): fecha de inicio, fecha final, secciones, fechas por sección, condiciones de publicación y acceso especial.
+    - **Envío y finalización** («Envío de archivos»): tipo de asignación (individual o de grupo), tipo de material enviado, archivos permitidos, extensiones y si se conserva el envío más reciente o solo se permite uno.
+    - **Evaluación y comentarios** («No se agregó ninguna rúbrica»): rúbrica, libro de calificaciones y herramientas de anotación.
+  - Abajo, una barra fija con **Guardar y cerrar**, **Guardar** (sigue en el editor), **Cancelar** y el interruptor **Visible / Oculto**.
+- **«Calificación de»** cambia los puntos de la actividad. Si ya hay calificaciones capturadas, Enlace pregunta si se conservan los puntos de cada alumno o su calificación sobre 10.
+- **Barra del editor de texto renovada** (en actividades, contenido, noticias y foros):
+  - Estilo del párrafo (Párrafo, Título, Subtítulo, Cita), negrita, cursiva, listas, video, enlace e imagen.
+  - Menú **＋**: ecuación, fórmula dentro del texto, divisor, símbolos (α, Δ, π, ±, √, ∫, ℏ…) y emoji.
+  - **Enlace rápido** a una actividad, unidad, material, evaluación o foro del curso.
+  - **Pantalla completa** (Esc para salir).
+- Por seguridad, el texto sigue guardándose con marcas sencillas. Por eso no hay subrayado, colores, tipos de letra ni alineación: Enlace no permite HTML libre en el contenido.
+
 ## Novedades de la versión 12.75 (avisos de faltas y entregas pendientes, y menús desplegables)
 
 - **Actividades por vencer y sin entregar, en la campana de cada alumno** (aunque no haya activado notificaciones):

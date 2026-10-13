@@ -142,26 +142,62 @@ function richText(source, fileIds = []) {
 
 // ---- Editor --------------------------------------------------------------------------------------
 
+// Barra al estilo Brightspace (12.76): estilo del párrafo, negrita/cursiva, listas, video, enlace, imagen, «+»,
+// enlace rápido, vista previa y pantalla completa. Íconos SVG en línea (sin archivos ni fuentes de íconos).
+const RICH_ICON = {
+  ul: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="4.5" cy="6" r="1.5"/><circle cx="4.5" cy="12" r="1.5"/><circle cx="4.5" cy="18" r="1.5"/><path d="M9 6h12M9 12h12M9 18h12"/></svg>',
+  link: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 14a4 4 0 0 0 5.7 0l3.6-3.6a4 4 0 0 0-5.7-5.7L12 6.3"/><path d="M14 10a4 4 0 0 0-5.7 0l-3.6 3.6a4 4 0 0 0 5.7 5.7l1.6-1.6"/></svg>',
+  image: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="M4 18l5-5 4 4 3-3 4 4"/></svg>',
+  video: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="13" height="12" rx="2"/><path d="M16 10l5-3v10l-5-3z"/></svg>',
+  full: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"/></svg>',
+};
 const RICH_TOOLS = [
-  ['bold', 'N', 'Negrita'],
-  ['italic', 'C', 'Cursiva'],
-  ['heading', 'Título', 'Título de sección'],
-  ['ul', '• Lista', 'Lista con viñetas'],
-  ['ol', '1. Lista', 'Lista numerada'],
-  ['link', 'Enlace', 'Insertar enlace'],
-  ['math', 'Fórmula', 'Insertar fórmula'],
-  ['image', 'Imagen', 'Insertar imagen'],
-  ['video', 'Video', 'Insertar video de YouTube, Vimeo, Google Drive o Cloudflare Stream'],
+  ['bold', '<b>B</b>', 'Negrita'],
+  ['italic', '<i>I</i>', 'Cursiva'],
 ];
+
+// Menú «+» (12.76, como el de Brightspace): ecuación en su línea, divisor, símbolos de matemáticas y física, y emojis.
+const RICH_SYMBOLS = 'α β γ δ Δ ε θ λ μ ν π ρ σ τ φ ω Ω ° ± × ÷ ≈ ≠ ≤ ≥ ∞ √ ∑ ∫ ∂ ∇ → ⇒ ↔ ∝ ∈ ∀ ∃ ℏ Å · ² ³ ½'.split(' ');
+const RICH_EMOJIS = '🙂 😀 👍 👏 🎉 ✅ ❌ ⚠️ 📌 📎 📅 ⏰ 📝 📚 🔬 🧪 💡 ⭐'.split(' ');
+function richMoreHtml() {
+  const grid = (items, label) => `<div class="rich-grid" role="group" aria-label="${label}">${items.map((x) => `<button type="button" class="rich-cell" data-rich-insert="${x}" aria-label="Insertar ${x}">${x}</button>`).join('')}</div>`;
+  return `<details class="rich-more"><summary class="rich-tool" title="Insertar" aria-label="Insertar ecuación, divisor, símbolos o emoji">＋</summary><div class="rich-more-panel">
+    <button type="button" class="rich-menu-item" data-format="equation"><span aria-hidden="true">Σ</span> Ecuación (en su propia línea)</button>
+    <button type="button" class="rich-menu-item" data-format="math"><span aria-hidden="true">𝑥</span> Fórmula dentro del texto</button>
+    <button type="button" class="rich-menu-item" data-format="divider"><span aria-hidden="true">—</span> Divisor</button>
+    <p class="rich-menu-head"><span aria-hidden="true">Ω</span> Símbolos</p>${grid(RICH_SYMBOLS, 'Símbolos')}
+    <p class="rich-menu-head"><span aria-hidden="true">🙂</span> Emoji</p>${grid(RICH_EMOJIS, 'Emoji')}</div></details>`;
+}
+
+// Enlace rápido (12.76): a un elemento del curso abierto (solo quien enseña). La dirección es la de Enlace (https), así
+// que richText la acepta como cualquier enlace; se abre en otra pestaña directo en ese elemento.
+function richQuickLinkHtml() {
+  if (typeof current === 'undefined' || !current?.records || typeof teaches !== 'function' || !teaches()) return '';
+  return `<details class="rich-more rich-quick"><summary class="rich-tool" title="Insertar enlace rápido a un elemento del curso">Enlace rápido</summary><div class="rich-more-panel" data-rich-quick></div></details>`;
+}
+function richQuickItems() {
+  const c = current.course.id;
+  const url = (q) => `${location.origin}/#c=${encodeURIComponent(c)}&${q}`;
+  const live = (kind) => current.records.filter((r) => r.kind === kind && !r.deleted_at).sort((a, b) => String(a.data.title || '').localeCompare(String(b.data.title || ''), 'es'));
+  return [
+    ['Actividades', live('task').map((r) => [r.data.title, url(`s=task&d=${r.id}`)])],
+    ['Contenido', [...live('module').map((r) => [r.data.title, url(`s=content&m=${r.id}`)]), ...live('material').map((r) => [r.data.title, url(`s=content${r.data.module ? `&m=${r.data.module}` : ''}`)])]],
+    ['Evaluaciones', live('quiz').map((r) => [r.data.title, url(`s=quiz&d=${r.id}`)])],
+    ['Foros', live('forum').map((r) => [r.data.title, url(`s=forum&d=${r.id}`)])],
+  ].filter(([, items]) => items.length);
+}
 
 /** Área de texto con barra de formato y vista previa. Con `images` agrega el botón para insertar fotos. */
 function richTextarea(label, name, value = '', { required = false, images = false } = {}) {
-  const tools = RICH_TOOLS.filter(([id]) => images || id !== 'image')
-    .map(([id, text, title]) => `<button type="button" class="rich-tool rich-${id}" data-format="${id}" title="${title}" aria-label="${title}">${text}</button>`)
-    .join('');
+  const tool = (id, html, title) => `<button type="button" class="rich-tool rich-${id}" data-format="${id}" title="${title}" aria-label="${title}">${html}</button>`;
+  const lists = `<details class="rich-more rich-lists"><summary class="rich-tool" title="Listas" aria-label="Listas">${RICH_ICON.ul}<span class="rich-caret" aria-hidden="true"></span></summary><div class="rich-more-panel">
+    <button type="button" class="rich-menu-item" data-format="ul">• Lista con viñetas</button><button type="button" class="rich-menu-item" data-format="ol">1. Lista numerada</button></div></details>`;
+  const tools = `<select class="rich-block" data-rich-block aria-label="Estilo del párrafo"><option value="">Párrafo</option><option value="# ">Título</option><option value="## ">Subtítulo</option><option value="> ">Cita</option></select>
+    <span class="rich-sep"></span>${RICH_TOOLS.map(([id, html, title]) => tool(id, html, title)).join('')}<span class="rich-sep"></span>${lists}<span class="rich-sep"></span>
+    ${tool('video', RICH_ICON.video, 'Insertar video de YouTube, Vimeo, Google Drive o Cloudflare Stream')}${tool('link', RICH_ICON.link, 'Insertar enlace')}${images ? tool('image', RICH_ICON.image, 'Insertar imagen') : ''}`;
   return `<div class="rich-editor" data-rich-editor><span class="rich-label">${label}</span>
-    <div class="rich-toolbar" role="toolbar" aria-label="Formato de ${richEsc(label.toLowerCase())}">${tools}
-      <button type="button" class="rich-tool rich-preview-toggle" data-format="preview" aria-pressed="false">Vista previa</button></div>
+    <div class="rich-toolbar" role="toolbar" aria-label="Formato de ${richEsc(label.toLowerCase())}">${tools}${richMoreHtml()}${richQuickLinkHtml()}<span class="rich-spacer"></span>
+      <button type="button" class="rich-tool rich-preview-toggle" data-format="preview" aria-pressed="false">Vista previa</button>${tool('full', RICH_ICON.full, 'Pantalla completa')}</div>
     <textarea name="${name}" aria-label="${richEsc(label)}" ${required ? 'required' : ''}>${richEsc(value)}</textarea>
     <div class="rich-preview" data-rich-preview hidden></div>
     <p class="rich-hint muted">Selecciona texto y usa los botones, o escribe **negrita**, *cursiva*, - lista. Fórmulas: $v = v_0 + a t$. Un enlace de YouTube o Vimeo solo en su línea se ve como video.</p>
@@ -195,7 +231,7 @@ function richPrefix(area, prefix) {
   const endBreak = value.indexOf('\n', area.selectionEnd);
   const end = endBreak === -1 ? value.length : endBreak;
   const lines = (value.slice(start, end) || '').split('\n');
-  const text = lines.map((l, i) => (typeof prefix === 'function' ? prefix(i) : prefix) + l.replace(/^(\s*([-*•]|\d+[.)]|#{1,3})\s+)/, '')).join('\n');
+  const text = lines.map((l, i) => (typeof prefix === 'function' ? prefix(i) : prefix) + l.replace(/^(\s*([-*•>]|\d+[.)]|#{1,3})\s+)/, '')).join('\n');
   area.setRangeText(text, start, end, 'end');
   area.focus();
   area.dispatchEvent(new Event('input', { bubbles: true }));
@@ -226,11 +262,20 @@ document.addEventListener('click', async (e) => {
     case 'heading':
       return richPrefix(area, '## ');
     case 'ul':
+      tool.closest('details')?.removeAttribute('open');
       return richPrefix(area, '- ');
     case 'ol':
+      tool.closest('details')?.removeAttribute('open');
       return richPrefix(area, (i) => `${i + 1}. `);
     case 'math':
+      tool.closest('details')?.removeAttribute('open');
       return richWrap(area, '$', '$', 'v = v_0 + a t');
+    case 'full': {
+      const on = editor.classList.toggle('rich-full');
+      tool.setAttribute('aria-pressed', String(on));
+      tool.title = on ? 'Salir de pantalla completa' : 'Pantalla completa';
+      return area.focus();
+    }
     case 'link': {
       const url = prompt('Dirección del enlace (https://…)', 'https://');
       if (!url || !/^https?:\/\/\S+$/.test(url.trim())) return;
@@ -245,17 +290,73 @@ document.addEventListener('click', async (e) => {
       richInsertBlock(area, url.trim());
       return richRefreshPreview(editor);
     }
+    case 'equation':
+      richInsertBlock(area, '$$ F = m a $$');
+      tool.closest('details').open = false;
+      return richRefreshPreview(editor);
+    case 'divider':
+      richInsertBlock(area, '---');
+      tool.closest('details').open = false;
+      return richRefreshPreview(editor);
     case 'preview': {
       const preview = editor.querySelector('[data-rich-preview]');
       preview.hidden = !preview.hidden;
       area.hidden = !preview.hidden;
       tool.setAttribute('aria-pressed', String(!preview.hidden));
       tool.textContent = preview.hidden ? 'Vista previa' : 'Seguir editando';
-      editor.querySelectorAll('.rich-tool:not(.rich-preview-toggle)').forEach((b) => (b.disabled = !preview.hidden));
+      editor.querySelectorAll('.rich-tool:not(.rich-preview-toggle):not(.rich-full), .rich-block').forEach((b) => (b.disabled = !preview.hidden));
       return richRefreshPreview(editor);
     }
   }
 });
+
+// Estilo del párrafo: Título, Subtítulo o Cita en las líneas seleccionadas; «Párrafo» quita la marca.
+document.addEventListener('change', (e) => {
+  const select = e.target.closest('[data-rich-block]');
+  if (!select) return;
+  const editor = select.closest('[data-rich-editor]');
+  richPrefix(editor.querySelector('textarea'), select.value);
+  select.value = '';
+  richRefreshPreview(editor);
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  const full = document.querySelector('.rich-editor.rich-full');
+  if (!full) return;
+  full.classList.remove('rich-full');
+  full.querySelector('[data-format="full"]')?.setAttribute('aria-pressed', 'false');
+});
+
+// Símbolos, emojis y enlaces rápidos: se insertan donde está el cursor.
+document.addEventListener('click', (e) => {
+  const cell = e.target.closest('[data-rich-insert], [data-rich-link]');
+  const editor = cell?.closest('[data-rich-editor]');
+  if (!editor) return;
+  const area = editor.querySelector('textarea');
+  if (cell.dataset.richLink) {
+    const title = cell.dataset.richTitle.replace(/[[\]]/g, '');
+    richWrap(area, '[', `](${cell.dataset.richLink})`, title);
+    cell.closest('details').open = false;
+  } else {
+    area.setRangeText(cell.dataset.richInsert, area.selectionStart, area.selectionEnd, 'end');
+    area.focus();
+    area.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+  richRefreshPreview(editor);
+});
+// La lista del enlace rápido se arma al abrirla (con los elementos que haya en ese momento).
+document.addEventListener(
+  'toggle',
+  (e) => {
+    const panel = e.target.matches?.('.rich-quick[open]') && e.target.querySelector('[data-rich-quick]');
+    if (!panel) return;
+    const groups = richQuickItems();
+    panel.innerHTML = groups.length
+      ? groups.map(([name, items]) => `<p class="rich-menu-head">${richEsc(name)}</p>${items.map(([title, href]) => `<button type="button" class="rich-menu-item" data-rich-link="${richEsc(href)}" data-rich-title="${richEsc(title || 'Sin título')}">${richEsc(title || 'Sin título')}</button>`).join('')}`).join('')
+      : '<p class="muted">Todavía no hay actividades, contenido, evaluaciones ni foros en este curso.</p>';
+  },
+  true,
+);
 
 document.addEventListener('change', async (e) => {
   const input = e.target.closest('[data-rich-image]');

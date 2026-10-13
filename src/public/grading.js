@@ -129,16 +129,17 @@ function gradebookCategoryOptions(selected, empty) {
 }
 
 /** Editor de la actividad: en qué categoría del libro cuenta y con qué valor (como «Está en el cuaderno de calificaciones»). */
-function taskGradebookHtml(data) {
+/** Libro de calificaciones del editor de actividades; con `bare` (12.76) va sin su propio desplegable, dentro de una tarjeta. */
+function taskGradebookHtml(data, bare = false) {
   const settings = gradingSettings();
   const usable = settings.scheme === 'categories' && settings.categories.some((c) => c.source === 'tasks');
-  if (!usable) {
-    return `<details open><summary>Libro de calificaciones</summary><div class="details-body"><p class="muted">Esta actividad cuenta con los pesos por actividad del curso. Para enlazarla a una categoría (Tareas, Laboratorio, Parcial 1…), organiza la calificación por categorías en Calificaciones → Administrar calificaciones.</p></div></details>`;
-  }
-  return `<details open><summary>Libro de calificaciones</summary><div class="details-body">
-    <label>Cuenta en la categoría<select name="gradeCategory">${gradebookCategoryOptions(data.category, 'No cuenta en la calificación')}</select></label>
+  const body = usable
+    ? `<label>Cuenta en la categoría<select name="gradeCategory">${gradebookCategoryOptions(data.category, 'No cuenta en la calificación')}</select></label>
     <label>Valor dentro de la categoría<input name="gradePoints" type="number" min="0.01" max="1000" step="0.01" value="${esc(data.points ?? 1)}" class="grade-input"></label>
-    <p class="muted">Con valor 2 cuenta el doble que una actividad con valor 1 de la misma categoría. También puedes acomodarlo todo en Calificaciones → Administrar calificaciones.</p></div></details>`;
+    <p class="muted">Con valor 2 cuenta el doble que una actividad con valor 1 de la misma categoría. También puedes acomodarlo todo en Calificaciones → Administrar calificaciones.</p>`
+    : `<p class="muted">Esta actividad cuenta con los pesos por actividad del curso. Para enlazarla a una categoría (Tareas, Laboratorio, Parcial 1…), organiza la calificación por categorías en Calificaciones → Administrar calificaciones.</p>`;
+  if (bare) return `<h3 class="bs-sub">Libro de calificaciones</h3>${body}`;
+  return `<details open><summary>Libro de calificaciones</summary><div class="details-body">${body}</div></details>`;
 }
 
 /** Nombre de la categoría con su parcial («Parcial 1 · Tareas»). */

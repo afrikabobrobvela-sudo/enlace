@@ -695,3 +695,95 @@ dialog.annotator:not([open]) { display: none; }
 
 /* 12.75: en la campana, «Vencida sin entregar» en rojo (#b3123a, 6.9:1 sobre blanco). */
 .bell-item.is-overdue .bell-kind { color: #b3123a; font-weight: 700; }
+
+/* ---- 12.76: editor de actividades al estilo Brightspace -------------------------------------------------------------
+   Columna principal (nombre, «Calificación de» + vencimiento en una fila, instrucciones, material) y a la derecha
+   tarjetas plegables con un resumen bajo el título; barra inferior fija con el interruptor Visible/Oculto. */
+.bs-editor .editor-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(300px, 380px); gap: 0; align-items: start; }
+.bs-editor .editor-main { padding: 8px 32px 32px 28px; }
+.bs-editor .editor-sidebar { background: #e9eef4; padding: 16px; min-height: 100%; display: flex; flex-direction: column; gap: 14px; }
+.bs-row { display: grid; grid-template-columns: minmax(150px, 220px) minmax(200px, 300px); gap: 24px; align-items: end; }
+.bs-row > label { margin: 0; }
+.bs-points { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+.bs-points input { width: 110px !important; margin: 0 !important; }
+.bs-points span { color: var(--ink-soft); font-weight: 600; }
+.bs-card { background: #fff; border: 0 !important; border-radius: 12px; box-shadow: 0 1px 3px rgba(17, 26, 46, 0.12); padding: 0 !important; margin: 0 !important; }
+.bs-card > summary { list-style: none; cursor: pointer; display: grid; grid-template-columns: 1fr auto; gap: 0 12px; padding: 18px 20px; border: 0 !important; background: none !important; font-size: inherit; }
+.bs-card > summary::-webkit-details-marker { display: none; }
+.bs-card > summary::after { content: '' !important; grid-column: 2; grid-row: 1; align-self: start; margin: 6px 0 0 !important; width: 12px !important; height: 14px !important; border: 0 !important; background: var(--tinta); clip-path: polygon(0 0, 100% 50%, 0 100%); transition: transform 0.15s ease; transform: none !important; position: static !important; }
+.bs-card[open] > summary::after { transform: rotate(90deg) !important; }
+.bs-card-title { grid-column: 1; grid-row: 1; font-family: var(--condensada, inherit); font-weight: 700; font-size: 20px; line-height: 1.25; color: var(--tinta); }
+.bs-card-sum { grid-column: 1 / -1; grid-row: 2; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); color: var(--ink-soft); font-size: 15px; font-weight: 500; }
+.bs-card[open] .bs-card-sum { display: none; }
+.bs-card[open] > summary { border-bottom: 1px solid var(--line) !important; }
+.bs-card-body { padding: 16px 20px 20px; }
+.bs-card-body > label, .bs-card-body > div > label { display: block; margin-bottom: 14px; }
+.bs-sub { font-size: 15px; font-weight: 700; margin: 20px 0 4px; color: var(--tinta); }
+.bs-radios { border: 0; padding: 0; margin: 4px 0 14px; }
+.bs-radios legend { font-weight: 600; font-size: 14px; margin-bottom: 6px; padding: 0; }
+.bs-radios .check-label { display: flex; margin: 6px 0; }
+.bs-editor .editor-main .attachment-box { margin-top: 20px; }
+.bs-editor .editor-bottom { position: sticky; bottom: 0; z-index: 20; display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 14px 0; background: var(--surface, #fff); border-top: 1px solid var(--line); box-shadow: 0 -6px 16px rgba(17, 26, 46, 0.06); }
+.bs-visible { display: inline-flex !important; align-items: center; gap: 10px; margin: 0 0 0 8px !important; font-weight: 600; cursor: pointer; }
+.bs-visible input { appearance: none; -webkit-appearance: none; width: 52px !important; height: 30px !important; margin: 0 !important; border-radius: 999px; border: 2px solid var(--line-strong, #8a96a6); background: #fff; position: relative; cursor: pointer; transition: background 0.15s; }
+.bs-visible input::before { content: ''; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%; background: var(--line-strong, #8a96a6); transition: left 0.15s, background 0.15s; }
+.bs-visible input:checked { background: var(--brand, #1f3fd1); border-color: var(--brand, #1f3fd1); }
+.bs-visible input:checked::before { left: 25px; background: #fff; }
+.bs-visible input:focus-visible { outline: 3px solid #0a7383; outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { .bs-card > summary::after, .bs-visible input, .bs-visible input::before { transition: none; } }
+@media (max-width: 960px) {
+  .bs-editor .editor-layout { grid-template-columns: 1fr; }
+  .bs-editor .editor-main { padding: 0 0 16px; }
+  .bs-editor .editor-sidebar { border-radius: 12px; }
+}
+@media (max-width: 720px) {
+  .bs-row { grid-template-columns: 1fr; gap: 0; }
+  .bs-editor .editor-bottom { bottom: var(--bottomnav-h, 64px); }
+}
+
+/* 12.76: editor de texto con barra al estilo Brightspace: marco único, íconos, separadores, menús «Listas», «＋» y
+   «Enlace rápido», y pantalla completa. */
+.rich-editor { position: relative; }
+.rich-editor .rich-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 2px; padding: 8px 10px; border: 1.5px solid var(--line-strong, #8a96a6); border-bottom: 1px solid var(--line); border-radius: 10px 10px 0 0; background: #fff; }
+.rich-editor > textarea, .rich-editor > .rich-preview { margin-top: -6px !important; border: 1.5px solid var(--line-strong, #8a96a6) !important; border-top: 0 !important; border-radius: 0 0 10px 10px !important; }
+.rich-editor .rich-tool { display: inline-flex; align-items: center; justify-content: center; gap: 2px; min-width: 38px; height: 38px; padding: 0 8px; border: 0; background: none; color: var(--tinta); border-radius: 6px; font-size: 15px; }
+.rich-editor .rich-tool:hover:not(:disabled) { background: #eef1f5; }
+.rich-editor .rich-tool svg { width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.rich-editor .rich-tool svg circle[r="1.5"] { fill: currentColor; stroke: none; }
+.rich-editor .rich-bold b { font-size: 19px; font-weight: 800; }
+.rich-editor .rich-italic i { font-family: Georgia, 'Times New Roman', serif; font-size: 20px; }
+.rich-editor .rich-preview-toggle { border: 1px solid var(--line); font-weight: 600; font-size: 14px; }
+.rich-editor .rich-tool[aria-pressed='true'] { background: #e3e9f6; }
+.rich-block { width: auto !important; min-width: 120px; height: 38px; margin: 0 !important; border: 0 !important; background-color: transparent !important; font-weight: 500; }
+.rich-sep { width: 1px; height: 26px; background: var(--line); margin: 0 6px; }
+.rich-spacer { flex: 1; }
+.rich-caret { width: 6px; height: 6px; margin-left: 4px; border-right: 2px solid currentColor; border-bottom: 2px solid currentColor; transform: rotate(45deg) translateY(-2px); }
+.rich-more { position: relative; }
+.rich-more > summary { list-style: none; cursor: pointer; }
+.rich-more > summary::-webkit-details-marker { display: none; }
+.rich-more > summary::after { display: none !important; }
+.rich-more[open] > summary { background: #e3e9f6; }
+.rich-more-panel { position: absolute; z-index: 40; top: calc(100% + 4px); left: 0; width: 280px; max-height: 360px; overflow: auto; padding: 6px; background: #fff; border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 12px 32px rgba(17, 26, 46, 0.18); }
+.rich-quick .rich-more-panel { width: 320px; }
+.rich-menu-item { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 40px; padding: 8px 10px; border: 0; border-bottom: 1px solid var(--line); background: none; text-align: left; font-size: 15px; color: var(--tinta); border-radius: 0; }
+.rich-menu-item:hover { background: #eef1f5; }
+.rich-menu-item span { width: 18px; text-align: center; font-weight: 700; }
+.rich-menu-head { margin: 10px 6px 4px; font-weight: 700; font-size: 13px; color: var(--ink-soft); }
+.rich-grid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 2px; padding: 0 4px 6px; }
+.rich-cell { min-width: 0; height: 32px; padding: 0; border: 0; background: none; border-radius: 6px; font-size: 16px; color: var(--tinta); }
+.rich-cell:hover { background: #eef1f5; }
+.rich-editor.rich-full { position: fixed; inset: 0; z-index: 200; margin: 0; padding: 16px; background: #fff; display: flex; flex-direction: column; }
+.rich-editor.rich-full > textarea, .rich-editor.rich-full > .rich-preview { flex: 1; min-height: 0; }
+@media (max-width: 720px) {
+  .rich-more-panel { position: fixed; left: 12px; right: 12px; top: auto; bottom: 80px; width: auto !important; }
+  .rich-editor .rich-preview-toggle { order: 10; }
+}
+/* Ajustes del editor (12.76): las reglas viejas de `.editor-sidebar summary` ganaban en especificidad. */
+.bs-editor .editor-sidebar .bs-card > summary { display: grid !important; grid-template-columns: 1fr auto !important; align-items: start !important; justify-content: initial !important; padding: 18px 20px !important; font-size: inherit !important; }
+.bs-editor .editor-sidebar .bs-card-sum { display: block; text-align: left; }
+.bs-editor .editor-sidebar .bs-card[open] .bs-card-sum { display: none; }
+.rich-block { padding: 0 6px !important; line-height: 1.2 !important; font-size: 15px !important; color: var(--tinta); }
+.rich-more:not(.rich-lists):not(.rich-quick) > summary { font-size: 24px; font-weight: 400; }
+.rich-quick > summary { font-weight: 600; font-size: 14px; }
+.bs-card .conditions-editor { border: 0 !important; padding: 0 !important; margin: 4px 0 8px !important; background: none !important; box-shadow: none !important; }
+.bs-card .conditions-editor > summary { font-family: inherit !important; font-size: 15px !important; font-weight: 600 !important; color: var(--link, #1f3fd1) !important; padding: 6px 0 !important; border: 0 !important; background: none !important; min-height: 0 !important; }

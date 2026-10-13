@@ -197,12 +197,82 @@ function teacherFilesModal(task) {
   }, 'Guardar material');
   files = attachmentManager($('#fields'), task.data.fileIds || [], 'material');
 }
+/**
+ * Editor de actividades al estilo Brightspace (12.76): a la izquierda título, «Calificación de» y vencimiento en una
+ * fila, instrucciones y material; a la derecha tres tarjetas plegables con un resumen debajo del título («Fechas y
+ * condiciones de disponibilidad», «Envío y finalización», «Evaluación y comentarios»); abajo una barra fija con
+ * «Guardar y cerrar», «Guardar», «Cancelar» y el interruptor Visible/Oculto. Los nombres de los campos son los de
+ * siempre, así que save() y las secciones/condiciones se leen igual.
+ */
+function taskEditorCard(key, title, body) {
+  return `<details class="bs-card" data-bs-card="${key}"><summary><span class="bs-card-title">${title}</span><span class="bs-card-sum" data-bs-sum="${key}"></span></summary><div class="bs-card-body">${body}</div></details>`;
+}
+
+/** Resúmenes de las tarjetas, del estado actual del formulario. */
+function taskEditorSummaries(form) {
+  const get = (name) => form.querySelector(`[name="${name}"]`);
+  const when = (name) => (get(name)?.value ? new Date(get(name).value).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' }) : '');
+  const start = when('start'), end = when('end');
+  const conds = form.querySelectorAll('[data-conditions] .cond-row').length;
+  const some = form.querySelector('[name="sectionsMode"][value="some"]')?.checked;
+  const dates = [start && `Desde ${start}`, end && `hasta ${end}`].filter(Boolean).join(' ') || 'Siempre disponible';
+  const extra = [some && 'algunas secciones', conds && `${conds} ${conds === 1 ? 'condición' : 'condiciones'}`].filter(Boolean);
+  const mode = { files: 'Envío de archivos', text: 'Envío de texto', both: 'Envío de archivos o texto' }[get('submissionMode')?.value] || '';
+  const team = get('groupCategory')?.value;
+  const rubric = get('rubric');
+  const sums = {
+    fechas: extra.length ? `${dates} · ${extra.join(' · ')}` : dates,
+    envio: team ? `${mode} · por equipo` : mode,
+    evaluacion: rubric?.value ? `Rúbrica: ${rubric.selectedOptions[0]?.textContent || ''}` : 'No se agregó ninguna rúbrica',
+  };
+  for (const [key, text] of Object.entries(sums)) {
+    const el = form.querySelector(`[data-bs-sum="${key}"]`);
+    if (el) el.textContent = text;
+  }
+  const toggle = form.querySelector('.bs-visible');
+  if (toggle) toggle.querySelector('span').textContent = get('visible').checked ? 'Visible' : 'Oculto';
+}
+
 function renderEditor() {
   const t = find(detail), d = t?.data || {};
-  $('#main').innerHTML = `<div class="crumbs"><button data-section="tasks">❮ Volver a asignaciones</button></div><form id="taskEditor" class="real-form"><div class="editor-layout"><section class="editor-main"><h1>${t ? 'Editar actividad' : 'Nueva actividad'}</h1>${field('Título de la asignación', 'title', d.title || '', 'text', 'required maxlength="200"')}<p class="muted">Calificación máxima: 10 puntos</p>${field('Fecha de vencimiento', 'due', localDate(d.due), 'datetime-local')}${attachmentPanel(true)}${richTextarea('Instrucciones', 'body', d.body || '', { images: true })}<p class="muted">Adjunta aquí la guía, plantilla, lectura o rúbrica que deben descargar tus alumnos.</p></section><section class="editor-sidebar"><details open><summary>Visibilidad</summary><div class="details-body">${visible(d.visible, undefined, d.sections)}</div></details>${conditionsEditorHtml(t)}<details open><summary>Fechas y disponibilidad</summary><div class="details-body">${field('Disponible desde', 'start', localDate(d.start), 'datetime-local')}${field('Cierre de entregas', 'end', localDate(d.end), 'datetime-local')}<p class="muted">Las fechas son opcionales. El vencimiento marca entregas tardías; el cierre bloquea nuevos envíos.</p>${sectionDatesHtml(t?.id, 'task')}</div></details><details open><summary>Envío y finalización</summary><div class="details-body"><label>Tipo de entrega<select name="submissionMode">${[['both', 'Texto y/o archivos'], ['files', 'Archivos obligatorios'], ['text', 'Solo texto']].map(([v, n]) => `<option value="${v}" ${(d.submissionMode || 'both') === v ? 'selected' : ''}>${n}</option>`).join('')}</select></label><label>Máximo de archivos por entrega<select name="maxFiles">${[1, 2, 3, 4, 5].map(n => `<option ${(d.maxFiles || 5) === n ? 'selected' : ''}>${n}</option>`).join('')}</select></label>${field('Extensiones permitidas (opcional)', 'extensions', (d.extensions || []).join(', '), 'text', 'placeholder="pdf, docx, jpg"')}<p class="muted">Déjalo vacío para permitir cualquier formato. Tamaño máximo: 20 MB por archivo.</p><label class="check-label"><input type="checkbox" name="allowResubmit" ${d.allowResubmit !== false ? 'checked' : ''}> Permitir actualizar la entrega</label><p class="muted">Se conserva la entrega más reciente. Si el alumno la actualiza, deberá calificarse nuevamente.</p><label>Individual o por equipo<select name="groupCategory"><option value="">Individual</option>${[...new Set([...records('group').map(g => g.data.category), d.groupCategory].filter(Boolean))].map(c => `<option value="${esc(c)}" ${d.groupCategory === c ? 'selected' : ''}>Por equipo: ${esc(c)}</option>`).join('')}</select></label><p class="muted">Por equipo: lo que entregue un integrante cuenta para todo su equipo, y la calificación que escribas se aplica al equipo completo. Los equipos se forman en Grupos (uno por sección). También puedes cambiarlo desde la lista de la actividad o el libro.</p><label>Rúbrica<select name="rubric" id="rubricPicker"><option value="">Sin rúbrica</option>${d.rubric ? `<option value="${esc(d.rubric)}" selected>${esc(records('rubric').find(r => r.id === d.rubric)?.data.title || 'Rúbrica asignada')}</option>` : ''}</select></label></div></details>${taskGradebookHtml(d)}<details><summary>Evaluación y comentarios</summary><div class="details-body"><p>Escala de 0 a 10 con retroalimentación escrita.</p></div></details></section></div><p class="form-error error" hidden></p><div class="editor-bottom"><button class="primary" type="submit">Guardar y cerrar</button><button type="button" class="secondary" data-section="tasks">Cancelar</button>${t ? trashButton('task', t.id, 'Eliminar actividad') : ''}</div></form>`;
-  const files = attachmentManager($('#taskEditor'), d.fileIds || []);
+  const maxScore = d.maxScore ?? 10;
+  const maxFiles = d.maxFiles || 5;
+  const teams = [...new Set([...records('group').map((g) => g.data.category), d.groupCategory].filter(Boolean))];
+  const radio = (name, value, label, checked) => `<label class="check-label"><input type="radio" name="${name}" value="${value}" ${checked ? 'checked' : ''}> ${label}</label>`;
+  const grants = t ? specialGrants('task', t.id).length : 0;
+  const fechas = `${field('Fecha de inicio', 'start', localDate(d.start), 'datetime-local')}${field('Fecha final', 'end', localDate(d.end), 'datetime-local')}
+    <p class="muted">Antes de la fecha de inicio los alumnos no pueden entregar; después de la fecha final ya no se aceptan entregas. El vencimiento (a la izquierda) solo marca las entregas tardías.</p>
+    ${typeof sectionChooserHtml === 'function' ? sectionChooserHtml(d.sections || []) : ''}${sectionDatesHtml(t?.id, 'task')}
+    <h3 class="bs-sub">Condiciones de publicación</h3><p class="muted">Los alumnos no pueden ver la actividad hasta que cumplan las condiciones.</p>${conditionsEditorHtml(t)}
+    <h3 class="bs-sub">Acceso especial</h3><p class="muted">El acceso especial abre la actividad en otras fechas para algunos alumnos (por ejemplo, una prórroga). ${t ? `Se asigna con el botón «Acceso especial» de la página de la actividad${grants ? `: ahora lo tienen ${grants} ${grants === 1 ? 'alumno' : 'alumnos'}` : ''}.` : 'Podrás asignarlo después de guardar, desde la página de la actividad.'}</p>`;
+  const envio = `<label>Tipo de asignación<select name="groupCategory"><option value="">Asignación individual</option>${teams.map((c) => `<option value="${esc(c)}" ${d.groupCategory === c ? 'selected' : ''}>Asignación de grupo: ${esc(c)}</option>`).join('')}</select></label>
+    <p class="muted">De grupo: lo que entregue un integrante cuenta para todo su equipo y la calificación se aplica al equipo completo. Los equipos se forman en Grupos.</p>
+    <label>Tipo de material enviado<select name="submissionMode">${[['files', 'Envío de archivos'], ['text', 'Envío de texto'], ['both', 'Envío de archivos o texto']].map(([v, n]) => `<option value="${v}" ${(d.submissionMode || 'both') === v ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
+    <fieldset class="bs-radios" data-files-only><legend>Archivos permitidos por envío</legend>${radio('maxFiles', 5, 'Hasta 5 archivos', maxFiles === 5)}${maxFiles > 1 && maxFiles < 5 ? radio('maxFiles', maxFiles, `Hasta ${maxFiles} archivos`, true) : ''}${radio('maxFiles', 1, 'Un archivo', maxFiles === 1)}</fieldset>
+    <div data-files-only>${field('Extensiones de archivo permitidas', 'extensions', (d.extensions || []).join(', '), 'text', 'placeholder="Sin restricciones (por ejemplo: pdf, docx)"')}<p class="muted">Vacío = sin restricciones. Tamaño máximo: 20 MB por archivo.</p></div>
+    <fieldset class="bs-radios"><legend>Envíos</legend>${radio('allowResubmit', 'on', 'Se conserva solamente el envío más reciente', d.allowResubmit !== false)}${radio('allowResubmit', 'off', 'Sólo un envío permitido', d.allowResubmit === false)}</fieldset>
+    <p class="muted">Si el alumno reemplaza su envío, deberás calificarlo nuevamente. Recibes un aviso en la campana (y en el celular, si activaste las notificaciones) con cada entrega.</p>`;
+  const evaluacion = `<label>Rúbricas<select name="rubric" id="rubricPicker"><option value="">Sin rúbrica</option>${d.rubric ? `<option value="${esc(d.rubric)}" selected>${esc(records('rubric').find((r) => r.id === d.rubric)?.data.title || 'Rúbrica asignada')}</option>` : ''}</select></label>
+    ${taskGradebookHtml(d, true)}
+    <h3 class="bs-sub">Herramientas de anotación</h3><p class="muted">Puedes marcar y escribir sobre los PDF entregados al revisar cada envío; el alumno ve las correcciones cuando publicas la calificación.</p>`;
+  $('#main').innerHTML = `<div class="crumbs"><button data-section="tasks">❮ Volver a administrar asignaciones</button></div><form id="taskEditor" class="real-form bs-editor"><div class="editor-layout"><section class="editor-main"><h1>${t ? 'Editar actividad' : 'Nueva actividad'}</h1>${field('Nombre', 'title', d.title || '', 'text', 'required maxlength="200" placeholder="Sin título"')}
+      <div class="bs-row"><label>Calificación de<span class="bs-points"><input name="maxScore" type="number" min="0.01" max="1000" step="0.01" value="${esc(maxScore)}" aria-describedby="bsPointsHint"><span>puntos</span></span></label>${field('Fecha de vencimiento', 'due', localDate(d.due), 'datetime-local')}</div>
+      <p class="muted" id="bsPointsHint">Calificas sobre estos puntos en el libro; Enlace la convierte a escala de 10.</p>
+      ${richTextarea('Instrucciones', 'body', d.body || '', { images: true })}${attachmentPanel(true)}</section>
+    <section class="editor-sidebar">${taskEditorCard('fechas', 'Fechas y condiciones de disponibilidad', fechas)}${taskEditorCard('envio', 'Envío y finalización', envio)}${taskEditorCard('evaluacion', 'Evaluación y comentarios', evaluacion)}</section></div>
+    <p class="form-error error" hidden></p>
+    <div class="editor-bottom"><button class="primary" type="submit" value="close">Guardar y cerrar</button><button class="secondary" type="submit" value="stay">Guardar</button><button type="button" class="secondary" data-section="tasks">Cancelar</button>
+      <label class="bs-visible"><input type="checkbox" name="visible" role="switch" ${d.visible !== false ? 'checked' : ''}><span></span></label>${t ? trashButton('task', t.id, 'Eliminar actividad') : ''}</div></form>`;
+  const form = $('#taskEditor');
+  const files = attachmentManager(form, d.fileIds || []);
   richAttachments = files;
-  bindForm('#taskEditor', async (f) => {
+  const filesOnly = () => form.querySelectorAll('[data-files-only]').forEach((el) => (el.hidden = form.querySelector('[name="submissionMode"]').value === 'text'));
+  form.addEventListener('change', () => (filesOnly(), taskEditorSummaries(form)));
+  form.addEventListener('click', (e) => e.target.closest('[data-cond-add], [data-cond-remove]') && setTimeout(() => taskEditorSummaries(form)));
+  filesOnly();
+  bindForm('#taskEditor', async (f, submitter) => {
+    const max = Number(f.get('maxScore'));
+    if (!(max > 0 && max <= 1000)) throw new Error('La calificación debe ser mayor que 0 y hasta 1000 puntos.');
     const fileIds = await files.upload();
     const saved = await save('task', {
       title: f.get('title'),
@@ -213,17 +283,28 @@ function renderEditor() {
       visible: f.get('visible') === 'on',
       fileIds,
       submissionMode: f.get('submissionMode'),
-      maxFiles: Number(f.get('maxFiles')),
-      extensions: f.get('extensions'),
-      allowResubmit: f.get('allowResubmit') === 'on',
+      maxFiles: Number(f.get('maxFiles')) || 5,
+      extensions: f.get('extensions') || '',
+      allowResubmit: f.get('allowResubmit') !== 'off',
       groupCategory: f.get('groupCategory') || '',
       rubric: f.get('rubric') || null,
       ...(f.has('gradeCategory') ? { gradebook: { category: f.get('gradeCategory') || null, points: Number(f.get('gradePoints')) || 1 } } : {})
     }, t);
     await saveSectionDates('task', saved.id, readSectionDates(f));
+    // «Calificación de»: cambia solo el máximo; las calificaciones ya capturadas conservan su valor sobre 10.
+    if (max !== (t?.data.maxScore ?? 10)) {
+      const graded = t ? records('submission').filter((x) => x.data.task === t.id && x.data.grade != null).length : 0;
+      const rescale = graded > 0 && confirm(`Ya hay ${graded} ${graded === 1 ? 'calificación capturada' : 'calificaciones capturadas'}. ¿Conservar los puntos de cada alumno con el nuevo máximo? (Aceptar = conservar los puntos; Cancelar = conservar la calificación sobre 10.)`);
+      await request('/api/task/max', { course: current.course.id, id: saved.id, max, rescale });
+    }
+    if (submitter?.value === 'stay') {
+      detail = saved.id;
+      return 'Guardado. Puedes seguir editando.';
+    }
     section = 'tasks';
   });
   fillRubricPicker($('#rubricPicker'), d.rubric);
+  taskEditorSummaries(form);
 }
 function submissionModal(t) {
   const s = records('submission').find(s => s.data.task === t.id && (s.author === viewerKey() || s.data.member === myMember()?.id)), d = t.data;

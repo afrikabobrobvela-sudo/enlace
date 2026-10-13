@@ -126,7 +126,7 @@ document.addEventListener('click', (e) => {
 });
 // Menús desplegables (12.75): se cierran al tocar fuera o con Esc, y abrir uno cierra los demás. Antes «Más» y el
 // filtro de secciones se quedaban abiertos hasta volver a tocar su botón.
-const POPOVER_MENUS = 'details.more-menu, details.section-filter, details.course-picker, details.card-actions, details.more-actions, details.gb-col-menu, details.bank-picker';
+const POPOVER_MENUS = 'details.more-menu, details.section-filter, details.course-picker, details.card-actions, details.more-actions, details.gb-col-menu, details.bank-picker, details.rich-more';
 document.addEventListener('click', (e) => {
   for (const menu of document.querySelectorAll(POPOVER_MENUS)) if (menu.open && !menu.contains(e.target)) menu.open = false;
 });
