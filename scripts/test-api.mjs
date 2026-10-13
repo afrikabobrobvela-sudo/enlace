@@ -63,8 +63,11 @@ try {
   assert.equal(forged.status, 401, 'Las cabeceras de ChatGPT Sites ya no otorgan identidad');
   checks++;
   const cookieValue = (await session('owner')).split('=')[1];
+  // Se cambia el primer carácter de la firma: los últimos llevan bits de relleno y cambiarlos podía dejar los mismos bytes.
+  const [cookieBody, cookieSig] = cookieValue.split('.');
+  const badCookie = `${cookieBody}.${cookieSig[0] === 'A' ? 'B' : 'A'}${cookieSig.slice(1)}`;
   const tampered = await api(
-    new Request('https://test.local/api/me', { headers: { cookie: '__Host-enlace_session=' + cookieValue.slice(0, -2) + 'xx' } }),
+    new Request('https://test.local/api/me', { headers: { cookie: '__Host-enlace_session=' + badCookie } }),
     env,
   );
   assert.equal(tampered.status, 401, 'Una firma alterada se rechaza');
