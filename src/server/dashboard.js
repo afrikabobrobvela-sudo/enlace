@@ -158,7 +158,7 @@ export const dashboardRoutes = {
         since,
         nowIso(),
       ),
-      // Foros (12.23): publicaciones nuevas en lo que sigue y respuestas a sus hilos (una por hilo más abajo).
+      // Foros (12.23): publicaciones nuevas en lo que sigue y respuestas a sus hilos (una por hilo más abajo), y faltas (12.75).
       // Por índice (curso, tipo, sin eliminar, fecha): solo las publicaciones recientes de sus cursos.
       all(
         db,
@@ -169,6 +169,13 @@ export const dashboardRoutes = {
          JOIN aula_records f ON f.id=json_extract(p.data,'$.forum') AND f.deleted_at IS NULL
          JOIN aula_courses c ON c.id=p.course
          WHERE ${forumActivitySql('?1', 'place', '?3')}
+         UNION ALL
+         -- Faltas (12.75): al alumno, cada inasistencia registrada en la ventana, solo de clases recientes (importar un
+         -- pase de lista viejo no llena la campana). Si el docente la cambia a asistencia, deja de aparecer.
+         SELECT 'absence', s.id, s.course, c.name, coalesce(nullif(s.topic,''),'Clase') || ' del ' || strftime('%d/%m/%Y', s.date),
+                a.updated, NULL
+         FROM mine CROSS JOIN aula_attendance a ON a.member=mine.member AND a.status='absent' AND a.updated>?2
+         JOIN aula_sessions s ON s.id=a.session AND s.date>=substr(?2,1,10) JOIN aula_courses c ON c.id=s.course
          ORDER BY at DESC LIMIT ${limit}`,
         user.id,
         since,

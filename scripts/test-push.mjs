@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import { api } from '../src/server/api.js';
 import { completeLogin, sessionCookieForTests } from '../src/server/auth.js';
 import { encryptPayload, queueDueReminders, runPush, sendQueued, validEndpoint } from '../src/server/push.js';
+import { fillAbsences } from '../src/server/attendance.js';
 import { memoryBucket, openD1 } from './lib/d1-sqlite.mjs';
 
 const store = openD1(':memory:');
@@ -238,6 +239,28 @@ ok(got.length === 1 && got[0].title === 'Inasistencia registrada' && got[0].body
 mark = sent.length;
 await call('docente', '/api/attendance/checkin/close', { course: c, session: clase2 });
 ok((await inbox(anaPhone, mark)).length === 0, 'cerrar otra vez no repite');
+
+// 12.75: la falta también sale en la campana (para quien no activó las notificaciones), solo mientras siga siendo falta.
+let bell = (await call('ana', '/api/notifications')).items.filter((i) => i.type === 'absence');
+ok(bell.length === 1 && bell[0].id === clase2 && bell[0].title === 'Clase del 06/10/2026' && bell[0].fresh, 'falta en la campana');
+ok((await call('beto', '/api/notifications')).items.every((i) => i.type !== 'absence' || i.id !== clase), 'la clase a la que asistió no sale en la campana');
+await call('docente', '/api/attendance/mark', { course: c, session: clase2, marks: [{ member: id('ana'), status: 'excused' }] });
+ok((await call('ana', '/api/notifications')).items.every((i) => i.type !== 'absence'), 'justificada: sale de la campana');
+// 12.75: un pase de lista vencido se completa solo cada 5 minutos (tarea programada), aunque nadie abra la asistencia.
+const clase3 = (await call('docente', '/api/attendance/session', { course: c, date: '2026-10-07' }, 201)).id;
+await call('docente', '/api/attendance/checkin/open', { course: c, session: clase3, minutes: 10 });
+await env.DB.prepare("UPDATE aula_sessions SET checkin_until='2026-10-07T15:00:00.000Z' WHERE id=?").bind(clase3).run();
+mark = sent.length;
+await fillAbsences(env.DB, null);
+await sendQueued(env, 40);
+got = await inbox(anaPhone, mark);
+ok(got.length === 1 && got[0].title === 'Inasistencia registrada' && got[0].body === 'Física · clase del 07/10/2026', 'falta por registro vencido, desde la tarea programada');
+mark = sent.length;
+await fillAbsences(env.DB, null);
+await sendQueued(env, 40);
+ok((await inbox(anaPhone, mark)).length === 0, 'la tarea programada no repite');
+bell = (await call('ana', '/api/notifications')).items.filter((i) => i.type === 'absence');
+ok(bell.length === 1 && bell[0].id === clase3, 'y aparece en la campana');
 
 // ---- Noticia urgente (sin correo configurado, solo notificación) ------------------------------------------------
 const noticia = await call('docente', '/api/record', { course: c, kind: 'notice', data: { title: 'Cambio de salón', body: 'Hoy en el 204', visible: true } }, 201);

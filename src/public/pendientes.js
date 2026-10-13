@@ -57,8 +57,9 @@ const NOTICE_LABELS = {
   submission: 'Entregas nuevas',
   post: 'Foro: publicaciones nuevas',
   message: 'Mensaje',
+  absence: 'Inasistencia registrada',
 };
-const NOTICE_TARGET = { notice: 'notices', material: 'content', quiz: 'quiz', task: 'task', grade: 'task', submission: 'task', post: 'thread', message: 'messages' };
+const NOTICE_TARGET = { notice: 'notices', material: 'content', quiz: 'quiz', task: 'task', grade: 'task', submission: 'task', post: 'thread', message: 'messages', absence: 'attendance' };
 let noticesCache = null;
 let noticesLoadedAt = 0;
 const NOTICES_EVERY = 5 * 60_000;

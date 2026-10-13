@@ -151,12 +151,18 @@ async function reconcileLocationFlags(db, session, userId) {
 const ABSENCE_NOTICE = `m.user_id, 'Inasistencia registrada' AS title, c.name || ' · clase del ' || strftime('%d/%m/%Y', s.date) AS body,
   '/#c=' || c.id || '&s=attendance' AS url, 'inasistencia:' || s.id AS tag`;
 
+/** Registros por completar: el de la clase pedida (?3) o los vencidos (?2 = ahora) del curso ?1, o de todos los cursos activos. */
+const OPEN_EXPIRED = `s.checkin_secret IS NOT NULL AND (s.id=?3 OR (?3 IS NULL AND s.checkin_until<?2))
+  AND (s.course=?1 OR (?1 IS NULL AND s.course IN (SELECT id FROM aula_courses WHERE archived_at IS NULL)))`;
+
 /**
  * Al terminar un registro (cerrado por el docente o vencido), quien no se registró queda como falta. La marca de
  * «registro por cerrar» es checkin_secret: se abre con el registro y se borra aquí, así cada registro se completa una
  * sola vez y no se tocan los registros que ya existen (los que el docente capturó a mano o los del propio registro).
+ * Con `course` null (12.75, tarea programada cada 5 minutos) completa los registros vencidos de todos los cursos activos:
+ * antes solo se completaban cuando alguien abría la asistencia del curso, y hasta entonces no llegaba ningún aviso.
  */
-async function fillAbsences(db, course, sessionId = null) {
+export async function fillAbsences(db, course, sessionId = null) {
   const now = nowIso();
   const [pushed] = await db.batch([
     // Notificación (12.72) a quien queda con falta, antes de escribirla (mismas condiciones que el INSERT).
@@ -165,7 +171,7 @@ async function fillAbsences(db, course, sessionId = null) {
         pushSql(`SELECT DISTINCT ${ABSENCE_NOTICE}
          FROM aula_sessions s JOIN aula_courses c ON c.id=s.course
          JOIN aula_members m ON m.course=s.course AND m.role='student' AND m.user_id IS NOT NULL AND (s.section='' OR m.section=s.section)
-         WHERE s.course=?1 AND s.checkin_secret IS NOT NULL AND (s.id=?3 OR (?3 IS NULL AND s.checkin_until<?2))
+         WHERE ${OPEN_EXPIRED}
            AND NOT EXISTS (SELECT 1 FROM aula_attendance x WHERE x.session=s.id AND x.member=m.id)`),
       )
       .bind(course, now, sessionId),
@@ -174,12 +180,12 @@ async function fillAbsences(db, course, sessionId = null) {
         `INSERT INTO aula_attendance (session,member,status,note,updated_by,updated)
          SELECT s.id, m.id, 'absent', 'No se registró', 'sistema', ?2
          FROM aula_sessions s JOIN aula_members m ON m.course=s.course AND m.role='student' AND (s.section='' OR m.section=s.section)
-         WHERE s.course=?1 AND s.checkin_secret IS NOT NULL AND (s.id=?3 OR (?3 IS NULL AND s.checkin_until<?2))
+         WHERE ${OPEN_EXPIRED}
          ON CONFLICT(session,member) DO NOTHING`,
       )
       .bind(course, now, sessionId),
     db
-      .prepare('UPDATE aula_sessions SET checkin_secret=NULL WHERE course=?1 AND checkin_secret IS NOT NULL AND (id=?3 OR (?3 IS NULL AND checkin_until<?2))')
+      .prepare(`UPDATE aula_sessions AS s SET checkin_secret=NULL WHERE ${OPEN_EXPIRED}`)
       .bind(course, now, sessionId),
   ]);
   return pushed;

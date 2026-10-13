@@ -12,6 +12,7 @@ import { serveSebConfig } from './server/seb.js';
 import { serveCertificatePage } from './server/constancias.js';
 import { serveH5p } from './server/h5p.js';
 import { PUSH_CRON, runPush } from './server/push.js';
+import { fillAbsences } from './server/attendance.js';
 
 const TYPES = {
   html: 'text/html; charset=utf-8',
@@ -37,7 +38,14 @@ export default {
   // Tareas programadas ([triggers] de wrangler.toml): cada 5 minutos, las notificaciones pendientes (12.72); la otra,
   // el resumen diario de avisos por correo.
   async scheduled(event, env, ctx) {
-    if (event.cron === PUSH_CRON) ctx.waitUntil(runPush(env).catch((error) => console.error('aula-push programado', error)));
+    // Cada 5 minutos: primero se completan los pases de lista vencidos (las faltas encolan su aviso) y luego se envía.
+    if (event.cron === PUSH_CRON)
+      ctx.waitUntil(
+        fillAbsences(env.DB, null)
+          .catch((error) => console.error('aula-asistencia programada', error))
+          .then(() => runPush(env))
+          .catch((error) => console.error('aula-push programado', error)),
+      );
     else ctx.waitUntil(runDigest(env.DB, env).catch((error) => console.error('aula-mail resumen', error)));
   },
   async fetch(request, env, ctx) {
