@@ -84,7 +84,7 @@ async function renderTrash() {
 
 async function restoreItem(kind, id) {
   await request('/api/trash/restore', { course: current.course.id, kind, id });
-  current = await request('/api/course?id=' + encodeURIComponent(current.course.id) + viewSuffix());
+  current = sortedCourse(await request('/api/course?id=' + encodeURIComponent(current.course.id) + viewSuffix()));
   await renderTrash();
   toast('Elemento restaurado.');
 }

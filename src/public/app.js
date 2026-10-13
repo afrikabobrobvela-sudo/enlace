@@ -82,9 +82,14 @@ async function request(path, data, method = 'POST') {
     throw Object.assign(new Error(b.error || 'No se pudo completar la operación.'), { status: r.status, login: b.login, data: b });
   return b;
 }
+/** Curso recién cargado (12.78): los alumnos quedan en orden alfabético para todas las pantallas, también los recién agregados. */
+function sortedCourse(c) {
+  if (Array.isArray(c?.members) && typeof byName === 'function') c.members.sort(byName);
+  return c;
+}
 async function reload() {
   if (current) {
-    const next = await request('/api/course?id=' + encodeURIComponent(current.course.id) + viewSuffix());
+    const next = sortedCourse(await request('/api/course?id=' + encodeURIComponent(current.course.id) + viewSuffix()));
     current = next;
   }
   else
@@ -97,7 +102,7 @@ async function openCourse(id, member = null) {
     previewMember = member;
     previewAsStudent = Boolean(member);
   }
-  const next = await request('/api/course?id=' + encodeURIComponent(id) + viewSuffix());
+  const next = sortedCourse(await request('/api/course?id=' + encodeURIComponent(id) + viewSuffix()));
   current = next;
   section = 'hub';
   detail = null;
@@ -339,7 +344,7 @@ document.addEventListener('click', (e) => {
 
 /** Alumnos del libro de calificaciones (y de su exportación) en orden alfabético (12.42). */
 function gradebookStudents() {
-  return studentsInView().sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'es', { sensitivity: 'base' }));
+  return studentsInView();
 }
 
 function renderGrades() {
@@ -518,7 +523,7 @@ function renderGroups() {
   return workspaceGroups();
 }
 function renderMembers() {
-  $('#main').innerHTML = `<h1>Listado de alumnos</h1><div class="toolbar">${teaches() ? button('Inscribir alumno', 'new-member') + button('Importar lista', 'bulk-members', '', 'secondary') + '<button class="secondary" type="button" data-join-code>Código QR para unirse</button>' + button(courseSections().length ? 'Secciones' : 'Crear secciones', 'sections', '', 'secondary') + '<button class="secondary" type="button" data-section="access">Accesos</button>' : ''}<input data-search type="search" placeholder="Buscar…" aria-label="Buscar alumno">${sectionFilterHtml()}</div>${teaches() ? '<p class="real-status">La inscripción vincula el curso al correo del alumno: verá el curso cuando entre con ese mismo correo (su cuenta de Microsoft o de Google). No se envían invitaciones. «Ver lo que ve» muestra el curso exactamente como lo ve ese alumno (solo lectura; la consulta queda registrada).</p>' : ''}${coTeachersPanel()}<div class="table-wrap"><table><thead><tr><th>Nombre</th>${teaches() ? `<th>Matrícula</th>${courseSections().length ? '<th>Sección</th>' : ''}<th>Correo</th><th>Estado</th><th>Acción</th>` : courseSections().length ? '<th>Sección</th>' : ''}</tr></thead><tbody>${(teaches() ? studentsInView() : current.members.filter(m => m.role === 'student')).map(m => `<tr data-search-row><td>${teaches() ? `<span class="person">${avatarHtml(m)}<span>${esc(m.name)}</span></span>` : esc(m.name)}</td>${!teaches() && courseSections().length ? `<td>${esc(sectionName(m.section) || '—')}</td>` : ''}${teaches() ? `<td>${esc(m.matricula)}</td>${courseSections().length ? `<td>${memberSectionSelect(m)}</td>` : ''}<td>${esc(m.email)}</td><td>${m.user_id ? 'Cuenta vinculada' : 'Pendiente de ingreso'}</td><td><div class="row-actions">${button('Editar', 'edit-member', m.id, 'text-btn')}${button('Ver lo que ve', 'view-member', m.id, 'text-btn')}${button('Retirar', 'remove-member', m.id, 'text-btn danger-text')}${m.photo ? `<button type="button" class="text-btn" data-member-photo-delete="${esc(m.id)}">Quitar foto</button>` : ''}</div></td>` : ''}</tr>`).join('') || '<tr><td>No hay alumnos inscritos.</td></tr>'}</tbody></table></div>`;
+  $('#main').innerHTML = `<h1>Listado de alumnos</h1><div class="toolbar">${teaches() ? button('Inscribir alumno', 'new-member') + button('Importar lista', 'bulk-members', '', 'secondary') + '<button class="secondary" type="button" data-join-code>Código QR para unirse</button>' + button(courseSections().length ? 'Secciones' : 'Crear secciones', 'sections', '', 'secondary') + '<button class="secondary" type="button" data-section="access">Accesos</button>' : ''}<input data-search type="search" placeholder="Buscar…" aria-label="Buscar alumno">${sectionFilterHtml()}</div>${teaches() ? '<p class="real-status">La inscripción vincula el curso al correo del alumno: verá el curso cuando entre con ese mismo correo (su cuenta de Microsoft o de Google). No se envían invitaciones. «Ver lo que ve» muestra el curso exactamente como lo ve ese alumno (solo lectura; la consulta queda registrada).</p>' : ''}${coTeachersPanel()}<div class="table-wrap"><table><thead><tr><th>Nombre</th>${teaches() ? `<th>Matrícula</th>${courseSections().length ? '<th>Sección</th>' : ''}<th>Correo</th><th>Estado</th><th>Acción</th>` : courseSections().length ? '<th>Sección</th>' : ''}</tr></thead><tbody>${(teaches() ? studentsInView() : current.members.filter(m => m.role === 'student').sort(byName)).map(m => `<tr data-search-row><td>${teaches() ? `<span class="person">${avatarHtml(m)}<span>${esc(m.name)}</span></span>` : esc(m.name)}</td>${!teaches() && courseSections().length ? `<td>${esc(sectionName(m.section) || '—')}</td>` : ''}${teaches() ? `<td>${esc(m.matricula)}</td>${courseSections().length ? `<td>${memberSectionSelect(m)}</td>` : ''}<td>${esc(m.email)}</td><td>${m.user_id ? 'Cuenta vinculada' : 'Pendiente de ingreso'}</td><td><div class="row-actions">${button('Editar', 'edit-member', m.id, 'text-btn')}${button('Ver lo que ve', 'view-member', m.id, 'text-btn')}${button('Retirar', 'remove-member', m.id, 'text-btn danger-text')}${m.photo ? `<button type="button" class="text-btn" data-member-photo-delete="${esc(m.id)}">Quitar foto</button>` : ''}</div></td>` : ''}</tr>`).join('') || '<tr><td>No hay alumnos inscritos.</td></tr>'}</tbody></table></div>`;
   if (teaches()) $('#main .toolbar')?.insertAdjacentHTML('afterbegin', button('Traer de otro curso', 'copy-members', '', 'secondary'));
 }
 // ---- Accesos (12.20): inicios de sesión durante el curso e ingresos al curso de alumnos y docentes ----
@@ -1185,7 +1190,7 @@ document.addEventListener('click', async (e) => {
           previewMember = null;
         }
         attendanceData = null;
-        current = await request('/api/course?id=' + encodeURIComponent(current.course.id) + viewSuffix());
+        current = sortedCourse(await request('/api/course?id=' + encodeURIComponent(current.course.id) + viewSuffix()));
         if (['progress', 'admin', 'trash', 'editor', 'review'].includes(section)) {
           section = 'hub';
           detail = null;

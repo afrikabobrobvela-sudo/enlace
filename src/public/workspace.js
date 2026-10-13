@@ -162,7 +162,9 @@ function studentTaskState(t, mine) {
 }
 
 function workspaceTasks() {
-  let ts = records('task');
+  // Quien enseña (12.78): las más nuevas arriba, por fecha de vencimiento (o de creación si no tiene), y las más viejas abajo.
+  const newest = (t) => Date.parse(t.data.due || '') || Date.parse(t.created || t.data.created || '') || 0;
+  let ts = teaches() ? [...records('task')].sort((a, b) => newest(b) - newest(a)) : records('task');
   if (!teaches()) {
     // Lo próximo primero (12.36): por entregar (la más cercana arriba), vencidas (la más reciente arriba), entregadas.
     const subs = records('submission');

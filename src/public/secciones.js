@@ -50,8 +50,13 @@ function inSelectedSection(member) {
 }
 
 /** Alumnos que se ven con el filtro de sección actual (para quien enseña). */
+// Orden alfabético en español (12.78): el servidor ordena por bytes (ORDER BY name), así que «Álvarez» o un nombre
+// en minúsculas quedaban después de la «Z». Sin distinguir acentos ni mayúsculas.
+const NAME_ORDER = new Intl.Collator('es', { sensitivity: 'base', ignorePunctuation: true });
+const byName = (a, b) => NAME_ORDER.compare(String(a.name || '').trim(), String(b.name || '').trim());
+
 function studentsInView() {
-  return current.members.filter((m) => m.role === 'student' && inSelectedSection(m));
+  return current.members.filter((m) => m.role === 'student' && inSelectedSection(m)).sort(byName);
 }
 
 /** ¿La clase es para este alumno? (las de todo el curso son para todos). */
