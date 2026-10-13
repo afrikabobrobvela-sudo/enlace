@@ -5,6 +5,10 @@ No es el código de D2L Brightspace ni una plataforma oficial de la BUAP.
 
 Esta versión se despliega en **tu propia cuenta de Cloudflare** (Workers + D1 + R2, plan gratuito) y ya no depende de ChatGPT Sites.
 
+## Novedades de la versión 12.77 (barra del editor de actividades)
+
+- **Los botones de abajo del editor de actividades ya no se salen de la pantalla.** «Guardar y cerrar», «Guardar», «Cancelar» y «Visible» quedan alineados con el título, y la página ya no se desborda hacia los lados (desaparece la barra horizontal). Unos estilos antiguos movían la barra y el editor 32 px hacia afuera. Revisado de 360 a 1920 px de ancho.
+
 ## Novedades de la versión 12.76 (editor de actividades al estilo Brightspace)
 
 - **Nuevo editor de actividades**, con la misma distribución que Brightspace:
