@@ -9,6 +9,7 @@ import { conditionsSql, recordConditionsSql } from './condiciones.js';
 
 const DAY = 86_400_000;
 const WINDOW_DAYS = 14;
+const DUE_SOON_DAYS = 2; // «Vence pronto» en la campana (12.75)
 // Historial de avisos: hasta 60 días (y más elementos) cuando se pide con ?days=60.
 const HISTORY_DAYS = 60;
 const READ_BATCH = 50;
@@ -106,7 +107,7 @@ export const dashboardRoutes = {
     const seen = user.notices_seen_at || '';
     // D1 admite como máximo 5 términos en un SELECT compuesto (UNION): se hacen tres consultas y se juntan aquí.
     const ctes = `WITH mine AS (${STUDENT_COURSES}), teach AS (${TEACHER_COURSES})`;
-    const [content, activity, forums] = await Promise.all([
+    const [content, activity, forums, due] = await Promise.all([
       // Noticias, materiales y evaluaciones en una sola pasada (antes se calculaba todo tres veces). Primero el filtro
       // por fecha, que es barato; las condiciones de sección, acceso especial y liberación solo para lo reciente.
       // Con publicación programada, la fecha del aviso es la de publicación (aparece como nuevo en ese momento).
@@ -181,9 +182,36 @@ export const dashboardRoutes = {
         since,
         nowIso(),
       ),
+      // Actividades por vencer y vencidas sin entregar (12.75): las mismas reglas que «Por entregar» de Inicio. Vence
+      // pronto = dentro de 2 días; vencida = en los últimos 7 días (WINDOW_DAYS acota el historial).
+      all(
+        db,
+        `WITH mine AS (${STUDENT_COURSES})
+         SELECT t.id, t.title, t.course, c.name AS course_name, coalesce(nullif(e.due,''), nullif(d.due,''), t.due) AS due
+         FROM mine CROSS JOIN aula_tasks t ON t.course=mine.course AND t.deleted_at IS NULL AND t.visible=1
+         JOIN aula_courses c ON c.id=t.course
+         LEFT JOIN aula_extensions e ON e.task=t.id AND e.member=mine.member
+         LEFT JOIN aula_section_dates d ON d.item=t.id AND d.section=mine.section
+         WHERE coalesce(nullif(e.due,''), nullif(d.due,''), t.due) BETWEEN ?2 AND ?3
+           AND coalesce(nullif(e.start_at,''), nullif(d.start_at,''), t.start_at)<=?4
+           AND ${sectionSql('t.sections', 'mine.section')} AND ${specialTaskSql('t', 'mine.member')} AND t.forum IS NULL AND ${conditionsSql('t.conditions', 'mine.member')}
+           AND NOT EXISTS (SELECT 1 FROM aula_submissions s WHERE s.task=t.id AND s.member=mine.member AND (s.submitted!='' OR s.grade IS NOT NULL))
+         ORDER BY due LIMIT 30`,
+        user.id,
+        new Date(Date.now() - Math.min(days, 7) * DAY).toISOString(),
+        new Date(Date.now() + DUE_SOON_DAYS * DAY).toISOString(),
+        nowIso(),
+      ),
     ]);
     const reads = new Set((await all(db, 'SELECT item FROM aula_notice_reads WHERE user_id=?', user.id)).map((r) => r.item));
-    const items = [...content, ...activity, ...forums].sort((a, b) => (a.at < b.at ? 1 : -1)).slice(0, limit);
+    // Por vencer: el aviso «llega» 2 días antes del vencimiento; vencida: al vencer (cambia de tipo y vuelve a ser nuevo).
+    const nowText = nowIso();
+    const dueItems = due.map((t) => {
+      const overdue = t.due < nowText;
+      const at = overdue ? t.due : new Date(Math.max(Date.parse(t.due) - DUE_SOON_DAYS * DAY, Date.parse(since))).toISOString();
+      return { type: overdue ? 'overdue' : 'due', id: t.id, course: t.course, course_name: t.course_name, title: t.title, at, due: t.due };
+    });
+    const items = [...content, ...activity, ...forums, ...dueItems].sort((a, b) => (a.at < b.at ? 1 : -1)).slice(0, limit);
     // Varias entregas de la misma actividad (o publicaciones del mismo hilo) se agrupan en un solo aviso.
     const grouped = [];
     for (const item of items) {

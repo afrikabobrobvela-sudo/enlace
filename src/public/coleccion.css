@@ -692,3 +692,6 @@ dialog.annotator:not([open]) { display: none; }
 #topnav .more-menu[open] { padding: 0; background: none; }
 #topnav .more-menu[open] > summary { background: rgba(255, 255, 255, 0.16); color: #fff; }
 @media (prefers-reduced-motion: reduce) { #topnav .more-menu > summary::after, .more-actions > summary::after, .section-filter > summary::after { transition: none; } }
+
+/* 12.75: en la campana, «Vencida sin entregar» en rojo (#b3123a, 6.9:1 sobre blanco). */
+.bell-item.is-overdue .bell-kind { color: #b3123a; font-weight: 700; }

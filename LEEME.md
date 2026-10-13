@@ -5,8 +5,13 @@ No es el código de D2L Brightspace ni una plataforma oficial de la BUAP.
 
 Esta versión se despliega en **tu propia cuenta de Cloudflare** (Workers + D1 + R2, plan gratuito) y ya no depende de ChatGPT Sites.
 
-## Novedades de la versión 12.75 (avisos de inasistencia y menús desplegables)
+## Novedades de la versión 12.75 (avisos de faltas y entregas pendientes, y menús desplegables)
 
+- **Actividades por vencer y sin entregar, en la campana de cada alumno** (aunque no haya activado notificaciones):
+  - **«Vence pronto»**: lo que vence en los próximos 2 días y no ha entregado, con la fecha («vence 14 oct, 11:59 p.m.»).
+  - **«Vencida sin entregar»** (en rojo): lo que venció en los últimos 7 días sin entrega.
+  - Usan las mismas reglas que «Por entregar» de Inicio (prórrogas, fechas por sección, acceso especial, condiciones). Al entregar, el aviso desaparece.
+- **Notificaciones en el celular** (para quien las activó), una vez al día a las 6 p.m.: «Vence mañana» (ya existía) y, nuevo, **«Sin entregar: …»** de lo que venció en las últimas 24 horas sin entrega.
 - **Las faltas ahora sí avisan al alumno.** Antes había dos huecos:
   - El aviso solo llegaba como notificación del celular o la computadora, y solo a quien la había activado. **Ahora cada falta aparece también en la campana** de Enlace («Inasistencia registrada · Clase del 06/10/2026»), aunque el alumno no haya activado nada. Si la cambias a asistencia, retardo o justificada, desaparece de la campana.
   - Cuando un pase de lista con QR o código se cerraba solo por tiempo, las faltas de quien no se registró se escribían hasta que alguien abría la asistencia del curso, y hasta entonces no salía ningún aviso. **Ahora Enlace las completa solo cada 5 minutos** y avisa en ese momento.

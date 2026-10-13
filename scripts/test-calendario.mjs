@@ -164,4 +164,27 @@ assert(unfolded.includes(`SUMMARY:Clase: Leyes de Newton: ${'á'.repeat(60)}`), 
 assert.equal((unfolded.match(/BEGIN:VEVENT/g) || []).length, 2);
 checks += 8;
 
-console.log(`PASS: ${checks} verificaciones de calendario y avisos — fechas por alumno con prórroga, estado de entrega, sin lo oculto ni archivado, vista del docente, avisos leídos uno por uno o todos, historial de 60 días y archivo .ics.`);
+// ---- 12.75: en la campana, actividades por vencer (2 días) y vencidas sin entregar (7 días) ----
+const q = (await call('docente', '/api/courses', { name: 'Química', group: '502' }, 201)).id;
+await call('docente', '/api/members/bulk', { course: q, students: ['ana', 'beto'].map((n) => ({ name: n, email: n + '@example.test' })) });
+const qtask = (title, due) => call('docente', '/api/record', { course: q, kind: 'task', data: { title, body: '', visible: true, submissionMode: 'text', due } }, 201);
+const pronto = await qtask('Q pronto', inDays(1));
+const atrasada = await qtask('Q atrasada', inDays(-2));
+await qtask('Q lejana', inDays(5));
+await qtask('Q muy vieja', inDays(-9));
+const entregadaQ = await qtask('Q entregada', inDays(-1));
+await call('ana', '/api/record', { course: q, kind: 'submission', data: { task: entregadaQ.id, body: 'Listo' } }, 201);
+const bellQ = async (who) => (await call(who, '/api/notifications')).items.filter((i) => i.course === q && (i.type === 'due' || i.type === 'overdue'));
+let dq = await bellQ('ana');
+assert.deepEqual(dq.map((i) => [i.type, i.title]).sort(), [['due', 'Q pronto'], ['overdue', 'Q atrasada']]);
+assert.equal(dq.find((i) => i.type === 'due').due, pronto.data.due, 'lleva su fecha de vencimiento');
+assert.equal(dq.find((i) => i.type === 'overdue').id, atrasada.id);
+assert.equal((await bellQ('beto')).length, 3, 'a quien no entregó, también la que ana sí entregó');
+assert.equal((await bellQ('docente')).length, 0, 'al docente no');
+// Al entregarla deja de aparecer.
+await call('ana', '/api/record', { course: q, kind: 'submission', data: { task: atrasada.id, body: 'Tarde' } }, 201);
+dq = await bellQ('ana');
+assert.deepEqual(dq.map((i) => i.title), ['Q pronto']);
+checks += 6;
+
+console.log(`PASS: ${checks} verificaciones de calendario y avisos — fechas por alumno con prórroga, estado de entrega, sin lo oculto ni archivado, vista del docente, avisos leídos uno por uno o todos, historial de 60 días, por vencer y vencidas sin entregar, y archivo .ics.`);

@@ -279,13 +279,20 @@ await call('docente', '/api/record', { course: c, kind: 'task', data: { title: '
 const entregada = await call('docente', '/api/record', { course: c, kind: 'task', data: { title: 'Ya entregada', visible: true, due: '2026-10-12T20:00:00.000Z' } }, 201);
 await call('ana', '/api/record', { course: c, kind: 'submission', data: { task: entregada.id, body: 'Listo' } }, 201);
 await call('docente', '/api/record', { course: c, kind: 'task', data: { title: 'Oculta', visible: false, due: '2026-10-12T20:00:00.000Z' } }, 201);
+// 12.75: vencidas sin entregar en las últimas 24 h (de las 18:00 de ayer a las 18:00 de hoy, hora local).
+const vencida = await call('docente', '/api/record', { course: c, kind: 'task', data: { title: 'Cuestionario 2', visible: true, due: '2026-10-11T20:00:00.000Z' } }, 201); // 11 oct 14:00 local
+await call('docente', '/api/record', { course: c, kind: 'task', data: { title: 'Vieja', visible: true, due: '2026-10-10T20:00:00.000Z' } }, 201); // anteayer: ya avisada
 ok((await queueDueReminders(env.DB, new Date('2026-10-11T23:00:00Z'))) === 0, 'antes de las 18:00 (17:00 local) no');
 mark = sent.length;
-ok((await queueDueReminders(env.DB, now)) === 1, 'un recordatorio');
+ok((await queueDueReminders(env.DB, now)) === 2, 'un recordatorio y una vencida');
 ok((await queueDueReminders(env.DB, new Date('2026-10-12T03:00:00Z'))) === 0, 'una sola vez al día');
 await runPush(env, now);
 got = await inbox(anaPhone, mark);
-ok(got.length === 1 && got[0].title === 'Vence mañana: Informe final' && got[0].body === 'Física · a las 22:30' && got[0].url === `/#c=${c}&s=task&d=${manana.id}`, 'vence mañana');
+ok(got.length === 2, 'dos avisos');
+const vm = got.find((g) => g.title.startsWith('Vence mañana'));
+ok(vm && vm.title === 'Vence mañana: Informe final' && vm.body === 'Física · a las 22:30' && vm.url === `/#c=${c}&s=task&d=${manana.id}`, 'vence mañana');
+const sin = got.find((g) => g.title.startsWith('Sin entregar'));
+ok(sin && sin.title === 'Sin entregar: Cuestionario 2' && sin.body === 'Física · venció el 11/10 a las 14:00' && sin.tag === `vencida:${vencida.id}`, 'vencida sin entregar');
 ok((await inbox(docPhone, mark)).length === 0, 'al docente no');
 
 // ---- Cola: lo que no alcanza se envía en la tarea programada ----------------------------------------------------
