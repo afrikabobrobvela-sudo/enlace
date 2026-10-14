@@ -700,7 +700,7 @@ dialog.annotator:not([open]) { display: none; }
    Columna principal (nombre, «Calificación de» + vencimiento en una fila, instrucciones, material) y a la derecha
    tarjetas plegables con un resumen bajo el título; barra inferior fija con el interruptor Visible/Oculto. */
 .bs-editor .editor-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(300px, 380px); gap: 0; align-items: start; }
-.bs-editor .editor-main { padding: 8px 32px 32px 28px; }
+.bs-editor .editor-main { padding: 8px 32px 32px 0; }
 .bs-editor .editor-sidebar { background: #e9eef4; padding: 16px; min-height: 100%; display: flex; flex-direction: column; gap: 14px; }
 .bs-row { display: grid; grid-template-columns: minmax(150px, 220px) minmax(200px, 300px); gap: 24px; align-items: end; }
 .bs-row > label { margin: 0; }
@@ -787,3 +787,9 @@ dialog.annotator:not([open]) { display: none; }
 .rich-quick > summary { font-weight: 600; font-size: 14px; }
 .bs-card .conditions-editor { border: 0 !important; padding: 0 !important; margin: 4px 0 8px !important; background: none !important; box-shadow: none !important; }
 .bs-card .conditions-editor > summary { font-family: inherit !important; font-size: 15px !important; font-weight: 600 !important; color: var(--link, #1f3fd1) !important; padding: 6px 0 !important; border: 0 !important; background: none !important; min-height: 0 !important; }
+/* 12.77: brightspace-layout.css daba márgenes negativos (-32px) al editor y a su barra inferior: con el nuevo
+   relleno, la página se desbordaba a los lados y «Guardar y cerrar» quedaba cortado contra el borde. */
+.bs-editor .editor-layout { margin: 0 0 24px !important; }
+.bs-editor .editor-bottom { margin: 0 !important; padding: 14px 0 !important; }
+.bs-editor .editor-sidebar { border-radius: 12px; }
+@media (max-width: 720px) { .bs-editor .editor-bottom { padding: 12px 16px !important; } }

@@ -184,8 +184,8 @@ context.downloadsOut = downloads;
 run('exportAttendance()');
 const csv = downloads[0].text.replace(/^\uFEFF/, '').split('\r\n');
 check(csv[0] === '"Matrícula","Alumno","2026-09-28 07:00","2026-10-05","Asistencias","Retardos","Faltas","Justificadas","Porcentaje"');
-check(csv[1] === '"","Ana","P","F","1","0","1","0","50.0"', 'Ana: 1 de 2 = 50 %');
-check(csv[4].startsWith(`"2026","'=HYPERLINK(""x"")"`), 'Un nombre que empieza con = no se vuelve fórmula en Excel');
+check(csv.includes('"","Ana","P","F","1","0","1","0","50.0"'), 'Ana: 1 de 2 = 50 %');
+check(csv.some((row) => row.startsWith(`"2026","'=HYPERLINK(""x"")"`)), 'Un nombre que empieza con = no se vuelve fórmula en Excel');
 
 run(`attendanceData.canTeach = false; attendanceData.records = attendanceData.records.filter((r) => r.member === 'm-ana'); renderMyAttendance();`);
 page = html();

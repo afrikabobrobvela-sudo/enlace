@@ -5,6 +5,16 @@ No es el código de D2L Brightspace ni una plataforma oficial de la BUAP.
 
 Esta versión se despliega en **tu propia cuenta de Cloudflare** (Workers + D1 + R2, plan gratuito) y ya no depende de ChatGPT Sites.
 
+## Novedades de la versión 12.78 (orden de alumnos y actividades)
+
+- **Alumnos en orden alfabético correcto en todas las pantallas** (lista, actividad, calificaciones, asistencia, participación y exportaciones). Antes, los nombres con acento («Álvarez») o escritos en minúsculas quedaban después de la «Z». Ahora se ordenan como en un diccionario en español, sin importar acentos ni mayúsculas, y la «Ñ» va después de la «N».
+- **Los alumnos nuevos se acomodan solos** en su lugar en cuanto los agregas (a mano, con lista, con código o traídos de otro curso).
+- **Actividades: las más nuevas arriba.** En la lista de actividades del docente, las de fecha límite más reciente aparecen primero y las más viejas al final (las que no tienen fecha, por su fecha de creación). La vista del alumno sigue igual: primero lo que tiene por entregar.
+
+## Novedades de la versión 12.77 (barra del editor de actividades)
+
+- **Los botones de abajo del editor de actividades ya no se salen de la pantalla.** «Guardar y cerrar», «Guardar», «Cancelar» y «Visible» quedan alineados con el título, y la página ya no se desborda hacia los lados (desaparece la barra horizontal). Unos estilos antiguos movían la barra y el editor 32 px hacia afuera. Revisado de 360 a 1920 px de ancho.
+
 ## Novedades de la versión 12.76 (editor de actividades al estilo Brightspace)
 
 - **Nuevo editor de actividades**, con la misma distribución que Brightspace:

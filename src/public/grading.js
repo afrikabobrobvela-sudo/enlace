@@ -1009,7 +1009,7 @@ async function saveColumnOrder(order) {
     const saved = await request('/api/grades/order', { course: current.course.id, order });
     // La configuración de calificaciones del curso se creó con este cambio: se recarga para tener su revisión.
     if (saved.created) {
-      current = await request('/api/course?id=' + encodeURIComponent(current.course.id) + viewSuffix());
+      current = sortedCourse(await request('/api/course?id=' + encodeURIComponent(current.course.id) + viewSuffix()));
       refreshGradebook();
     }
   } catch (error) {
