@@ -233,6 +233,7 @@ function taskEditorSummaries(form) {
   if (toggle) toggle.querySelector('span').textContent = get('visible').checked ? 'Visible' : 'Oculto';
 }
 
+let specialAfterSave = null; // actividad cuya ventana de acceso especial se abre tras guardar
 function renderEditor() {
   const t = find(detail), d = t?.data || {};
   const maxScore = d.maxScore ?? 10;
@@ -244,7 +245,9 @@ function renderEditor() {
     <p class="muted">Antes de la fecha de inicio los alumnos no pueden entregar; después de la fecha final ya no se aceptan entregas. El vencimiento (a la izquierda) solo marca las entregas tardías.</p>
     ${typeof sectionChooserHtml === 'function' ? sectionChooserHtml(d.sections || []) : ''}${sectionDatesHtml(t?.id, 'task')}
     <h3 class="bs-sub">Condiciones de publicación</h3><p class="muted">Los alumnos no pueden ver la actividad hasta que cumplan las condiciones.</p>${conditionsEditorHtml(t)}
-    <h3 class="bs-sub">Acceso especial</h3><p class="muted">El acceso especial abre la actividad en otras fechas para algunos alumnos (por ejemplo, una prórroga). ${t ? `Se asigna con el botón «Acceso especial» de la página de la actividad${grants ? `: ahora lo tienen ${grants} ${grants === 1 ? 'alumno' : 'alumnos'}` : ''}.` : 'Podrás asignarlo después de guardar, desde la página de la actividad.'}</p>`;
+    <h3 class="bs-sub">Acceso especial</h3><p class="muted">El acceso especial abre la actividad en otras fechas para algunos alumnos (por ejemplo, una prórroga). ${grants ? `Ahora lo ${grants === 1 ? 'tiene 1 alumno' : `tienen ${grants} alumnos`}.` : 'Nadie lo tiene todavía.'}</p>
+    <button class="secondary bs-special" type="submit" value="special">${t ? 'Dar acceso especial…' : 'Guardar y dar acceso especial…'}${grants ? ` <span class="badge-count">${grants}</span>` : ''}</button>
+    <p class="muted">${t ? 'Guarda los cambios de la actividad y' : 'Guarda la actividad y'} abre la lista de alumnos.</p>`;
   const envio = `<label>Tipo de asignación<select name="groupCategory"><option value="">Asignación individual</option>${teams.map((c) => `<option value="${esc(c)}" ${d.groupCategory === c ? 'selected' : ''}>Asignación de grupo: ${esc(c)}</option>`).join('')}</select></label>
     <p class="muted">De grupo: lo que entregue un integrante cuenta para todo su equipo y la calificación se aplica al equipo completo. Los equipos se forman en Grupos.</p>
     <label>Tipo de material enviado<select name="submissionMode">${[['files', 'Envío de archivos'], ['text', 'Envío de texto'], ['both', 'Envío de archivos o texto']].map(([v, n]) => `<option value="${v}" ${(d.submissionMode || 'both') === v ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
@@ -297,14 +300,20 @@ function renderEditor() {
       const rescale = graded > 0 && confirm(`Ya hay ${graded} ${graded === 1 ? 'calificación capturada' : 'calificaciones capturadas'}. ¿Conservar los puntos de cada alumno con el nuevo máximo? (Aceptar = conservar los puntos; Cancelar = conservar la calificación sobre 10.)`);
       await request('/api/task/max', { course: current.course.id, id: saved.id, max, rescale });
     }
-    if (submitter?.value === 'stay') {
+    if (submitter?.value === 'stay' || submitter?.value === 'special') {
       detail = saved.id;
+      // El acceso especial se da sobre la actividad ya guardada: la ventana se abre al volver a dibujar el editor.
+      if (submitter.value === 'special') specialAfterSave = saved.id;
       return 'Guardado. Puedes seguir editando.';
     }
     section = 'tasks';
   });
   fillRubricPicker($('#rubricPicker'), d.rubric);
   taskEditorSummaries(form);
+  if (t && specialAfterSave === t.id) {
+    specialAfterSave = null;
+    specialAccessModal('task', t.id);
+  }
 }
 function submissionModal(t) {
   const s = records('submission').find(s => s.data.task === t.id && (s.author === viewerKey() || s.data.member === myMember()?.id)), d = t.data;

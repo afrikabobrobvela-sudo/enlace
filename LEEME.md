@@ -5,6 +5,17 @@ No es el código de D2L Brightspace ni una plataforma oficial de la BUAP.
 
 Esta versión se despliega en **tu propia cuenta de Cloudflare** (Workers + D1 + R2, plan gratuito) y ya no depende de ChatGPT Sites.
 
+## Novedades de la versión 12.80 (entregas de alumnos retirados)
+
+- **Arreglo:** una actividad podía mostrar «4 entregas» en la lista y, al abrirla, aparecer vacía. Pasaba cuando quienes habían entregado fueron **retirados del curso**: sus entregas se conservan (como siempre) y se seguían contando, pero ya no había una fila dónde mostrarlas.
+- Ahora, al abrir la actividad, esas entregas aparecen en una fila **«Alumno retirado»** con su estado y calificación, y el botón «Evaluar →» te deja abrirlas, calificarlas y descargarlas. Así el número de entregas de la lista siempre coincide con lo que puedes ver.
+
+## Novedades de la versión 12.79 (acceso especial desde el editor)
+
+- En el editor de la actividad, la tarjeta «Fechas y condiciones de disponibilidad» ahora tiene el botón **«Dar acceso especial…»**. Guarda la actividad y abre la lista de alumnos para darles otras fechas (por ejemplo, una prórroga). Antes solo decía que se asignaba desde la página de la actividad.
+- En una actividad nueva, el botón dice «Guardar y dar acceso especial…». Al lado aparece cuántos alumnos ya lo tienen.
+- El botón «Acceso especial» de la página de la actividad sigue funcionando igual.
+
 ## Novedades de la versión 12.78 (orden de alumnos y actividades)
 
 - **Alumnos en orden alfabético correcto en todas las pantallas** (lista, actividad, calificaciones, asistencia, participación y exportaciones). Antes, los nombres con acento («Álvarez») o escritos en minúsculas quedaban después de la «Z». Ahora se ordenan como en un diccionario en español, sin importar acentos ni mayúsculas, y la «Ñ» va después de la «N».

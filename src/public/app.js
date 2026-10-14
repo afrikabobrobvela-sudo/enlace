@@ -173,6 +173,18 @@ function renderContent() {
 function renderTasks() {
   return workspaceTasks();
 }
+// Entregas de alumnos retirados del curso: se conservan y se cuentan, pero ya no están en current.members.
+// Se muestran para que el docente pueda abrirlas, calificarlas y descargarlas.
+function retiredSubmissionRows(t, subs) {
+  const retired = subs.filter((s) => !s.data.manual && !current.members.some((m) => m.id === s.data.member));
+  if (!retired.length) return '';
+  return retired
+    .map(
+      (s) =>
+        `<tr><td><span class="person"><span>Alumno retirado</span></span><div class="table-subtext">Ya no está inscrito; su entrega se conserva.</div></td>${courseSections().length ? '<td>—</td>' : ''}<td${needsReview(s) ? ' class="status-review"' : ''}>${s.data.late ? 'Entrega tardía' : 'Entregado'}${needsReview(s) ? ' · sin revisar' : ''}</td><td>${s.data.grade ?? '—'}</td><td><button class="table-link" data-action="review" data-id="${esc(t.id)}" data-member="${esc(s.data.member)}">Evaluar →</button></td></tr>`,
+    )
+    .join('');
+}
 function renderTask() {
   const t = find(detail);
   if (!t)
@@ -183,7 +195,7 @@ function renderTask() {
     const ext = extensionOf(t.id, m.id);
     const team = teamFor(t, m.id);
     return `<tr><td><span class="person">${avatarHtml(m)}<span>${esc(m.name)}</span></span>${t.data.groupCategory ? `<div class="table-subtext">${team ? esc(team.data.title) : 'Sin equipo'}</div>` : ''}${ext ? `<div class="table-subtext special-note">Acceso especial: ${esc(specialSummary({ start: ext.data.start, due: ext.data.due, end: ext.data.end }))}</div>` : ''}</td>${courseSections().length ? `<td>${esc(sectionName(m.section) || '—')}</td>` : ''}<td${needsReview(s) ? ' class="status-review"' : ''}>${s ? s.data.manual ? 'Captura manual' : `${s.data.late ? 'Entrega tardía' : 'Entregado'}${needsReview(s) ? ' · sin revisar' : ''}` : 'Sin entrega'}</td><td>${s?.data.grade ?? '—'}</td><td><button class="table-link" data-action="review" data-id="${t.id}" data-member="${m.id}">Evaluar →</button> <button type="button" class="text-btn" data-special-access="task" data-id="${esc(t.id)}" data-member="${esc(m.id)}">${ext ? 'Cambiar acceso' : 'Acceso especial'}</button></td></tr>`;
-  }).join('') || '<tr><td colspan="4">Inscribe alumnos para revisar sus entregas.</td></tr>'}</tbody></table></div>` : `${own ? `<section class="panel"><h2>Tu entrega</h2><p class="deadline">${fmt(own.data.submitted)}${own.data.submitted ? ` <button type="button" class="text-btn" data-receipt="${esc(own.id)}">Comprobante</button>` : ''}</p>${richText(own.data.body)}${fileLinks(own.data.fileIds)}${typeof annotateButtonsHtml === 'function' ? annotateButtonsHtml(own.data.fileIds) : ''}<p>Calificación: <b>${own.data.grade ?? 'Pendiente'}</b></p>${richText(own.data.feedback)}${rubricResultHtml(own.data.rubricScores)}</section>` : ''}${t.data.forum ? '' : `<div class="toolbar">${button(own ? 'Actualizar entrega' : 'Realizar entrega', 'submit', t.id)}</div>`}`}`;
+  }).join('') + retiredSubmissionRows(t, subs) || '<tr><td colspan="4">Inscribe alumnos para revisar sus entregas.</td></tr>'}</tbody></table></div>` : `${own ? `<section class="panel"><h2>Tu entrega</h2><p class="deadline">${fmt(own.data.submitted)}${own.data.submitted ? ` <button type="button" class="text-btn" data-receipt="${esc(own.id)}">Comprobante</button>` : ''}</p>${richText(own.data.body)}${fileLinks(own.data.fileIds)}${typeof annotateButtonsHtml === 'function' ? annotateButtonsHtml(own.data.fileIds) : ''}<p>Calificación: <b>${own.data.grade ?? 'Pendiente'}</b></p>${richText(own.data.feedback)}${rubricResultHtml(own.data.rubricScores)}</section>` : ''}${t.data.forum ? '' : `<div class="toolbar">${button(own ? 'Actualizar entrega' : 'Realizar entrega', 'submit', t.id)}</div>`}`}`;
   if (teaches()) enhanceTaskGradeRoster(t, subs);
 }
 
@@ -430,7 +442,9 @@ function prefetchPreview(taskId, memberId) {
   document.head.append(link);
 }
 function renderReview() {
-  const t = find(detail), m = current.members.find(m => m.id === reviewMember), s = gradeOf(reviewMember, detail);
+  const t = find(detail), s = gradeOf(reviewMember, detail);
+  // Un alumno retirado ya no está en current.members, pero su entrega se conserva y debe poder calificarse.
+  const m = current.members.find(m => m.id === reviewMember) || (s ? { id: reviewMember, name: 'Alumno retirado', role: 'student', retired: true } : null);
   if (!t || !m)
     return renderGrades();
   const students = studentsInView().some(x => x.id === m.id) ? studentsInView() : current.members.filter(x => x.role === 'student');
