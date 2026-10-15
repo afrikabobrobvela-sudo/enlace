@@ -5,6 +5,12 @@ No es el código de D2L Brightspace ni una plataforma oficial de la BUAP.
 
 Esta versión se despliega en **tu propia cuenta de Cloudflare** (Workers + D1 + R2, plan gratuito) y ya no depende de ChatGPT Sites.
 
+## Novedades de la versión 12.81 (ubicación de asistencia más exacta)
+
+- **Arreglo:** en el pase de lista por código, a veces un alumno que sí estaba en el salón salía «por revisar» por una distancia enorme (por ejemplo «a 1.7 km»). Pasaba porque el teléfono enviaba la **primera** lectura de ubicación, que viene de la antena o el Wi-Fi: llega al instante pero puede estar muy lejos, antes de que el GPS afine.
+- Ahora el teléfono del alumno **espera a que el GPS converja** (unos segundos más) y se queda con la lectura más precisa, no con la primera. Así la distancia que se calcula es mucho más fiel y hay menos avisos «por revisar» falsos.
+- No cambia nada de lo demás: sigue siendo solo un aviso (nunca marca falta solo), y el botón «Está en el salón» sigue para confirmar a mano cuando haga falta.
+
 ## Novedades de la versión 12.80 (entregas de alumnos retirados)
 
 - **Arreglo:** una actividad podía mostrar «4 entregas» en la lista y, al abrirla, aparecer vacía. Pasaba cuando quienes habían entregado fueron **retirados del curso**: sus entregas se conservan (como siempre) y se seguían contando, pero ya no había una fila dónde mostrarlas.

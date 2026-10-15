@@ -78,9 +78,13 @@ function useCheckin(open, serverNow) {
  * error): se escuchan las lecturas unos segundos y se queda la más precisa (12.24). Termina antes si llega una de
  * 30 m o menos.
  */
-function currentLocation(timeout = 15000, settle = 8000) {
+// Captura la ubicación lo más exacta posible. Adentro de edificios, la primera lectura suele venir de la red
+// (antena o Wi-Fi): llega al instante pero puede estar a cientos de metros. Por eso damos tiempo a que el GPS
+// afine (`floor` mínimo antes de aceptar incluso una lectura buena) y nos quedamos con la de menor imprecisión.
+function currentLocation(timeout = 25000, settle = 14000, floor = 5000) {
   return new Promise((resolve) => {
     if (!navigator.geolocation) return resolve({ error: 'unavailable' });
+    const started = Date.now();
     let best = null;
     let watch = null;
     let done = false;
@@ -98,7 +102,9 @@ function currentLocation(timeout = 15000, settle = 8000) {
       (p) => {
         const reading = { lat: p.coords.latitude, lng: p.coords.longitude, accuracy: p.coords.accuracy };
         if (!best || reading.accuracy < best.accuracy) best = reading;
-        if (best.accuracy <= 30) finish({ location: best });
+        // Un fijo preciso (≤ 20 m) basta, pero solo tras `floor`: así una primera lectura de red (rápida pero
+        // posiblemente lejana) alcanza a ser corregida por el GPS antes de enviarla.
+        if (best.accuracy <= 20 && Date.now() - started >= floor) finish({ location: best });
       },
       (e) => {
         if (e.code === 1) finish({ error: 'denied' });
@@ -393,7 +399,7 @@ function renderCodeEntry() {
     submit.disabled = true;
     submit.textContent = 'Obteniendo ubicación…';
     try {
-      const place = await currentLocation(12000);
+      const place = await currentLocation();
       submit.textContent = 'Registrando…';
       const result = await request('/api/attendance/checkin/code', {
         code: form.code.value,
