@@ -223,7 +223,7 @@ function taskEditorSummaries(form) {
   const sums = {
     fechas: extra.length ? `${dates} · ${extra.join(' · ')}` : dates,
     envio: team ? `${mode} · por equipo` : mode,
-    evaluacion: rubric?.value ? `Rúbrica: ${rubric.selectedOptions[0]?.textContent || ''}` : 'No se agregó ninguna rúbrica',
+    evaluacion: (rubric?.value ? `Rúbrica: ${rubric.selectedOptions[0]?.textContent || ''}` : 'No se agregó ninguna rúbrica') + (form.querySelector('[name="similarity"]')?.checked ? ' · Detector de similitud' : ''),
   };
   for (const [key, text] of Object.entries(sums)) {
     const el = form.querySelector(`[data-bs-sum="${key}"]`);
@@ -257,6 +257,7 @@ function renderEditor() {
     <p class="muted">Si el alumno reemplaza su envío, deberás calificarlo nuevamente. Recibes un aviso en la campana (y en el celular, si activaste las notificaciones) con cada entrega.</p>`;
   const evaluacion = `<label>Rúbricas<select name="rubric" id="rubricPicker"><option value="">Sin rúbrica</option>${d.rubric ? `<option value="${esc(d.rubric)}" selected>${esc(records('rubric').find((r) => r.id === d.rubric)?.data.title || 'Rúbrica asignada')}</option>` : ''}</select></label>
     ${taskGradebookHtml(d, true)}
+    <h3 class="bs-sub">Detector de similitud</h3><label class="check-label"><input type="checkbox" name="similarity" ${d.similarity ? 'checked' : ''}> Revisar las entregas con el detector de similitud</label><p class="muted">Compara entre sí las entregas de esta actividad para encontrar texto copiado. Los alumnos ven un aviso en la actividad.</p>
     <h3 class="bs-sub">Herramientas de anotación</h3><p class="muted">Puedes marcar y escribir sobre los PDF entregados al revisar cada envío; el alumno ve las correcciones cuando publicas la calificación.</p>`;
   $('#main').innerHTML = `<div class="crumbs"><button data-section="tasks">❮ Volver a administrar asignaciones</button></div><form id="taskEditor" class="real-form bs-editor"><div class="editor-layout"><section class="editor-main"><h1>${t ? 'Editar actividad' : 'Nueva actividad'}</h1>${field('Nombre', 'title', d.title || '', 'text', 'required maxlength="200" placeholder="Sin título"')}
       <div class="bs-row"><label>Calificación de<span class="bs-points"><input name="maxScore" type="number" min="0.01" max="1000" step="0.01" value="${esc(maxScore)}" aria-describedby="bsPointsHint"><span>puntos</span></span></label>${field('Fecha de vencimiento', 'due', localDate(d.due), 'datetime-local')}</div>
@@ -300,6 +301,9 @@ function renderEditor() {
       const rescale = graded > 0 && confirm(`Ya hay ${graded} ${graded === 1 ? 'calificación capturada' : 'calificaciones capturadas'}. ¿Conservar los puntos de cada alumno con el nuevo máximo? (Aceptar = conservar los puntos; Cancelar = conservar la calificación sobre 10.)`);
       await request('/api/task/max', { course: current.course.id, id: saved.id, max, rescale });
     }
+    // Detector de similitud (12.82): se guarda aparte, solo si cambió.
+    if ((f.get('similarity') === 'on') !== Boolean(t?.data.similarity))
+      await request('/api/task/similarity', { course: current.course.id, id: saved.id, enabled: f.get('similarity') === 'on' });
     if (submitter?.value === 'stay' || submitter?.value === 'special') {
       detail = saved.id;
       // El acceso especial se da sobre la actividad ya guardada: la ventana se abre al volver a dibujar el editor.

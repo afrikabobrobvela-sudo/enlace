@@ -5,6 +5,17 @@ No es el código de D2L Brightspace ni una plataforma oficial de la BUAP.
 
 Esta versión se despliega en **tu propia cuenta de Cloudflare** (Workers + D1 + R2, plan gratuito) y ya no depende de ChatGPT Sites.
 
+## Novedades de la versión 12.82 (detector de similitud)
+
+- **Detector de similitud propio**, dentro de Enlace. En la página de cada actividad hay un botón **«Revisar similitud»**: con él decides qué actividades se analizan (también hay una casilla en el editor, tarjeta «Evaluación y comentarios»). Las actividades marcadas llevan la pastilla «Similitud» en la lista.
+- Al abrirlo, Enlace **compara entre sí todas las entregas de la actividad** (de todas las secciones) y muestra por alumno el **porcentaje de similitud**, con quién coincide más y avisos. «Comparar →» abre las dos entregas lado a lado con los **fragmentos resaltados**: rojo = texto idéntico, amarillo = reescritura cercana, gris = excluido. Al tocar un fragmento se muestra su pareja en la otra entrega.
+- **Qué detecta:** copia literal aunque cambien mayúsculas, acentos, puntuación o espacios, o aunque metan caracteres invisibles o letras cirílicas que se ven iguales (también se avisa de esas trampas). Detecta además **reescrituras** con sinónimos frecuentes u otro orden de las palabras.
+- **Qué no cuenta:** las citas entre comillas (salvo que cubran más de la mitad del texto), la bibliografía al final y lo copiado de las instrucciones de la actividad. Puedes cambiar estas opciones y la coincidencia mínima (6 a 12 palabras seguidas).
+- **Qué lee:** texto escrito en Enlace, PDF con texto, Word (.docx) y archivos de texto. No lee fotos ni PDF escaneados (se avisa). Los integrantes de un mismo equipo no se comparan entre sí.
+- **Privacidad:** el análisis se hace en el navegador de quien enseña; los trabajos no salen de Enlace ni se mandan a otro servicio. Los alumnos ven en la actividad un aviso de que sus entregas se comparan.
+- **Límites:** solo compara las entregas de la misma actividad; no busca en internet como Turnitin. Es un apoyo: confirma cada coincidencia antes de decidir.
+- Migración `0046_similitud.sql` (solo agrega la columna `aula_tasks.similarity`).
+
 ## Novedades de la versión 12.81 (ubicación de asistencia más exacta)
 
 - **Arreglo:** en el pase de lista por código, a veces un alumno que sí estaba en el salón salía «por revisar» por una distancia enorme (por ejemplo «a 1.7 km»). Pasaba porque el teléfono enviaba la **primera** lectura de ubicación, que viene de la antena o el Wi-Fi: llega al instante pero puede estar muy lejos, antes de que el GPS afine.

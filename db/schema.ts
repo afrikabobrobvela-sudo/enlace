@@ -331,6 +331,8 @@ export const tasks = sqliteTable(
     sections: text('sections').notNull().default(''),
     // Migración 0028: 1 = solo la ven los alumnos con acceso especial (una fila en aula_extensions).
     specialOnly: integer('special_only').notNull().default(0),
+    // 12.82: 1 = sus entregas se revisan con el detector de similitud (en el navegador del docente).
+    similarity: integer('similarity').notNull().default(0),
     // Migración 0029: la actividad califica la participación en un foro (id del foro en aula_records; NULL = no).
     forum: text('forum'),
     // Migración 0029: condiciones de liberación (JSON { mode: 'all'|'any', items: [{ type, target, value }] }; '' = ninguna).

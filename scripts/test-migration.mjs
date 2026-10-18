@@ -125,6 +125,8 @@ const legacyTasks = pick(before.records, 'task').map((t) => ({
     // 12.18: para todas las secciones.
     sections: [],
     specialOnly: false,
+    // 12.82: sin revisión de similitud.
+    similarity: false,
     forum: null,
     conditions: null,
   },

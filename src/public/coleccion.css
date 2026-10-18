@@ -793,3 +793,43 @@ dialog.annotator:not([open]) { display: none; }
 .bs-editor .editor-bottom { margin: 0 !important; padding: 14px 0 !important; }
 .bs-editor .editor-sidebar { border-radius: 12px; }
 @media (max-width: 720px) { .bs-editor .editor-bottom { padding: 12px 16px !important; } }
+
+/* ---------- Detector de similitud (12.82, similitud.js) ---------- */
+.sim-pill { background: #eef3f8; color: #2c4a66; border: 1px solid #c9d7e6; }
+.sim-note { margin: 4px 0 12px; }
+.sim-intro { max-width: 78ch; color: var(--ink-soft, #34465a); }
+.sim-options { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; padding: 14px 16px; margin: 16px 0 8px; border: 1px solid var(--line, #d5dde6); border-radius: 12px; background: var(--surface, #fff); }
+.sim-options label:not(.check-label) { display: flex; align-items: center; gap: 8px; margin: 0; }
+.sim-options select { width: auto; }
+.sim-options .check-label { margin: 0; }
+.sim-options .primary { margin-left: auto; }
+.sim-progress { min-height: 1.4em; color: var(--ink-faint, #5f6f7e); }
+.sim-summary { display: flex; flex-wrap: wrap; gap: 8px 20px; margin: 4px 0 12px; }
+.sim-table td { vertical-align: top; }
+.sim-score { display: flex; align-items: center; gap: 10px; }
+.sim-bar { position: relative; display: inline-block; width: 96px; height: 8px; border-radius: 999px; background: #e7ecf2; overflow: hidden; }
+.sim-bar i { position: absolute; inset: 0 auto 0 0; border-radius: inherit; background: currentColor; }
+.sim-score.sim-high { color: #b3123a; }
+.sim-score.sim-mid { color: #9a5b00; }
+.sim-score.sim-low { color: #2f6b45; }
+.sim-score b { color: var(--ink, #15202b); font-variant-numeric: tabular-nums; }
+.sim-warn { margin: 0; padding-left: 18px; font-size: 13px; color: #7a4b00; }
+.sim-compare { margin-top: 24px; padding-top: 8px; border-top: 2px solid var(--line, #d5dde6); scroll-margin-top: 80px; }
+.sim-compare-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; margin: 8px 0; }
+.sim-compare-bar label { display: flex; align-items: center; gap: 8px; margin: 0; }
+.sim-compare-bar select { width: auto; }
+.sim-legend { display: flex; flex-wrap: wrap; gap: 8px; font-size: 13px; }
+.sim-columns { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.sim-doc { border: 1px solid var(--line, #d5dde6); border-radius: 12px; background: #fff; min-width: 0; }
+.sim-doc h3 { margin: 0; padding: 10px 14px; border-bottom: 1px solid var(--line, #d5dde6); font-size: 15px; }
+.sim-text { max-height: 70vh; overflow: auto; padding: 12px 14px; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.6; font-size: 15px; }
+mark.sim-lit { background: #ffd7df; color: inherit; border-radius: 3px; box-shadow: inset 0 -2px 0 #d9466a; }
+mark.sim-near { background: #ffefc2; color: inherit; border-radius: 3px; box-shadow: inset 0 -2px 0 #c98a00; }
+.sim-compare mark { cursor: pointer; }
+.sim-compare mark.is-active { outline: 2px solid #0a7383; outline-offset: 1px; }
+.sim-ex { color: var(--ink-faint, #5f6f7e); background: #f1f4f7; border-radius: 3px; }
+@media (max-width: 720px) {
+  .sim-columns { grid-template-columns: 1fr; }
+  .sim-text { max-height: 50vh; }
+  .sim-options .primary { margin-left: 0; width: 100%; }
+}

@@ -41,6 +41,8 @@ export function taskRecord(row) {
       groupCategory: row.group_category || '',
       sections: taskSections(row.sections),
       specialOnly: row.special_only === 1,
+      // 12.82: el docente revisa las entregas con el detector de similitud.
+      similarity: row.similarity === 1,
       // 12.23: califica la participación en un foro (no se entrega nada) y condiciones de liberación.
       forum: row.forum || null,
       conditions: parseJson(row.conditions || 'null', null),
