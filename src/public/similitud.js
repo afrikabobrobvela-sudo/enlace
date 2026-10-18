@@ -350,9 +350,32 @@ function simHighlightHtml(doc, cov, frags, side) {
   return html + esc(doc.text.slice(at));
 }
 
+/**
+ * Categoría de equipos para no comparar a integrantes del mismo equipo (12.83). La de la actividad si es por equipo;
+ * si no, la que agrupa a más de quienes entregaron (por ejemplo, los equipos de laboratorio de una actividad individual).
+ * `groups`: [{ id, data: { category, members } }]; `members`: ids de inscripción de quienes entregaron.
+ */
+function simPickTeamCategory(groups, members, preferred = '') {
+  const categories = [...new Set(groups.map((g) => g.data.category).filter(Boolean))];
+  if (preferred && categories.includes(preferred)) return preferred;
+  let best = '';
+  let most = 1; // al menos dos alumnos con equipo, si no, no vale la pena
+  for (const category of categories) {
+    const inTeams = new Set(groups.filter((g) => g.data.category === category).flatMap((g) => g.data.members));
+    const covered = members.filter((m) => inTeams.has(m)).length;
+    if (covered > most) [best, most] = [category, covered];
+  }
+  return best;
+}
+
+/** Equipo de un alumno en una categoría (o null). */
+function simTeamOf(groups, category, member) {
+  return category ? groups.find((g) => g.data.category === category && g.data.members.includes(member)) || null : null;
+}
+
 /* ---------- Interfaz (solo quien enseña) ---------- */
 
-const simState = { task: null, docs: null, result: null, entries: null, busy: false, progress: '', compare: null, opts: { minRun: 8, quotes: true, bibliography: true, instructions: true } };
+const simState = { task: null, docs: null, result: null, entries: null, busy: false, progress: '', compare: null, opts: { minRun: 8, quotes: true, bibliography: true, instructions: true, teams: '' } };
 const simTextCache = new Map(); // entrega + revisión → { text, notes }
 const SIM_MAX_FILE = 20 * 1024 * 1024;
 const SIM_MAX_TEXT = 300000;
@@ -450,8 +473,9 @@ async function runSimilarity(t) {
     await new Promise((resolve) => setTimeout(resolve, 30));
     const opts = simState.opts;
     const docs = entries.map((e) => simPrepare(e.text, { quotes: opts.quotes, bibliography: opts.bibliography, instructions: opts.instructions ? t.data.body : '', minRun: opts.minRun }));
-    // Integrantes de un mismo equipo entregan lo mismo: no se comparan entre sí.
-    const team = entries.map((e) => (typeof teamFor === 'function' ? teamFor(t, e.member)?.id : null) || null);
+    // Integrantes de un mismo equipo (de la categoría elegida) trabajan juntos: no se comparan entre sí.
+    const groups = records('group');
+    const team = entries.map((e) => simTeamOf(groups, opts.teams, e.member)?.id || null);
     let last = Date.now();
     const onStep = async (done, total) => {
       if (Date.now() - last < 60) return;
@@ -491,7 +515,8 @@ function simResultHtml() {
         ...(docs[i].obfuscation.confusable ? [`${docs[i].obfuscation.confusable} letras de otro alfabeto que imitan a las latinas`] : []),
         ...(!docs[i].eligible ? ['Sin texto que comparar'] : []),
       ];
-      return `<tr><td><b>${esc(simName(e.member))}</b>${courseSections().length ? `<div class="table-subtext">${esc(sectionName(current.members.find((m) => m.id === e.member)?.section) || 'Sin sección')}</div>` : ''}</td>
+      const team = simTeamOf(records('group'), simState.opts.teams, e.member);
+      return `<tr><td><b>${esc(simName(e.member))}</b>${team ? `<div class="table-subtext">Equipo: ${esc(team.data.title)}</div>` : ''}${courseSections().length ? `<div class="table-subtext">${esc(sectionName(current.members.find((m) => m.id === e.member)?.section) || 'Sin sección')}</div>` : ''}</td>
         <td><div class="sim-score ${simLevel(r.total)}"><span class="sim-bar"><i style="width:${Math.round(r.total * 100)}%"></i></span><b>${simPct(r.total)}</b></div><div class="table-subtext">${simPct(r.literal)} idéntico</div></td>
         <td>${best ? `${esc(simName(entries[best.doc].member))} <b>${simPct(best.pct)}</b>${r.sources.length > 1 ? `<div class="table-subtext">y ${r.sources.length - 1} más</div>` : ''}` : '<span class="muted">Ninguna</span>'}</td>
         <td>${warn.length ? `<ul class="sim-warn">${warn.map((w) => `<li>${esc(w)}</li>`).join('')}</ul>` : '<span class="muted">—</span>'}</td>
@@ -527,7 +552,11 @@ function renderSimilarity() {
     section = 'tasks';
     return renderTasks();
   }
-  if (simState.task !== t.id) Object.assign(simState, { task: t.id, entries: null, docs: null, result: null, compare: null });
+  if (simState.task !== t.id) {
+    Object.assign(simState, { task: t.id, entries: null, docs: null, result: null, compare: null });
+    simState.opts.teams = simPickTeamCategory(records('group'), simSubmissions(t).map((s) => s.data.member), t.data.groupCategory);
+  }
+  const categories = [...new Set(records('group').map((g) => g.data.category).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'es'));
   const count = simSubmissions(t).length;
   const o = simState.opts;
   $('#main').innerHTML = `<div class="crumbs"><button data-section="tasks">Actividades</button><span>›</span>${button(esc(t.data.title), 'task', t.id, 'text-btn')}<span>›</span><span>Similitud</span></div>
@@ -538,6 +567,7 @@ function renderSimilarity() {
       <label class="check-label"><input type="checkbox" name="quotes" ${o.quotes ? 'checked' : ''}> Excluir citas entre comillas</label>
       <label class="check-label"><input type="checkbox" name="bibliography" ${o.bibliography ? 'checked' : ''}> Excluir bibliografía</label>
       <label class="check-label"><input type="checkbox" name="instructions" ${o.instructions ? 'checked' : ''}> Excluir el texto de las instrucciones</label>
+      ${categories.length ? `<label>Mismo equipo <select name="teams"><option value="">Comparar a todos</option>${categories.map((c) => `<option value="${esc(c)}" ${o.teams === c ? 'selected' : ''}>No comparar dentro de: ${esc(c)}</option>`).join('')}</select></label>` : ''}
       <button class="primary" type="submit" ${simState.busy || !count ? 'disabled' : ''}>${simState.result ? 'Volver a analizar' : 'Analizar'} ${count} ${count === 1 ? 'entrega' : 'entregas'}</button>
     </form>
     <p id="simProgress" class="sim-progress" role="status">${esc(simState.progress)}</p>
@@ -607,7 +637,7 @@ document.addEventListener('submit', (e) => {
   if (e.target.id !== 'simOptions') return;
   e.preventDefault();
   const f = new FormData(e.target);
-  simState.opts = { minRun: Number(f.get('minRun')) || 8, quotes: f.has('quotes'), bibliography: f.has('bibliography'), instructions: f.has('instructions') };
+  simState.opts = { minRun: Number(f.get('minRun')) || 8, quotes: f.has('quotes'), bibliography: f.has('bibliography'), instructions: f.has('instructions'), teams: String(f.get('teams') || '') };
   const t = find(detail);
   if (t) runSimilarity(t);
 });
