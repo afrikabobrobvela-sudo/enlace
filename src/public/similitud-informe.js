@@ -9,7 +9,7 @@
 
 const SIM_COLORS = ['#c42b3c', '#7b3fa0', '#1d7a46', '#1f5fa8', '#b25400', '#0b7a75', '#a3306e', '#5d6b12', '#8a4b2a', '#3d5a99'];
 const simColor = (k) => SIM_COLORS[k % SIM_COLORS.length];
-const SIMR_EXCLUDED = { c: 'cita entre comillas', b: 'bibliografía', i: 'texto de las instrucciones' };
+const SIMR_EXCLUDED = { c: 'cita entre comillas', b: 'bibliografía', i: 'instrucciones o material de la actividad', p: 'texto que comparten muchas entregas (formato o plantilla)' };
 const SIMR_MAX_PAGES = 120; // por archivo
 const simReportsCache = new Map(); // curso:actividad → { at, promise }
 let simrViewer = null; // informe abierto: { state, destroy() }
@@ -47,9 +47,12 @@ async function simSaveReports(t, reports) {
   simReportsCache.set(current.course.id + ':' + t.id, { at: Date.now(), promise: Promise.resolve(rows) });
 }
 
-/** ¿Todas las entregas de la actividad tienen informe de su contenido actual? */
+/** Informes guardados antes de 12.85 (sin la opción de texto común): el análisis de ahora es distinto. */
+const simReportsOld = (rows) => rows.some((r) => !('common' in (r.summary?.settings || {})));
+
+/** ¿Todas las entregas de la actividad tienen informe de su contenido actual, hecho con el detector de ahora? */
 function simReportsFresh(t, rows) {
-  return simSubmissions(t).every((s) => rows.some((r) => r.submission === s.id && r.version === simVersionOf(s)));
+  return !simReportsOld(rows) && simSubmissions(t).every((s) => rows.some((r) => r.submission === s.id && r.version === simVersionOf(s)));
 }
 
 /* ---------- Porcentaje en la revisión y en la tabla de la actividad ---------- */
@@ -78,7 +81,7 @@ function simBadgeInner(t, id, rows, fresh) {
   const best = r.summary.sources[0];
   const stale = s && r.version !== simVersionOf(s);
   return `<button type="button" class="simr-badge-card" data-simr-open="${esc(id)}"><span class="simr-badge-pct ${simLevel(r.total)}">${simPct(r.total)}</span><span class="simr-badge-text"><b>Informe de similitud de Enlace</b><small>${best ? `Mayor coincidencia: ${esc(simName(best.member))} (${simPct(best.pct)})` : 'Sin coincidencias con otras entregas'}</small></span><span class="simr-badge-go" aria-hidden="true"></span></button>${
-    stale || !fresh ? `<p class="simr-badge-stale">${stale ? 'La entrega cambió después del análisis.' : 'Hay entregas nuevas o corregidas desde el análisis.'} <button type="button" class="text-btn" data-simr-generate="${esc(t.id)}">Actualizar</button></p>` : ''
+    stale || !fresh ? `<p class="simr-badge-stale">${stale ? 'La entrega cambió después del análisis.' : simReportsOld(rows) ? 'El detector mejoró desde este análisis.' : 'Hay entregas nuevas o corregidas desde el análisis.'} <button type="button" class="text-btn" data-simr-generate="${esc(t.id)}">Actualizar</button></p>` : ''
   }`;
 }
 
@@ -424,6 +427,7 @@ function simrPaintSide(st, view = simrView(st)) {
   const yes = (on) => (on ? 'excluido' : 'incluido');
   side.innerHTML = `<div class="simr-score ${simLevel(view.total)}"><span class="simr-score-pct">${simPct(view.total)}</span><span class="simr-score-label">Similitud</span></div>
     <p class="simr-score-sub">${simPct(view.literal)} es texto idéntico. Comparada con ${summary.compared} ${summary.compared === 1 ? 'entrega' : 'entregas'} de la actividad${summary.skipped ? `; no con ${summary.skipped} del mismo equipo` : ''}.</p>
+    ${summary.commonShare ? `<p class="simr-side-note">No cuenta el ${simPct(summary.commonShare)} de esta entrega que comparten muchas otras (formato de la práctica, plantilla o marca de agua).</p>` : ''}
     ${st.hidden.size ? `<p class="simr-hidden-note">${st.hidden.size === 1 ? 'Una fuente excluida' : `${st.hidden.size} fuentes excluidas`}. <button type="button" class="text-btn" data-simr-include-all>Incluirlas</button></p>` : ''}
     <div class="simr-side-head"><h2>Fuentes <span class="simr-count">${listed.length}</span></h2>
       <label class="simr-switch"><input type="checkbox" role="switch" data-simr-overlap ${st.overlap ? 'checked' : ''}> Mostrar las fuentes solapadas</label></div>
@@ -434,7 +438,7 @@ function simrPaintSide(st, view = simrView(st)) {
     <details class="simr-flags"${notes.length ? ' open' : ''}><summary>Marcas de alerta <span class="simr-count">${notes.length}</span></summary>${notes.length ? `<ul>${notes.map((n) => `<li>${esc(n)}</li>`).join('')}</ul>` : '<p>Ninguna: no hay caracteres ocultos, letras de otro alfabeto ni archivos sin leer.</p>'}</details>
     <details class="simr-settings"><summary>Cómo se analizó</summary><ul>
       <li>Coincidencia mínima: ${settings.minRun || 8} palabras seguidas</li>
-      <li>Citas entre comillas: ${yes(settings.quotes)}</li><li>Bibliografía: ${yes(settings.bibliography)}</li><li>Texto de las instrucciones: ${yes(settings.instructions)}</li>
+      <li>Citas entre comillas: ${yes(settings.quotes)}</li><li>Bibliografía: ${yes(settings.bibliography)}</li><li>Instrucciones y material de la actividad: ${yes(settings.instructions)}</li><li>Texto que comparten muchas entregas: ${yes(settings.common !== false)}</li>
       <li>${settings.teams ? `No se compara dentro de los equipos de «${esc(settings.teams)}»` : 'Se compara con todas las entregas'}</li>
       <li>Analizado ${esc(fmt(report.analyzedAt))}</li></ul>
       <p>Para cambiar estas opciones, vuelve a analizar en <button type="button" class="text-btn" data-similarity-open="${esc(t.id)}">Similitud</button>.</p></details>`;

@@ -834,6 +834,7 @@ mark.sim-near { background: #ffefc2; color: inherit; border-radius: 3px; box-sha
   .sim-options .primary { margin-left: 0; width: 100%; }
 }
 .sim-actions { white-space: nowrap; }
+.sim-common { margin: 0 0 12px; padding: 10px 14px; border-left: 4px solid #56627a; border-radius: var(--radius-sm); background: #f2f4f7; color: var(--ink-soft); max-width: 90ch; }
 .sim-actions .text-btn { margin-left: 10px; }
 
 /* Informe de similitud (12.84): documento con las coincidencias del color de su fuente y la columna de fuentes, como el

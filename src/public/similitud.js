@@ -8,7 +8,8 @@
  * - Reescritura cercana: oraciones con el mismo vocabulario (raíces, sinónimos frecuentes y peso por rareza de cada
  *   palabra en el grupo) aunque cambie el orden o algunas palabras.
  * Se excluyen del cálculo las citas entre comillas (si no cubren más de la mitad del texto), la bibliografía (solo
- * después del primer 40 % del texto) y lo copiado de las instrucciones de la actividad.
+ * después del primer 40 % del texto), lo copiado de las instrucciones y del material de la actividad, y (12.85) el texto
+ * que comparten muchas entregas: plantillas, el formato de la práctica o la marca de agua de una app de escaneo.
  * Las funciones `sim*` sin DOM son puras y se prueban en scripts/test-similitud.mjs. */
 
 const SIM_STOP = new Set(
@@ -74,7 +75,8 @@ function simObfuscation(text) {
 
 /**
  * Prepara un documento: palabras, cuáles cuentan (no excluidas) y por qué se excluyeron las demás.
- * `instructions`: texto de la actividad; lo que el alumno copie de ahí (≥ minRun palabras) no cuenta.
+ * `instructions`: texto de la actividad y de su material (o ya preparado con simPrepare, para no repetirlo en cada
+ * entrega); lo que el alumno copie de ahí (≥ minRun palabras) no cuenta.
  */
 function simPrepare(text, { quotes = true, bibliography = true, instructions = '', minRun = 8 } = {}) {
   text = String(text || '');
@@ -99,8 +101,8 @@ function simPrepare(text, { quotes = true, bibliography = true, instructions = '
     if (head) within([{ start: head.index, end: text.length }], 'bibliografía');
   }
   const doc = { text, tokens, reason, notes, n, obfuscation: simObfuscation(text) };
-  if (instructions && n) {
-    const guide = simPrepare(instructions, { quotes: false, bibliography: false, minRun });
+  if (instructions && (typeof instructions === 'string' || instructions.n) && n) {
+    const guide = typeof instructions === 'string' ? simPrepare(instructions, { quotes: false, bibliography: false, minRun }) : instructions;
     for (const run of simLiteralRuns(doc, guide, minRun)) for (let i = run.a; i < run.a + run.len; i++) if (!reason[i]) reason[i] = 'instrucciones';
     doc.windows = {}; // las ventanas se calcularon antes de excluir las instrucciones
   }
@@ -383,6 +385,57 @@ function simSkipper(entries, groups, category) {
   return (i, j) => Boolean(team[i] && team[i] === team[j]) || files[i].some((id) => files[j].includes(id));
 }
 
+/** Unidades de trabajo: las entregas que no se comparan entre sí (un equipo, la misma entrega) cuentan como una. */
+function simUnits(count, skip) {
+  const root = Array.from({ length: count }, (_, i) => i);
+  const find = (i) => (root[i] === i ? i : (root[i] = find(root[i])));
+  for (let i = 0; i < count; i++) for (let j = i + 1; j < count; j++) if (skip(i, j)) root[find(j)] = find(i);
+  return root.map((_, i) => find(i));
+}
+
+/**
+ * Texto común a muchas entregas (12.85): el formato o la guía de la práctica que todos llenan, una plantilla o la marca
+ * de agua de una app de escaneo. Una secuencia de `minRun` palabras que aparece en `threshold` unidades o más (un equipo
+ * cuenta una vez) no es copia entre alumnos y deja de contar; sin esto, toda la clase sale idéntica a toda la clase.
+ * Devuelve el umbral y cuántas palabras se excluyeron en total.
+ */
+function simExcludeCommon(docs, { minRun = 8, units = docs.map((_, i) => i), share = 0.3, min = 5 } = {}) {
+  const total = new Set(units).size;
+  const threshold = Math.max(min, Math.ceil(total * share));
+  if (total < threshold) return { threshold, words: 0 };
+  // Por clave, cuántas unidades distintas la tienen: se recorren las entregas agrupadas por unidad y el valor guarda
+  // conteo × 100000 + última unidad (un número por clave, sin conjuntos).
+  const seen = new Map();
+  const order = docs.map((_, i) => i).sort((a, b) => units[a] - units[b]);
+  for (const d of order)
+    for (const key of simWindows(docs[d], minRun)) {
+      if (key === null) continue;
+      const value = seen.get(key);
+      if (value === undefined) seen.set(key, 100000 + units[d]);
+      else if (value % 100000 !== units[d]) seen.set(key, (Math.floor(value / 100000) + 1) * 100000 + units[d]);
+    }
+  let words = 0;
+  for (const doc of docs) {
+    const mark = new Uint8Array(doc.n);
+    simWindows(doc, minRun).forEach((key, x) => {
+      if (key !== null && Math.floor(seen.get(key) / 100000) >= threshold) mark.fill(1, x, x + minRun);
+    });
+    let count = 0;
+    for (let x = 0; x < doc.n; x++)
+      if (mark[x] && !doc.reason[x]) {
+        doc.reason[x] = 'común';
+        count++;
+      }
+    if (!count) continue;
+    doc.common = doc.eligible ? count / doc.eligible : 0; // parte de su texto que era común
+    doc.eligible -= count;
+    doc.windows = {};
+    doc.sentences = undefined;
+    words += count;
+  }
+  return { threshold, words };
+}
+
 /* ---------- Informes guardados (12.84) ---------- */
 
 /** Huella corta de un texto (FNV-1a + longitud): el informe guarda posiciones de palabras y solo se dibuja sobre el mismo texto. */
@@ -413,7 +466,7 @@ function simRuns(cov) {
   return runs;
 }
 
-const SIM_EXCLUDED = { cita: 'c', bibliografía: 'b', instrucciones: 'i' };
+const SIM_EXCLUDED = { cita: 'c', bibliografía: 'b', instrucciones: 'i', común: 'p' };
 const SIM_MAX_REPORT = 280000; // caracteres del JSON de un informe (el servidor acepta 300 000)
 const simRound = (x) => Math.round(x * 10000) / 10000;
 
@@ -430,7 +483,7 @@ function simWarnings(notes, doc) {
     ...(doc.notes || []),
     ...(doc.obfuscation.invisible ? [`${doc.obfuscation.invisible} caracteres invisibles dentro de palabras`] : []),
     ...(doc.obfuscation.confusable ? [`${doc.obfuscation.confusable} letras de otro alfabeto que imitan a las latinas`] : []),
-    ...(!doc.eligible ? ['Sin texto que comparar'] : []),
+    ...(!doc.eligible ? ['Sin texto que comparar'] : doc.eligible < 50 ? [`Solo ${doc.eligible} palabras para comparar: el porcentaje no es confiable`] : []),
   ];
 }
 
@@ -485,7 +538,7 @@ function simBuildReports(items, docs, result, { settings = {}, skip = () => fals
       version: item.version,
       total: simRound(r.total),
       literal: simRound(r.literal),
-      summary: { sources, notes: simWarnings(item.notes, doc).slice(0, 30), settings, compared: docs.length - 1 - skipped, skipped },
+      summary: { sources, notes: simWarnings(item.notes, doc).slice(0, 30), settings, compared: docs.length - 1 - skipped, skipped, commonShare: simRound(doc.common || 0) },
       data,
     };
   });
@@ -546,8 +599,9 @@ function simReportView(data, count, { hidden = new Set(), focus = null } = {}) {
 
 /* ---------- Interfaz (solo quien enseña) ---------- */
 
-const simState = { task: null, live: null, reports: null, loading: false, busy: false, progress: '', saving: '', compare: null, pendingCompare: null, opts: { minRun: 8, quotes: true, bibliography: true, instructions: true, teams: '' } };
+const simState = { task: null, live: null, reports: null, loading: false, busy: false, progress: '', saving: '', compare: null, pendingCompare: null, opts: { minRun: 8, quotes: true, bibliography: true, instructions: true, common: true, teams: '' } };
 const simTextCache = new Map(); // entrega + huella → { text, notes, parts }
+const simFileCache = new Map(); // archivo → texto leído (un archivo no cambia)
 const simRunning = new Map(); // actividad → análisis en curso (la pantalla de similitud y la revisión comparten el mismo)
 let simCompareRequest = null; // cotejo pedido desde un informe: [entrega, otra entrega]
 const SIM_MAX_FILE = 20 * 1024 * 1024;
@@ -583,6 +637,13 @@ function simSubmissions(t) {
  * posición de cada trozo de texto (`items`, con desde/hasta dentro del texto) y el tamaño de cada página (`pages`).
  */
 async function simFileText(id, keep = false) {
+  if (!keep && simFileCache.has(id)) return simFileCache.get(id);
+  const read = await simReadFile(id, keep);
+  if (!keep && read.text) simFileCache.set(id, read);
+  return read;
+}
+
+async function simReadFile(id, keep) {
   const file = current.files.find((f) => f.id === id);
   const name = file?.name || 'archivo';
   const ext = name.toLowerCase().split('.').pop();
@@ -618,7 +679,10 @@ async function simFileText(id, keep = false) {
       }
       if (!keep || !text.trim()) pdf.destroy();
       if (!text.trim()) return { note: `${name}: el PDF no tiene texto (¿es una foto o un escaneo?)` };
-      return keep ? { text, pdf, items, pages } : { text };
+      // Un escaneo con app suele traer solo la marca de agua («Escaneado con…») como texto.
+      const words = text.split(/\s+/).filter(Boolean).length;
+      const note = words < 30 * pdf.numPages ? `${name}: casi no tiene texto (${words} palabras en ${pdf.numPages} ${pdf.numPages === 1 ? 'página' : 'páginas'}); si es un escaneo o una foto, lo escrito no se compara` : undefined;
+      return keep ? { text, pdf, items, pages, note } : { text, note };
     }
     if (ext === 'docx') return { text: (await readDocxParagraphs(buffer)).map((p) => p.text).join('\n') };
     const text = new TextDecoder().decode(buffer);
@@ -654,8 +718,8 @@ async function simSubmissionText(s, keep = false) {
 /** Opciones del análisis: las del último guardado o, si no hay, las de omisión con la categoría de equipos que convenga. */
 function simOptsFor(t, rows) {
   const saved = rows?.find((r) => r.summary?.settings)?.summary.settings;
-  if (saved) return { minRun: saved.minRun, quotes: saved.quotes, bibliography: saved.bibliography, instructions: saved.instructions, teams: saved.teams || '' };
-  return { minRun: 8, quotes: true, bibliography: true, instructions: true, teams: simPickTeamCategory(records('group'), simSubmissions(t).map((s) => s.data.member), t.data.groupCategory) };
+  if (saved) return { minRun: saved.minRun, quotes: saved.quotes, bibliography: saved.bibliography, instructions: saved.instructions, common: saved.common !== false, teams: saved.teams || '' };
+  return { minRun: 8, quotes: true, bibliography: true, instructions: true, common: true, teams: simPickTeamCategory(records('group'), simSubmissions(t).map((s) => s.data.member), t.data.groupCategory) };
 }
 
 /**
@@ -671,11 +735,20 @@ function simRun(t, opts, onProgress = () => {}) {
       onProgress(`Leyendo entrega ${k + 1} de ${subs.length}…`);
       entries.push({ submission: subs[k], member: subs[k].data.member, ...(await simSubmissionText(subs[k])) });
     }
+    // Las instrucciones y el material de la actividad (por ejemplo, la guía de la práctica en PDF) se preparan una vez.
+    let guide = null;
+    if (opts.instructions) {
+      const material = [];
+      for (const id of t.data.fileIds || []) material.push((await simFileText(id)).text || '');
+      const text = [t.data.body || '', ...material].filter(Boolean).join('\n\n');
+      if (text) guide = simPrepare(text, { quotes: false, bibliography: false, minRun: opts.minRun });
+    }
     onProgress('Comparando…');
     await new Promise((resolve) => setTimeout(resolve, 30));
-    const docs = entries.map((e) => simPrepare(e.text, { quotes: opts.quotes, bibliography: opts.bibliography, instructions: opts.instructions ? t.data.body : '', minRun: opts.minRun }));
+    const docs = entries.map((e) => simPrepare(e.text, { quotes: opts.quotes, bibliography: opts.bibliography, instructions: guide, minRun: opts.minRun }));
     // Integrantes de un mismo equipo trabajan juntos: no se comparan entre sí.
     const skip = simSkipper(entries.map((e) => ({ member: e.member, fileIds: e.submission.data.fileIds })), records('group'), opts.teams);
+    if (opts.common !== false) simExcludeCommon(docs, { minRun: opts.minRun, units: simUnits(docs.length, skip) });
     let last = Date.now();
     const onStep = async (done, total) => {
       if (Date.now() - last < 60) return;
@@ -747,19 +820,22 @@ function simResultHtml() {
   const flagged = reports.filter((r) => r.total >= 0.15).length;
   const warned = reports.filter((r) => r.summary.notes.length).length;
   const latest = reports.reduce((at, r) => (r.analyzedAt > at ? r.analyzedAt : at), '');
+  const common = reports.filter((r) => r.summary.commonShare > 0);
+  const commonAvg = common.reduce((sum, r) => sum + r.summary.commonShare, 0) / (common.length || 1);
   const rows = order
     .map((r) => {
       const best = r.summary.sources[0];
       const team = simTeamOf(groups, r.summary.settings?.teams, r.member);
       const notes = r.summary.notes;
       return `<tr><td><b>${esc(simName(r.member))}</b>${team ? `<div class="table-subtext">Equipo: ${esc(team.data.title)}</div>` : ''}${courseSections().length ? `<div class="table-subtext">${esc(sectionName(current.members.find((m) => m.id === r.member)?.section) || 'Sin sección')}</div>` : ''}</td>
-        <td><div class="sim-score ${simLevel(r.total)}"><span class="sim-bar"><i style="width:${Math.round(r.total * 100)}%"></i></span><b>${simPct(r.total)}</b></div><div class="table-subtext">${simPct(r.literal)} idéntico</div></td>
+        <td><div class="sim-score ${simLevel(r.total)}"><span class="sim-bar"><i style="width:${Math.round(r.total * 100)}%"></i></span><b>${simPct(r.total)}</b></div><div class="table-subtext">${simPct(r.literal)} idéntico</div>${r.summary.commonShare ? `<div class="table-subtext">Sin contar ${simPct(r.summary.commonShare)} de formato común</div>` : ''}</td>
         <td>${best ? `${esc(simName(best.member))} <b>${simPct(best.pct)}</b>${r.summary.sources.length > 1 ? `<div class="table-subtext">y ${r.summary.sources.length - 1} más</div>` : ''}` : '<span class="muted">Ninguna</span>'}</td>
         <td>${notes.length ? `<ul class="sim-warn">${notes.map((w) => `<li>${esc(w)}</li>`).join('')}</ul>` : '<span class="muted">—</span>'}</td>
         <td class="sim-actions"><button type="button" class="table-link" data-simr-open="${esc(r.submission)}">Ver informe →</button>${best ? `<button type="button" class="text-btn" data-sim-compare="${esc(r.submission)}:${esc(best.submission)}">Cotejar</button>` : ''}</td></tr>`;
     })
     .join('');
   return `<div class="sim-summary"><span><b>${reports.length}</b> entregas analizadas</span><span><b>${flagged}</b> con 15 % o más</span>${warned ? `<span><b>${warned}</b> con avisos</span>` : ''}${latest ? `<span class="muted">Analizado ${esc(fmt(latest))}</span>` : ''}</div>
+    ${common.length ? `<p class="sim-common">Se quitó el texto que comparten muchas entregas (el formato de la práctica, una plantilla o la marca de agua de un escaneo): en promedio, ${simPct(commonAvg)} de cada entrega. Lo que queda es lo que cada quien escribió.</p>` : ''}
     ${simState.saving ? `<p class="error">${esc(simState.saving)}</p>` : ''}
     <div class="table-wrap keep-table"><table class="sim-table"><caption class="sr-only">Similitud de cada entrega con las demás</caption><thead><tr><th scope="col">Alumno</th><th scope="col">Similitud total</th><th scope="col">Mayor coincidencia</th><th scope="col">Avisos</th><th scope="col">Informe</th></tr></thead><tbody>${rows}</tbody></table></div>
     <div id="simCompare">${simState.compare && simState.live ? simCompareHtml() : ''}</div>`;
@@ -830,7 +906,8 @@ function renderSimilarity() {
       <label>Coincidencia mínima <select name="minRun">${[6, 8, 10, 12].map((n) => `<option value="${n}" ${o.minRun === n ? 'selected' : ''}>${n} palabras seguidas</option>`).join('')}</select></label>
       <label class="check-label"><input type="checkbox" name="quotes" ${o.quotes ? 'checked' : ''}> Excluir citas entre comillas</label>
       <label class="check-label"><input type="checkbox" name="bibliography" ${o.bibliography ? 'checked' : ''}> Excluir bibliografía</label>
-      <label class="check-label"><input type="checkbox" name="instructions" ${o.instructions ? 'checked' : ''}> Excluir el texto de las instrucciones</label>
+      <label class="check-label"><input type="checkbox" name="instructions" ${o.instructions ? 'checked' : ''}> Excluir las instrucciones y el material de la actividad</label>
+      <label class="check-label"><input type="checkbox" name="common" ${o.common !== false ? 'checked' : ''}> Excluir el texto que comparten muchas entregas (formato, plantilla)</label>
       ${categories.length ? `<label>Mismo equipo <select name="teams"><option value="">Comparar a todos</option>${categories.map((c) => `<option value="${esc(c)}" ${o.teams === c ? 'selected' : ''}>No comparar dentro de: ${esc(c)}</option>`).join('')}</select></label>` : ''}
       <button class="primary" type="submit" ${simState.busy || simState.loading || !count ? 'disabled' : ''}>${simState.reports ? 'Volver a analizar' : 'Analizar'} ${count} ${count === 1 ? 'entrega' : 'entregas'}</button>
     </form>
@@ -908,7 +985,7 @@ document.addEventListener('submit', (e) => {
   if (e.target.id !== 'simOptions') return;
   e.preventDefault();
   const f = new FormData(e.target);
-  simState.opts = { minRun: Number(f.get('minRun')) || 8, quotes: f.has('quotes'), bibliography: f.has('bibliography'), instructions: f.has('instructions'), teams: String(f.get('teams') || '') };
+  simState.opts = { minRun: Number(f.get('minRun')) || 8, quotes: f.has('quotes'), bibliography: f.has('bibliography'), instructions: f.has('instructions'), common: f.has('common'), teams: String(f.get('teams') || '') };
   const t = find(detail);
   if (t) runSimilarity(t);
 });
