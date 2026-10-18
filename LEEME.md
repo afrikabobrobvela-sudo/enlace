@@ -5,6 +5,20 @@ No es el código de D2L Brightspace ni una plataforma oficial de la BUAP.
 
 Esta versión se despliega en **tu propia cuenta de Cloudflare** (Workers + D1 + R2, plan gratuito) y ya no depende de ChatGPT Sites.
 
+## Novedades de la versión 12.84 (informe de similitud como en Brightspace)
+
+- **Informe de similitud por entrega**, como el de Turnitin en Brightspace. Al analizar una actividad, Enlace **guarda un informe de cada entrega**. Ya no hay que volver a abrir la pantalla de similitud para ver los resultados.
+- En **Evaluar**, debajo de los archivos de la entrega, aparece **«Informe de similitud de Enlace · 18 %»**. Si la entrega aún no tiene informe, sale el botón **«Generar informe»**, que compara toda la actividad sin salir de la revisión. La tabla de la actividad tiene además la columna **Similitud**, con el porcentaje de cada alumno.
+- **El informe** muestra el documento del alumno: las páginas de su PDF, o el texto si es Word o lo escribió en Enlace. Cada coincidencia va **resaltada del color de su fuente** y con su número en el margen.
+- A un lado del documento aparecen la **similitud total** y las **Fuentes** (las entregas de los compañeros con que coincide). De cada fuente se ve su porcentaje, cuántos **bloques de texto** y **palabras coincidentes** tiene, y una casilla **«Excluir esta fuente»** que recalcula el total.
+- Al abrir una fuente se ven sus bloques con el **texto de la otra entrega** con que coincide cada uno. Al tocar un bloque, el documento se desplaza a él.
+- **«Mostrar las fuentes solapadas»:** como en Turnitin, cada palabra se atribuye a la fuente de mayor porcentaje. Las fuentes cuyo texto ya cubre otra se muestran al activar esta opción, y «Marcar solo esta fuente» resalta todo lo suyo.
+- Más opciones del informe: «Marcas de alerta» (caracteres invisibles, letras de otro alfabeto, archivos que no se pudieron leer), «Cómo se analizó», «Cotejar lado a lado», y «Anterior/Siguiente» para pasar de un alumno a otro.
+- **Equipos:** se mantiene que los integrantes del mismo equipo no se comparan entre sí, si están registrados en **Grupos** y en la pantalla de similitud está elegida su categoría en «Mismo equipo». Además, **dos entregas con el mismo archivo ya no se comparan nunca**, aunque se elija «Comparar a todos»: en una actividad por equipo, cada integrante recibe la entrega del equipo.
+- Si un alumno vuelve a entregar, su informe se marca como desactualizado («Actualizar»). Calificar no lo cambia. Al abrir la pantalla de similitud se vuelve a analizar solo si alguna entrega cambió.
+- **Privacidad:** el análisis se sigue haciendo en el navegador de quien enseña. El informe se guarda en tu base de Enlace, y solo quien enseña en el curso lo ve; el alumno no.
+- Migración `0047_informes_similitud.sql` (solo agrega la tabla `aula_similarity`).
+
 ## Novedades de la versión 12.83 (similitud y equipos de laboratorio)
 
 - **Arreglo:** el detector de similitud comparaba entre sí a integrantes del mismo equipo cuando la actividad era individual (por ejemplo, reportes de laboratorio que entrega cada alumno aunque trabajen en mesas). Solo reconocía los equipos si la actividad estaba configurada «por equipo».

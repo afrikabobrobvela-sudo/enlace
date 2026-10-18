@@ -145,8 +145,9 @@ function render() {
     notices: renderNotices,
     // 12.70 (mensajes.js); con función flecha para que las pruebas que no cargan ese archivo no fallen al armar el mapa.
     messages: () => renderMessages(),
-    // 12.82 (similitud.js)
-    similarity: () => renderSimilarity()
+    // 12.82 (similitud.js) y 12.84 (similitud-informe.js)
+    similarity: () => renderSimilarity(),
+    simreport: () => renderSimReport()
   };
   (routes[section] || renderHub)();
 }
@@ -177,13 +178,13 @@ function renderTasks() {
 }
 // Entregas de alumnos retirados del curso: se conservan y se cuentan, pero ya no están en current.members.
 // Se muestran para que el docente pueda abrirlas, calificarlas y descargarlas.
-function retiredSubmissionRows(t, subs) {
+function retiredSubmissionRows(t, subs, simColumn = false) {
   const retired = subs.filter((s) => !s.data.manual && !current.members.some((m) => m.id === s.data.member));
   if (!retired.length) return '';
   return retired
     .map(
       (s) =>
-        `<tr><td><span class="person"><span>Alumno retirado</span></span><div class="table-subtext">Ya no está inscrito; su entrega se conserva.</div></td>${courseSections().length ? '<td>—</td>' : ''}<td${needsReview(s) ? ' class="status-review"' : ''}>${s.data.late ? 'Entrega tardía' : 'Entregado'}${needsReview(s) ? ' · sin revisar' : ''}</td><td>${s.data.grade ?? '—'}</td><td><button class="table-link" data-action="review" data-id="${esc(t.id)}" data-member="${esc(s.data.member)}">Evaluar →</button></td></tr>`,
+        `<tr><td><span class="person"><span>Alumno retirado</span></span><div class="table-subtext">Ya no está inscrito; su entrega se conserva.</div></td>${courseSections().length ? '<td>—</td>' : ''}<td${needsReview(s) ? ' class="status-review"' : ''}>${s.data.late ? 'Entrega tardía' : 'Entregado'}${needsReview(s) ? ' · sin revisar' : ''}</td><td>${s.data.grade ?? '—'}</td>${simColumn ? simTaskCellHtml(t, s) : ''}<td><button class="table-link" data-action="review" data-id="${esc(t.id)}" data-member="${esc(s.data.member)}">Evaluar →</button></td></tr>`,
     )
     .join('');
 }
@@ -192,13 +193,16 @@ function renderTask() {
   if (!t)
     return renderTasks();
   const subs = records('submission').filter(s => s.data.task === t.id), own = subs.find(s => s.data.member === myMember()?.id) || subs.find(s => s.author === viewerKey());
-  $('#main').innerHTML = `<div class="crumbs"><button data-section="tasks">Actividades</button><span>›</span><span>${teaches() ? 'Envíos en carpeta' : 'Entrega'}</span></div><h1>${esc(t.data.title)}${sectionTag(t)}</h1><p class="deadline">Vence: ${fmt(t.data.due)}</p>${t.data.forum ? forumTaskNote(t) : ''}${t.data.extended ? `<p class="extension-note">Tienes acceso especial en esta actividad: ${esc([t.data.start && Date.parse(t.data.start) > Date.now() ? 'disponible desde ' + fmt(t.data.start) : '', t.data.due ? 'vence ' + fmt(t.data.due) : '', t.data.end ? 'cierra ' + fmt(t.data.end) : ''].filter(Boolean).join(', ') || 'puedes verla y entregarla')}.</p>` : ''}${!teaches() && t.data.groupCategory ? teamBannerHtml(t) : ''}${typeof similarityStudentNote === 'function' ? similarityStudentNote(t) : ''}${richText(t.data.body, t.data.fileIds)}${teaches() || t.data.fileIds?.length ? `<section class="task-materials"><div class="panel-head"><h2>Material del docente</h2>${teaches() ? button('＋ Subir archivos o presentaciones', 'task-files', t.id) : ''}</div>${fileLinks(t.data.fileIds)}${!t.data.fileIds?.length ? '<p class="muted">No hay archivos adjuntos a esta actividad.</p>' : ''}</section>` : ''}${teaches() ? `<div class="toolbar">${button('Editar actividad', 'edit-task', t.id, 'secondary')}${button('Descargar entregas (ZIP)', 'zip-task', t.id, 'secondary')}${t.data.forum ? '' : button('Calificar en bloque', 'bulk-grade', t.id, 'secondary') + `<button type="button" class="secondary" data-team-mode="${esc(t.id)}">${esc(gradeModeLabel(t))} ▾</button>`}${specialAccessButton('task', t.id)}${typeof similarityToolbarHtml === 'function' ? similarityToolbarHtml(t) : ''}${sectionFilterHtml()}</div>${sectionDatesSummary(t.id)}<div class="table-wrap"><table><thead><tr><th>Alumno</th>${courseSections().length ? '<th>Sección</th>' : ''}<th>Estado</th><th>Calificación</th><th>Acción</th></tr></thead><tbody>${studentsInView().filter(m => itemApplies(t, m)).map(m => {
+  // 12.84: porcentaje del informe de similitud de cada entrega (similitud-informe.js).
+  const simColumn = teaches() && Boolean(t.data.similarity) && typeof simTaskCellHtml === 'function';
+  $('#main').innerHTML = `<div class="crumbs"><button data-section="tasks">Actividades</button><span>›</span><span>${teaches() ? 'Envíos en carpeta' : 'Entrega'}</span></div><h1>${esc(t.data.title)}${sectionTag(t)}</h1><p class="deadline">Vence: ${fmt(t.data.due)}</p>${t.data.forum ? forumTaskNote(t) : ''}${t.data.extended ? `<p class="extension-note">Tienes acceso especial en esta actividad: ${esc([t.data.start && Date.parse(t.data.start) > Date.now() ? 'disponible desde ' + fmt(t.data.start) : '', t.data.due ? 'vence ' + fmt(t.data.due) : '', t.data.end ? 'cierra ' + fmt(t.data.end) : ''].filter(Boolean).join(', ') || 'puedes verla y entregarla')}.</p>` : ''}${!teaches() && t.data.groupCategory ? teamBannerHtml(t) : ''}${typeof similarityStudentNote === 'function' ? similarityStudentNote(t) : ''}${richText(t.data.body, t.data.fileIds)}${teaches() || t.data.fileIds?.length ? `<section class="task-materials"><div class="panel-head"><h2>Material del docente</h2>${teaches() ? button('＋ Subir archivos o presentaciones', 'task-files', t.id) : ''}</div>${fileLinks(t.data.fileIds)}${!t.data.fileIds?.length ? '<p class="muted">No hay archivos adjuntos a esta actividad.</p>' : ''}</section>` : ''}${teaches() ? `<div class="toolbar">${button('Editar actividad', 'edit-task', t.id, 'secondary')}${button('Descargar entregas (ZIP)', 'zip-task', t.id, 'secondary')}${t.data.forum ? '' : button('Calificar en bloque', 'bulk-grade', t.id, 'secondary') + `<button type="button" class="secondary" data-team-mode="${esc(t.id)}">${esc(gradeModeLabel(t))} ▾</button>`}${specialAccessButton('task', t.id)}${typeof similarityToolbarHtml === 'function' ? similarityToolbarHtml(t) : ''}${sectionFilterHtml()}</div>${sectionDatesSummary(t.id)}<div class="table-wrap"><table><thead><tr><th>Alumno</th>${courseSections().length ? '<th>Sección</th>' : ''}<th>Estado</th><th>Calificación</th>${simColumn ? '<th>Similitud</th>' : ''}<th>Acción</th></tr></thead><tbody>${studentsInView().filter(m => itemApplies(t, m)).map(m => {
     const s = subs.find(s => s.data.member === m.id);
     const ext = extensionOf(t.id, m.id);
     const team = teamFor(t, m.id);
-    return `<tr><td><span class="person">${avatarHtml(m)}<span>${esc(m.name)}</span></span>${t.data.groupCategory ? `<div class="table-subtext">${team ? esc(team.data.title) : 'Sin equipo'}</div>` : ''}${ext ? `<div class="table-subtext special-note">Acceso especial: ${esc(specialSummary({ start: ext.data.start, due: ext.data.due, end: ext.data.end }))}</div>` : ''}</td>${courseSections().length ? `<td>${esc(sectionName(m.section) || '—')}</td>` : ''}<td${needsReview(s) ? ' class="status-review"' : ''}>${s ? s.data.manual ? 'Captura manual' : `${s.data.late ? 'Entrega tardía' : 'Entregado'}${needsReview(s) ? ' · sin revisar' : ''}` : 'Sin entrega'}</td><td>${s?.data.grade ?? '—'}</td><td><button class="table-link" data-action="review" data-id="${t.id}" data-member="${m.id}">Evaluar →</button> <button type="button" class="text-btn" data-special-access="task" data-id="${esc(t.id)}" data-member="${esc(m.id)}">${ext ? 'Cambiar acceso' : 'Acceso especial'}</button></td></tr>`;
-  }).join('') + retiredSubmissionRows(t, subs) || '<tr><td colspan="4">Inscribe alumnos para revisar sus entregas.</td></tr>'}</tbody></table></div>` : `${own ? `<section class="panel"><h2>Tu entrega</h2><p class="deadline">${fmt(own.data.submitted)}${own.data.submitted ? ` <button type="button" class="text-btn" data-receipt="${esc(own.id)}">Comprobante</button>` : ''}</p>${richText(own.data.body)}${fileLinks(own.data.fileIds)}${typeof annotateButtonsHtml === 'function' ? annotateButtonsHtml(own.data.fileIds) : ''}<p>Calificación: <b>${own.data.grade ?? 'Pendiente'}</b></p>${richText(own.data.feedback)}${rubricResultHtml(own.data.rubricScores)}</section>` : ''}${t.data.forum ? '' : `<div class="toolbar">${button(own ? 'Actualizar entrega' : 'Realizar entrega', 'submit', t.id)}</div>`}`}`;
+    return `<tr><td><span class="person">${avatarHtml(m)}<span>${esc(m.name)}</span></span>${t.data.groupCategory ? `<div class="table-subtext">${team ? esc(team.data.title) : 'Sin equipo'}</div>` : ''}${ext ? `<div class="table-subtext special-note">Acceso especial: ${esc(specialSummary({ start: ext.data.start, due: ext.data.due, end: ext.data.end }))}</div>` : ''}</td>${courseSections().length ? `<td>${esc(sectionName(m.section) || '—')}</td>` : ''}<td${needsReview(s) ? ' class="status-review"' : ''}>${s ? s.data.manual ? 'Captura manual' : `${s.data.late ? 'Entrega tardía' : 'Entregado'}${needsReview(s) ? ' · sin revisar' : ''}` : 'Sin entrega'}</td><td>${s?.data.grade ?? '—'}</td>${simColumn ? simTaskCellHtml(t, s) : ''}<td><button class="table-link" data-action="review" data-id="${t.id}" data-member="${m.id}">Evaluar →</button> <button type="button" class="text-btn" data-special-access="task" data-id="${esc(t.id)}" data-member="${esc(m.id)}">${ext ? 'Cambiar acceso' : 'Acceso especial'}</button></td></tr>`;
+  }).join('') + retiredSubmissionRows(t, subs, simColumn) || '<tr><td colspan="4">Inscribe alumnos para revisar sus entregas.</td></tr>'}</tbody></table></div>` : `${own ? `<section class="panel"><h2>Tu entrega</h2><p class="deadline">${fmt(own.data.submitted)}${own.data.submitted ? ` <button type="button" class="text-btn" data-receipt="${esc(own.id)}">Comprobante</button>` : ''}</p>${richText(own.data.body)}${fileLinks(own.data.fileIds)}${typeof annotateButtonsHtml === 'function' ? annotateButtonsHtml(own.data.fileIds) : ''}<p>Calificación: <b>${own.data.grade ?? 'Pendiente'}</b></p>${richText(own.data.feedback)}${rubricResultHtml(own.data.rubricScores)}</section>` : ''}${t.data.forum ? '' : `<div class="toolbar">${button(own ? 'Actualizar entrega' : 'Realizar entrega', 'submit', t.id)}</div>`}`}`;
   if (teaches()) enhanceTaskGradeRoster(t, subs);
+  if (simColumn) simFillBadges(t);
 }
 
 /** Convierte la lista de una tarea en captura masiva: filtro por entrega y calificación directa. */
@@ -473,7 +477,7 @@ function renderReview() {
       ${previewable.length ? '<div class="inline-preview" id="inlinePreview"></div>' : ''}
       ${s?.data.body || !s?.data.submitted ? `<p class="submitted-text">${esc(s?.data.body || 'Puedes registrar una calificación manual, por ejemplo, de un examen escrito.')}</p>` : ''}
       ${s?.data.submitted ? `<p><button type="button" class="text-btn" data-receipt="${esc(s.id)}">Ver comprobante y folio</button></p>` : ''}
-      ${fileLinks(files)}${typeof annotateButtonsHtml === 'function' ? annotateButtonsHtml(files, true) : ''}</section>
+      ${fileLinks(files)}${typeof simReviewBadgeHtml === 'function' ? simReviewBadgeHtml(t, s) : ''}${typeof annotateButtonsHtml === 'function' ? annotateButtonsHtml(files, true) : ''}</section>
     <form class="review-panel real-form" id="reviewForm"><h2>Evaluación</h2>
       ${s && s.data.published === false ? '<p class="draft-note">Borrador: el alumno todavía no ve esta calificación.</p>' : ''}
       ${rubricWidgetHtml(t, s)}${field('Calificación / 10', 'grade', s?.data.grade ?? '', 'number', 'min="0" max="10" step="0.01" required')}
@@ -484,6 +488,7 @@ function renderReview() {
       ${s ? `<p><button type="button" class="text-btn" data-grade-history="${esc(m.id)}" data-task="${esc(t.id)}">Ver historial de esta calificación</button></p>` : ''}
       <p class="muted review-keys">Con teclado: ← y → cambian de alumno cuando no estás escribiendo.</p></form></div>`;
   mountInlinePreview(previewable.length ? $('#inlinePreview') : null, previewable[0], previewable);
+  if (typeof simFillBadges === 'function') simFillBadges(t);
   if (next)
     prefetchPreview(t.id, next.id);
   $('#reviewJump').onchange = e => {

@@ -973,3 +973,25 @@ export const pushMeta = sqliteTable('aula_push_meta', {
   key: text('key').primaryKey(),
   value: text('value').notNull(),
 });
+
+/**
+ * Migración 0047 (12.84): informes de similitud guardados. El docente compara las entregas de una actividad en su
+ * navegador (src/public/similitud.js) y guarda una fila por entrega: porcentaje total e idéntico, fuentes (`summary`) y
+ * los bloques coincidentes por fuente (`data`). `version` es la huella del contenido entregado (si cambia, está desactualizado).
+ */
+export const similarityReports = sqliteTable(
+  'aula_similarity',
+  {
+    submission: text('submission').primaryKey(),
+    course: text('course').notNull(),
+    task: text('task').notNull(),
+    version: text('version').notNull(),
+    total: real('total').notNull(),
+    literal: real('literal').notNull(),
+    summary: text('summary').notNull(),
+    data: text('data').notNull(),
+    analyzedAt: text('analyzed_at').notNull(),
+    analyzedBy: text('analyzed_by').notNull(),
+  },
+  (t) => [index('aula_similarity_task').on(t.course, t.task)],
+);
