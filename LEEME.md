@@ -5,6 +5,12 @@ No es el código de D2L Brightspace ni una plataforma oficial de la BUAP.
 
 Esta versión se despliega en **tu propia cuenta de Cloudflare** (Workers + D1 + R2, plan gratuito) y ya no depende de ChatGPT Sites.
 
+## Novedades de la versión 12.83 (similitud y equipos de laboratorio)
+
+- **Arreglo:** el detector de similitud comparaba entre sí a integrantes del mismo equipo cuando la actividad era individual (por ejemplo, reportes de laboratorio que entrega cada alumno aunque trabajen en mesas). Solo reconocía los equipos si la actividad estaba configurada «por equipo».
+- Ahora la pantalla de similitud tiene la opción **«Mismo equipo»**: «No comparar dentro de: Laboratorio» (o la categoría de equipos que elijas), o «Comparar a todos». Viene **preseleccionada sola**: la de la actividad si es por equipo; si no, la categoría de Grupos que reúne a más alumnos que entregaron.
+- Cada alumno muestra su equipo en el reporte. Los integrantes de un equipo sí se comparan con los de los demás equipos.
+
 ## Novedades de la versión 12.82 (detector de similitud)
 
 - **Detector de similitud propio**, dentro de Enlace. En la página de cada actividad hay un botón **«Revisar similitud»**: con él decides qué actividades se analizan (también hay una casilla en el editor, tarjeta «Evaluación y comentarios»). Las actividades marcadas llevan la pastilla «Similitud» en la lista.

@@ -56,7 +56,7 @@ const context = vm.createContext({
   esc: (s) => String(s ?? '').replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch]),
 });
 vm.runInContext(fs.readFileSync(new URL('../src/public/similitud.js', import.meta.url), 'utf8'), context);
-const { simPrepare, simAnalyze, simHighlightHtml, simPairView, simCanon } = context;
+const { simPrepare, simAnalyze, simHighlightHtml, simPairView, simCanon, simPickTeamCategory, simTeamOf } = context;
 const analyze = async (texts, opts = {}) => {
   const docs = texts.map((t) => simPrepare(t, { minRun: 8, ...opts }));
   return { docs, result: await simAnalyze(docs, { minRun: 8, ...opts }) };
@@ -130,6 +130,24 @@ const docs = [original, original, distinto].map((t) => simPrepare(t, { minRun: 8
 const team = await simAnalyze(docs, { minRun: 8, skip: (i, j) => i === 0 && j === 1 });
 assert.equal(team.docs[0].total, 0, 'El mismo equipo no cuenta como copia');
 checks++;
+
+// Equipos de una actividad individual (12.83): se elige la categoría que agrupa a quienes entregaron.
+const groups = [
+  { id: 'g1', data: { title: 'Mesa 1', category: 'Laboratorio', members: ['a', 'b'] } },
+  { id: 'g2', data: { title: 'Mesa 2', category: 'Laboratorio', members: ['c', 'd'] } },
+  { id: 'g3', data: { title: 'Exposición', category: 'Exposiciones', members: ['a', 'x'] } },
+];
+assert.equal(simPickTeamCategory(groups, ['a', 'b', 'c', 'd']), 'Laboratorio', 'La categoría con más alumnos que entregaron');
+assert.equal(simPickTeamCategory(groups, ['a', 'b', 'c', 'd'], 'Exposiciones'), 'Exposiciones', 'La de la actividad por equipo manda');
+assert.equal(simPickTeamCategory(groups, ['a', 'z']), '', 'Sin equipos de dos que entregaron, no se aplica');
+assert.equal(simPickTeamCategory([], ['a', 'b']), '');
+assert.equal(simTeamOf(groups, 'Laboratorio', 'c').data.title, 'Mesa 2');
+assert.equal(simTeamOf(groups, '', 'c'), null);
+const mesa = [original, original, original].map((t) => simPrepare(t, { minRun: 8 }));
+const members = ['a', 'b', 'c'];
+const lab = await simAnalyze(mesa, { minRun: 8, skip: (i, j) => simTeamOf(groups, 'Laboratorio', members[i])?.id === simTeamOf(groups, 'Laboratorio', members[j])?.id && !!simTeamOf(groups, 'Laboratorio', members[i]) });
+assert.equal(JSON.stringify(lab.docs[0].sources.map((x) => x.doc)), '[2]', 'Mesa 1 no se compara entre sí, sí con otra mesa');
+checks += 7;
 
 // Resaltado: escapa el texto y empareja los fragmentos de ambos lados.
 r = await analyze([`<script>alert(1)</script> ${original}`, original]);
