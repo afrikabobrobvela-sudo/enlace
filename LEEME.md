@@ -5,6 +5,16 @@ No es el código de D2L Brightspace ni una plataforma oficial de la BUAP.
 
 Esta versión se despliega en **tu propia cuenta de Cloudflare** (Workers + D1 + R2, plan gratuito) y ya no depende de ChatGPT Sites.
 
+## Novedades de la versión 12.85 (similitud: el formato de la práctica ya no cuenta como copia)
+
+- **Arreglo:** en reportes de laboratorio, casi toda la clase salía con 99–100 % de similitud y cada alumno con decenas de fuentes. Pasaba porque todos llenan **el mismo formato de reporte** (objetivo, marco teórico, procedimiento de la guía), y el detector lo tomaba como copia entre todos. Ocurre lo mismo con los PDF **escaneados con una app**, cuyo único texto es la marca de agua «Escaneado con…».
+- Ahora se **quita el texto que comparten muchas entregas**: el que aparece en el 30 % de las entregas o más, y al menos en 5. Un equipo cuenta como una sola entrega. Lo que queda es lo que cada quien escribió, así que solo se marcan las copias reales entre alumnos.
+- Opción nueva en la pantalla de similitud: «Excluir el texto que comparten muchas entregas (formato, plantilla)». Viene activada; si la desactivas, se vuelve a comparar todo.
+- La tabla dice cuánto formato común se quitó de cada entrega. En el informe, ese texto se ve en gris y una nota dice qué porcentaje no cuenta.
+- **«Excluir las instrucciones y el material de la actividad»** ahora también lee los archivos que subiste a la actividad (por ejemplo, la guía de la práctica en PDF o Word) y no cuenta lo que copien de ahí.
+- Avisos nuevos: un PDF con casi nada de texto (como un escaneo o una foto: lo escrito a mano no se puede comparar), y una entrega con menos de 50 palabras para comparar (su porcentaje no es confiable).
+- Los informes hechos con la 12.84 se vuelven a analizar solos al abrir «Similitud» en la actividad; en Evaluar aparece «El detector mejoró desde este análisis · Actualizar».
+
 ## Novedades de la versión 12.84 (informe de similitud como en Brightspace)
 
 - **Informe de similitud por entrega**, como el de Turnitin en Brightspace. Al analizar una actividad, Enlace **guarda un informe de cada entrega**. Ya no hay que volver a abrir la pantalla de similitud para ver los resultados.

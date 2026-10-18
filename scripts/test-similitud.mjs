@@ -88,6 +88,13 @@ const full = (await call('docente', `/api/similarity/report?course=${c}&submissi
 assert.equal(JSON.stringify(full.data.blocks), JSON.stringify([[0, 0, 2, 1, 'El reporte']]));
 await call('ana', `/api/similarity/report?course=${c}&submission=${anaSub.id}`, undefined, 403);
 await call('docente', `/api/similarity/report?course=${c}&submission=${otherSub.id}`, undefined, 404);
+// El texto común (12.85) se guarda como exclusión 'p' y la opción viaja en settings.
+await call('docente', '/api/similarity', { course: c, task: task.id, reports: [report(anaSub, { summary: { ...report(anaSub).summary, settings: { ...report(anaSub).summary.settings, common: false } }, data: { ...report(anaSub).data, excluded: [[3, 4, 'p']] } })] });
+const commonRow = (await call('docente', `/api/similarity/report?course=${c}&submission=${anaSub.id}`)).report;
+assert.equal(commonRow.summary.settings.common, false);
+assert.equal(commonRow.data.excluded[0][2], 'p');
+await call('docente', '/api/similarity', { course: c, task: task.id, reports: [report(anaSub, { data: { ...report(anaSub).data, excluded: [[3, 4, 'x']] } })] }, 400);
+checks += 3;
 // Volver a analizar reemplaza el informe.
 await call('docente', '/api/similarity', { course: c, task: task.id, reports: [report(anaSub, { version: 'v2', total: 0.05 })] });
 list = (await call('docente', '/api/similarity?course=' + c + '&task=' + task.id)).reports;
@@ -105,7 +112,7 @@ const context = vm.createContext({
   esc: (s) => String(s ?? '').replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch]),
 });
 vm.runInContext(fs.readFileSync(new URL('../src/public/similitud.js', import.meta.url), 'utf8'), context);
-const { simPrepare, simAnalyze, simHighlightHtml, simPairView, simCanon, simPickTeamCategory, simTeamOf, simSkipper, simBuildReports, simReportView, simHash, simVersionOf } = context;
+const { simPrepare, simAnalyze, simHighlightHtml, simPairView, simCanon, simPickTeamCategory, simTeamOf, simSkipper, simBuildReports, simReportView, simHash, simVersionOf, simUnits, simExcludeCommon } = context;
 const analyze = async (texts, opts = {}) => {
   const docs = texts.map((t) => simPrepare(t, { minRun: 8, ...opts }));
   return { docs, result: await simAnalyze(docs, { minRun: 8, ...opts }) };
@@ -220,6 +227,50 @@ assert.match(built[2].summary.notes.join(' '), /foto\.pdf/);
 assert.equal(built[1].summary.sources.length, 0);
 checks += 11;
 
+// Texto común a muchas entregas (12.85): el formato de la práctica que llena toda la clase no es copia entre alumnos.
+let seed2 = 11;
+const rand2 = () => (seed2 = (seed2 * 48271) % 2147483647) / 2147483647;
+const sil = 'ba ce di fo gu la me ni po ru sa te vi zo ca de fi go lu ma ne pi ro su ta'.split(' ');
+const own = () => Array.from({ length: 120 }, () => Array.from({ length: 2 + Math.floor(rand2() * 3) }, () => sil[Math.floor(rand2() * sil.length)]).join('')).join(' ') + '.';
+const formato = `Práctica 3. ${original} ${pendulo()} Escaneado con una aplicación de teléfono para entregar el reporte del laboratorio de física.`;
+function pendulo() {
+  return 'El péndulo simple oscila con un periodo que depende de la longitud del hilo y de la gravedad local. Medimos diez oscilaciones con un cronómetro y repetimos el experimento cinco veces para reducir el error aleatorio.';
+}
+const clase = Array.from({ length: 20 }, () => `${formato}\n${own()}`);
+clase[7] = `${formato}\n${clase[3].split('\n')[1]}`; // la 8.ª copió lo propio de la 4.ª
+const classDocs = (common) => {
+  const docs = clase.map((t) => simPrepare(t, { minRun: 8 }));
+  const info = common ? simExcludeCommon(docs, { minRun: 8 }) : null;
+  return { docs, info };
+};
+let plain = classDocs(false);
+let plainResult = await simAnalyze(plain.docs, { minRun: 8 });
+assert.ok(plainResult.docs.filter((d) => d.total >= 0.15).length === 20, 'Sin excluir lo común, toda la clase sale parecida');
+const withCommon = classDocs(true);
+const commonResult = await simAnalyze(withCommon.docs, { minRun: 8 });
+assert.equal(withCommon.info.threshold, 6, 'Umbral: 30 % de 20 entregas');
+assert.ok(withCommon.info.words > 0);
+const flagged = commonResult.docs.map((d, i) => [i, d.total]).filter(([, total]) => total >= 0.15).map(([i]) => i);
+assert.equal(JSON.stringify(flagged), '[3,7]', 'Solo quedan las dos que se copiaron: ' + JSON.stringify(flagged));
+assert.ok(commonResult.docs[7].sources[0].doc === 3 && commonResult.docs[7].total > 0.9, 'La copia sigue completa');
+assert.ok(withCommon.docs[0].common > 0.4, 'Se sabe cuánto texto común se quitó: ' + withCommon.docs[0].common);
+const commonReports = simBuildReports(clase.map((_, i) => ({ submission: 's' + i, member: 'm' + i, version: 'v' })), withCommon.docs, commonResult);
+assert.ok(commonReports[0].data.excluded.some(([, , code]) => code === 'p'), 'El informe marca el texto común');
+assert.ok(commonReports[0].summary.commonShare > 0.4 && commonReports[7].summary.commonShare > 0.4);
+// Un equipo cuenta una vez: lo que comparten solo sus integrantes no es «común».
+const team6 = Array.from({ length: 8 }, (_, i) => (i < 6 ? `${pendulo()} ${own()}` : own()));
+const teamDocs = team6.map((t) => simPrepare(t, { minRun: 8 }));
+const units = simUnits(8, (i, j) => i < 6 && j < 6);
+assert.equal(new Set(units).size, 3, 'Seis integrantes = una unidad');
+assert.equal(simExcludeCommon(teamDocs, { minRun: 8, units }).words, 0, 'Lo de un solo equipo no se excluye');
+assert.ok(simExcludeCommon(team6.map((t) => simPrepare(t, { minRun: 8 })), { minRun: 8 }).words > 0, 'Sin equipos sí sería común');
+// Pocas entregas: no hay «muchas» que compartan.
+assert.equal(simExcludeCommon([original, original, original].map((t) => simPrepare(t, { minRun: 8 })), { minRun: 8 }).words, 0);
+// Las instrucciones ya preparadas sirven igual que el texto.
+const guideDoc = simPrepare(pregunta, { quotes: false, bibliography: false, minRun: 8 });
+assert.equal(simPrepare(`${pregunta} ${distinto}`, { instructions: guideDoc }).eligible, simPrepare(`${pregunta} ${distinto}`, { instructions: pregunta }).eligible);
+checks += 14;
+
 // Fuentes solapadas: tres entregas iguales; la segunda fuente queda cubierta por la primera.
 r = await analyze([original, original, original]);
 const same = simBuildReports(['a', 'b', 'c'].map((x) => ({ submission: x, member: x, version: x })), r.docs, r.result)[0];
@@ -271,4 +322,4 @@ const crowd = await analyze([...many.slice(0, 20), original, parafrasis]);
 assert.ok(crowd.result.docs[21].total > 0.5 && crowd.result.docs[21].sources[0].doc === 20, 'Reescritura entre 22: ' + pct(crowd.result.docs[21].total));
 checks++;
 
-console.log(`PASS: ${checks} verificaciones del detector de similitud — solo el docente lo activa, copia literal y disfrazada, caracteres invisibles y letras de otro alfabeto, reescrituras, citas, bibliografía, instrucciones, equipos, informes guardados (fuentes, solapadas, excluir) y resaltado seguro (40 entregas en ${Math.round(ms)} ms).`);
+console.log(`PASS: ${checks} verificaciones del detector de similitud — solo el docente lo activa, copia literal y disfrazada, caracteres invisibles y letras de otro alfabeto, reescrituras, citas, bibliografía, instrucciones, texto común a muchas entregas, equipos, informes guardados (fuentes, solapadas, excluir) y resaltado seguro (40 entregas en ${Math.round(ms)} ms).`);

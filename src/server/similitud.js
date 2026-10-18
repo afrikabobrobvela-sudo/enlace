@@ -16,7 +16,7 @@ const MAX_SOURCES = 300;
 const MAX_BLOCKS = 2000;
 const MAX_EXCLUDED = 5000;
 const MAX_WORDS = 500_000;
-const EXCLUDED = new Set(['c', 'b', 'i']); // cita, bibliografía, instrucciones
+const EXCLUDED = new Set(['c', 'b', 'i', 'p']); // cita, bibliografía, instrucciones, texto común a muchas entregas
 
 const bad = () => fail('Informe de similitud no válido.');
 const text = (value, max = 100) => (typeof value === 'string' && value.length > 0 && value.length <= max ? value : bad());
@@ -56,10 +56,12 @@ export function cleanSummary(input) {
       quotes: settings.quotes !== false,
       bibliography: settings.bibliography !== false,
       instructions: settings.instructions !== false,
+      common: settings.common !== false,
       teams: short(settings.teams, 100),
     },
     compared: int(s.compared ?? 0, 100_000),
     skipped: int(s.skipped ?? 0, 100_000),
+    commonShare: share(s.commonShare ?? 0),
   };
 }
 
