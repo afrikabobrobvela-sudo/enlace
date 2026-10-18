@@ -1524,6 +1524,17 @@ const routes = {
     return json({ ok: true, groupCategory: category });
   },
 
+  // Detector de similitud (12.82): el docente elige qué actividades se revisan. El análisis corre en su navegador.
+  'POST /api/task/similarity': async ({ db, user, request }) => {
+    const body = await readJson(request);
+    requireTeacher(await access(db, user, body.course));
+    const task = await loadTask(db, body.id, body.course);
+    if (task.forum) fail('La participación en un foro no tiene entregas que comparar.');
+    const enabled = body.enabled === true ? 1 : 0;
+    await run(db, 'UPDATE aula_tasks SET similarity=?, revision=revision+1, updated=? WHERE id=? AND course=?', enabled, nowIso(), task.id, body.course);
+    return json({ ok: true, similarity: enabled === 1 });
+  },
+
   // Calificación máxima de la columna (12.51): las calificaciones se guardan sobre 10. Con `rescale` (12.52, solo si el
   // docente lo elige) las ya capturadas conservan sus puntos (6 de 10 → 6 de 9 = 6.67) y se recalcula su valor sobre 10.
   'POST /api/task/max': async ({ db, user, request }) => {
