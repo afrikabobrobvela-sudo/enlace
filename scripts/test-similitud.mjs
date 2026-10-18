@@ -50,13 +50,62 @@ await call('docente', '/api/record', { course: c, kind: 'task', id: task.id, rev
 assert.equal((await taskOf('docente')).data.similarity, true, 'Guardar la actividad conserva la revisión');
 checks += 6;
 
+// Informes guardados (12.84): solo quien enseña los guarda y los lee; solo de entregas de esa actividad.
+await call('docente', '/api/members/bulk', { course: c, students: [{ name: 'Beto', email: 'beto@example.test' }] });
+const anaSub = await call('ana', '/api/record', { course: c, kind: 'submission', data: { task: task.id, body: 'Mi reporte del péndulo' } }, 201);
+const betoSub = await call('beto', '/api/record', { course: c, kind: 'submission', data: { task: task.id, body: 'El reporte de Beto' } }, 201);
+const otherTask = await call('docente', '/api/record', { course: c, kind: 'task', data: { title: 'Otra', visible: true } }, 201);
+const otherSub = await call('ana', '/api/record', { course: c, kind: 'submission', data: { task: otherTask.id, body: 'Otra entrega' } }, 201);
+const course = await call('docente', '/api/course?id=' + c);
+const memberOf = (id) => course.records.find((r) => r.id === id).data.member;
+const report = (sub, extra = {}) => ({
+  submission: sub.id,
+  version: 'v1',
+  total: 0.42,
+  literal: 0.3,
+  summary: { sources: [{ submission: betoSub.id, member: memberOf(betoSub.id), pct: 0.42, literal: 0.3, words: 2, blocks: 1 }], notes: ['aviso'], settings: { minRun: 8, quotes: true, bibliography: true, instructions: true, teams: '' }, compared: 1, skipped: 0 },
+  data: { v: 1, hash: 'abc.1', words: 4, eligible: 4, excluded: [[3, 4, 'c']], blocks: [[0, 0, 2, 1, 'El reporte']] },
+  ...extra,
+});
+await call('ana', '/api/similarity', { course: c, task: task.id, reports: [report(anaSub)] }, 403);
+await call('ana', '/api/similarity?course=' + c + '&task=' + task.id, undefined, 403);
+await call('docente', '/api/similarity', { course: c, task: task.id, reports: [report(anaSub, { total: 2 })] }, 400);
+await call('docente', '/api/similarity', { course: c, task: task.id, reports: [report(anaSub, { data: { ...report(anaSub).data, blocks: [[5, 0, 2, 1, '']] } })] }, 400);
+await call('docente', '/api/similarity', { course: c, task: task.id, reports: [report(anaSub, { data: { ...report(anaSub).data, blocks: [[0, 3, 9, 1, '']] } })] }, 400);
+await call('docente', '/api/similarity', { course: c, task: 'no-existe', reports: [] }, 404);
+const before = store.counter.queries;
+const saved = await call('docente', '/api/similarity', { course: c, task: task.id, reports: [report(anaSub), report(betoSub, { total: 0.1, summary: { ...report(betoSub).summary, sources: [] }, data: { ...report(betoSub).data, blocks: [] } }), report(otherSub)] });
+assert.ok(store.counter.queries - before <= 8, `Guardar usa pocas consultas (${store.counter.queries - before})`);
+assert.equal(saved.saved, 2, 'La entrega de otra actividad no se guarda');
+let list = (await call('docente', '/api/similarity?course=' + c + '&task=' + task.id)).reports;
+assert.equal(list.length, 2);
+const anaRow = list.find((x) => x.submission === anaSub.id);
+assert.equal(anaRow.total, 0.42);
+assert.equal(anaRow.member, memberOf(anaSub.id));
+assert.equal(anaRow.summary.sources[0].submission, betoSub.id);
+assert.equal(anaRow.data, undefined, 'La lista no trae los bloques');
+const full = (await call('docente', `/api/similarity/report?course=${c}&submission=${anaSub.id}`)).report;
+assert.equal(JSON.stringify(full.data.blocks), JSON.stringify([[0, 0, 2, 1, 'El reporte']]));
+await call('ana', `/api/similarity/report?course=${c}&submission=${anaSub.id}`, undefined, 403);
+await call('docente', `/api/similarity/report?course=${c}&submission=${otherSub.id}`, undefined, 404);
+// Volver a analizar reemplaza el informe.
+await call('docente', '/api/similarity', { course: c, task: task.id, reports: [report(anaSub, { version: 'v2', total: 0.05 })] });
+list = (await call('docente', '/api/similarity?course=' + c + '&task=' + task.id)).reports;
+assert.equal(list.find((x) => x.submission === anaSub.id).total, 0.05);
+assert.equal(list.find((x) => x.submission === anaSub.id).version, 'v2');
+// Otro docente (de otro curso) no lee ni escribe.
+await call('admin', '/api/teachers', { email: 'otro@example.test', name: 'Otro', role: 'teacher' });
+await call('otro', '/api/similarity?course=' + c + '&task=' + task.id, undefined, 403);
+await call('otro', '/api/similarity', { course: c, task: task.id, reports: [report(anaSub)] }, 403);
+checks += 12;
+
 // ---------- Motor (navegador) ----------
 const context = vm.createContext({
   document: { addEventListener() {} },
   esc: (s) => String(s ?? '').replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch]),
 });
 vm.runInContext(fs.readFileSync(new URL('../src/public/similitud.js', import.meta.url), 'utf8'), context);
-const { simPrepare, simAnalyze, simHighlightHtml, simPairView, simCanon, simPickTeamCategory, simTeamOf } = context;
+const { simPrepare, simAnalyze, simHighlightHtml, simPairView, simCanon, simPickTeamCategory, simTeamOf, simSkipper, simBuildReports, simReportView, simHash, simVersionOf } = context;
 const analyze = async (texts, opts = {}) => {
   const docs = texts.map((t) => simPrepare(t, { minRun: 8, ...opts }));
   return { docs, result: await simAnalyze(docs, { minRun: 8, ...opts }) };
@@ -143,6 +192,49 @@ assert.equal(simPickTeamCategory(groups, ['a', 'z']), '', 'Sin equipos de dos qu
 assert.equal(simPickTeamCategory([], ['a', 'b']), '');
 assert.equal(simTeamOf(groups, 'Laboratorio', 'c').data.title, 'Mesa 2');
 assert.equal(simTeamOf(groups, '', 'c'), null);
+
+// 12.84: tampoco se comparan dos entregas con el mismo archivo (la entrega del equipo que reciben sus integrantes).
+const skipper = simSkipper([{ member: 'a', fileIds: ['f1'] }, { member: 'b', fileIds: ['f9'] }, { member: 'c', fileIds: ['f1'] }, { member: 'x' }], groups, 'Laboratorio');
+assert.equal(skipper(0, 1), true, 'Mismo equipo');
+assert.equal(skipper(0, 2), true, 'Mismo archivo');
+assert.equal(skipper(1, 3), false);
+assert.equal(simSkipper([{ member: 'a', fileIds: ['f1'] }, { member: 'b', fileIds: ['f1'] }], groups, '')(0, 1), true, 'Sin categoría, el mismo archivo tampoco');
+
+// Informe guardado (12.84): fuentes, bloques con el texto de la otra entrega, exclusiones y la vista con fuentes excluidas.
+const three = [`${conCita} ${distinto}`, original, `${distinto} Además agregamos una conclusión propia sobre la medición del tiempo en el laboratorio de la escuela.`];
+r = await analyze(three);
+const items = three.map((_, i) => ({ submission: 's' + i, member: 'm' + i, version: 'v' + i, notes: i === 2 ? ['foto.pdf: el PDF no tiene texto'] : [] }));
+const built = simBuildReports(items, r.docs, r.result, { settings: { minRun: 8 } });
+const first = built[0];
+assert.equal(first.summary.sources.length, 1, 'La cita no cuenta; coincide solo con la tercera');
+assert.equal(first.summary.sources[0].submission, 's2');
+assert.equal(first.data.hash, simHash(three[0]));
+assert.equal(first.data.words, r.docs[0].n);
+assert.ok(first.data.excluded.some(([, , code]) => code === 'c'), 'Se guarda lo excluido');
+const sumWords = first.data.blocks.reduce((sum, b) => sum + b[2] - b[1], 0);
+assert.equal(sumWords, first.summary.sources[0].words);
+assert.ok(first.data.blocks.every((b) => b[4] && distinto.replace(/\s+/g, ' ').includes(b[4].replace('…', '').slice(0, 40))), 'Cada bloque trae el texto de la otra entrega');
+assert.ok(Math.abs(simReportView(first.data, 1).total - first.total) < 0.001, 'La vista guardada da el mismo total');
+assert.equal(simReportView(first.data, 1, { hidden: new Set([0]) }).total, 0, 'Excluir la fuente quita su parte');
+assert.match(built[2].summary.notes.join(' '), /foto\.pdf/);
+assert.equal(built[1].summary.sources.length, 0);
+checks += 11;
+
+// Fuentes solapadas: tres entregas iguales; la segunda fuente queda cubierta por la primera.
+r = await analyze([original, original, original]);
+const same = simBuildReports(['a', 'b', 'c'].map((x) => ({ submission: x, member: x, version: x })), r.docs, r.result)[0];
+const shown = simReportView(same.data, 2);
+assert.equal(shown.shown[1].words, 0, 'Sin solapadas, la segunda fuente no suma');
+assert.equal(shown.own[1].words, shown.own[0].words, 'Con solapadas, cada fuente conserva lo suyo');
+assert.ok(shown.marks.every((m) => m.src === 0));
+const focused = simReportView(same.data, 2, { focus: 1 });
+assert.ok(focused.marks.length && focused.marks.every((m) => m.src === 1), 'Marcar solo una fuente');
+assert.ok(Math.abs(simReportView(same.data, 2, { hidden: new Set([0]) }).total - same.total) < 0.001, 'Excluir una fuente solapada no cambia el total');
+// La huella de una entrega cambia al volver a entregar, no al calificarla.
+const sub = { data: { submitted: '2026-10-01T10:00:00Z', fileIds: ['f1'], body: 'x', grade: null } };
+assert.equal(simVersionOf(sub), simVersionOf({ data: { ...sub.data, grade: 9 } }));
+assert.notEqual(simVersionOf(sub), simVersionOf({ data: { ...sub.data, fileIds: ['f2'] } }));
+checks += 7;
 const mesa = [original, original, original].map((t) => simPrepare(t, { minRun: 8 }));
 const members = ['a', 'b', 'c'];
 const lab = await simAnalyze(mesa, { minRun: 8, skip: (i, j) => simTeamOf(groups, 'Laboratorio', members[i])?.id === simTeamOf(groups, 'Laboratorio', members[j])?.id && !!simTeamOf(groups, 'Laboratorio', members[i]) });
@@ -179,4 +271,4 @@ const crowd = await analyze([...many.slice(0, 20), original, parafrasis]);
 assert.ok(crowd.result.docs[21].total > 0.5 && crowd.result.docs[21].sources[0].doc === 20, 'Reescritura entre 22: ' + pct(crowd.result.docs[21].total));
 checks++;
 
-console.log(`PASS: ${checks} verificaciones del detector de similitud — solo el docente lo activa, copia literal y disfrazada, caracteres invisibles y letras de otro alfabeto, reescrituras, citas, bibliografía, instrucciones, equipos y resaltado seguro (40 entregas en ${Math.round(ms)} ms).`);
+console.log(`PASS: ${checks} verificaciones del detector de similitud — solo el docente lo activa, copia literal y disfrazada, caracteres invisibles y letras de otro alfabeto, reescrituras, citas, bibliografía, instrucciones, equipos, informes guardados (fuentes, solapadas, excluir) y resaltado seguro (40 entregas en ${Math.round(ms)} ms).`);

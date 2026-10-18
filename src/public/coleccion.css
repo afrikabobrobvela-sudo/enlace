@@ -833,3 +833,122 @@ mark.sim-near { background: #ffefc2; color: inherit; border-radius: 3px; box-sha
   .sim-text { max-height: 50vh; }
   .sim-options .primary { margin-left: 0; width: 100%; }
 }
+.sim-actions { white-space: nowrap; }
+.sim-actions .text-btn { margin-left: 10px; }
+
+/* Informe de similitud (12.84): documento con las coincidencias del color de su fuente y la columna de fuentes, como el
+   informe de Turnitin en Brightspace. Cada fuente lleva su color en --src (similitud-informe.js, SIM_COLORS). */
+.simr-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px 24px; margin-bottom: 16px; }
+.simr-head h1 { margin: 0; }
+.simr-who { margin: 6px 0 0; color: var(--ink-soft); }
+.simr-head-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.simr { display: grid; grid-template-columns: minmax(0, 1fr) 360px; grid-template-areas: 'doc side'; gap: 20px; align-items: start; }
+.simr-doc { grid-area: doc; min-width: 0; padding: 20px; border-radius: var(--radius); background: #d9dee6; }
+.simr-side { grid-area: side; position: sticky; top: 76px; max-height: calc(100vh - 92px); overflow: auto; overscroll-behavior: contain; padding: 18px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow-sm); }
+.simr-loading, .simr-empty { grid-column: 1 / -1; padding: 28px; border: 1px dashed var(--line-strong); border-radius: var(--radius); background: var(--surface); }
+.simr-empty h2 { margin-top: 0; }
+.simr-banner { margin: 0 0 14px; padding: 10px 14px; border-left: 4px solid #b25400; border-radius: var(--radius-sm); background: #fff4e5; color: #5a2d00; }
+.simr-unread { margin: 0 0 14px; padding: 10px 14px 10px 32px; border-radius: var(--radius-sm); background: var(--surface); color: #7a4b00; }
+.simr-part { margin: 18px auto 10px; max-width: 860px; font-size: 15px; font-stretch: 85%; color: var(--ink-soft); overflow-wrap: anywhere; }
+.simr-part:first-of-type { margin-top: 0; }
+.simr-page { position: relative; max-width: 860px; margin: 0 auto 16px; background: #fff; box-shadow: 0 1px 3px rgba(17, 26, 46, 0.18), 0 6px 18px rgba(17, 26, 46, 0.08); }
+.simr-pdf { width: 100%; }
+.simr-canvas, .simr-canvas canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+.simr-canvas { display: grid; place-items: center; color: var(--ink-faint); font-size: 13px; }
+.simr-overlay { position: absolute; inset: 0; }
+.simr-textpage { padding: clamp(20px, 5vw, 56px); }
+.simr-text { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 15px; line-height: 1.7; color: var(--tinta); }
+
+/* Marcas: relleno del color de la fuente; la reescritura cercana, más clara y subrayada con puntos. */
+.simr-mark { cursor: pointer; color: inherit; background: color-mix(in srgb, var(--src) 26%, transparent); border-radius: 2px; box-shadow: inset 0 -2px 0 var(--src); }
+.simr-mark.is-near { background: color-mix(in srgb, var(--src) 13%, transparent); box-shadow: none; text-decoration: underline dotted var(--src) 2px; text-underline-offset: 3px; }
+.simr-box { position: absolute; display: block; }
+.simr-box.simr-mark { border-radius: 1px; box-shadow: inset 0 -2px 0 color-mix(in srgb, var(--src) 85%, transparent); text-decoration: none; }
+.simr-box.simr-mark.is-near { box-shadow: inset 0 -2px 0 color-mix(in srgb, var(--src) 45%, transparent); }
+.simr-mark:hover { background: color-mix(in srgb, var(--src) 36%, transparent); }
+.simr-mark.is-active { outline: 2px solid var(--src); outline-offset: 1px; background: color-mix(in srgb, var(--src) 38%, transparent); }
+.simr-ex { color: var(--ink-faint); background: repeating-linear-gradient(135deg, transparent 0 5px, rgba(86, 98, 122, 0.12) 5px 7px); }
+.simr-box-ex { background: rgba(86, 98, 122, 0.1); }
+.simr-num { display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 4px; margin-right: 3px; border-radius: 9px; background: var(--src); color: #fff; font: 800 11px/1 var(--condensada); font-stretch: 85%; font-variant-numeric: tabular-nums; vertical-align: 2px; }
+.simr-margin-num { position: absolute; margin: 0; translate: 0 -50%; box-shadow: 0 0 0 2px #fff; cursor: pointer; }
+
+/* Columna de fuentes */
+.simr-score { display: flex; align-items: baseline; gap: 10px; }
+.simr-score-pct { font: 800 56px/0.95 var(--condensada); font-stretch: 75%; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.simr-score-label { font-size: 18px; font-weight: 700; color: var(--ink-soft); }
+.simr-score.sim-high .simr-score-pct { color: #b3123a; }
+.simr-score.sim-mid .simr-score-pct { color: #8f5300; }
+.simr-score.sim-low .simr-score-pct { color: #2f6b45; }
+.simr-score-sub { margin: 6px 0 12px; font-size: 14px; color: var(--ink-soft); }
+.simr-hidden-note, .simr-side-note { margin: 0 0 10px; padding: 8px 10px; border-radius: var(--radius-sm); background: #f2f4f7; font-size: 13px; color: var(--ink-soft); }
+.simr-side-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 12px; margin: 14px 0 10px; padding-top: 14px; border-top: 1px solid var(--line); }
+.simr-side-head h2 { margin: 0; font-size: 20px; font-stretch: 80%; }
+.simr-count { display: inline-grid; place-items: center; min-width: 22px; height: 22px; padding: 0 6px; margin-left: 4px; border-radius: 11px; background: #e6eaf0; color: var(--tinta); font: 800 12px/1 var(--condensada); vertical-align: 3px; }
+.simr-switch { display: inline-flex; align-items: center; gap: 8px; margin: 0; font-size: 13px; color: var(--ink-soft); cursor: pointer; }
+.simr-switch input { width: 18px; height: 18px; margin: 0; accent-color: #0a7383; }
+.simr-sources { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.simr-source { border: 1px solid var(--line); border-left: 4px solid var(--src); border-radius: var(--radius-sm); background: var(--surface); }
+.simr-source.is-open, .simr-source.is-focus { border-color: color-mix(in srgb, var(--src) 45%, var(--line)); border-left-color: var(--src); box-shadow: var(--shadow-sm); }
+.simr-source.is-excluded { border-left-color: var(--line-strong); background: #f6f7f9; }
+.simr-source.is-excluded .simr-num { background: #8a93a3; }
+.simr-source.is-excluded .simr-source-text b, .simr-source.is-excluded .simr-source-pct { color: var(--ink-faint); }
+.simr-source-main { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: start; gap: 10px; width: 100%; min-height: 44px; padding: 10px 12px 6px; border: 0; border-radius: var(--radius-sm) var(--radius-sm) 0 0; background: none; color: var(--tinta); text-align: left; font: inherit; cursor: pointer; box-shadow: none; }
+.simr-source-main:hover { background: color-mix(in srgb, var(--src) 6%, transparent); }
+.simr-source-main .simr-num { min-width: 24px; height: 24px; margin: 1px 0 0; border-radius: 12px; font-size: 13px; vertical-align: 0; }
+.simr-source-text { display: grid; gap: 2px; min-width: 0; }
+.simr-source-text b { overflow-wrap: anywhere; }
+.simr-source-text small { font-size: 12px; line-height: 1.35; color: var(--ink-faint); }
+.simr-source-pct { font: 800 20px/1.1 var(--condensada); font-stretch: 80%; font-variant-numeric: tabular-nums; color: var(--tinta); white-space: nowrap; }
+.simr-exclude { display: flex; align-items: center; gap: 8px; margin: 0; padding: 0 12px 10px 46px; font-size: 13px; color: var(--ink-soft); cursor: pointer; }
+.simr-exclude input { width: 16px; height: 16px; margin: 0; accent-color: #0a7383; }
+.simr-blocks { list-style: none; margin: 0; padding: 0 10px 6px; display: grid; gap: 6px; }
+.simr-block { display: grid; gap: 4px; width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: #fbfcfd; color: var(--tinta); text-align: left; font: inherit; cursor: pointer; box-shadow: none; }
+.simr-block:hover { border-color: color-mix(in srgb, var(--src) 50%, var(--line)); }
+.simr-block.is-active { border-color: var(--src); background: color-mix(in srgb, var(--src) 7%, #fff); }
+.simr-block-head { font-size: 12px; font-weight: 700; color: var(--ink-soft); }
+.simr-snippet { font-size: 13px; line-height: 1.45; color: var(--tinta); overflow-wrap: anywhere; }
+.simr-source-links { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 0; padding: 4px 12px 12px; font-size: 13px; }
+.simr-none { color: var(--ink-soft); }
+.simr-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 14px 0 8px; font-size: 12px; color: var(--ink-soft); }
+.simr-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.simr-key { --src: #56627a; display: inline-block; width: 16px; height: 12px; border-radius: 2px; background: color-mix(in srgb, var(--src) 26%, transparent); box-shadow: inset 0 -2px 0 var(--src); }
+.simr-key.is-near { background: color-mix(in srgb, var(--src) 13%, transparent); box-shadow: inset 0 -2px 0 color-mix(in srgb, var(--src) 45%, transparent); }
+.simr-key.is-ex { background: repeating-linear-gradient(135deg, transparent 0 4px, rgba(86, 98, 122, 0.25) 4px 6px); box-shadow: none; }
+.simr-flags, .simr-settings { margin-top: 10px; border-top: 1px solid var(--line); padding-top: 10px; font-size: 13px; }
+.simr-flags summary, .simr-settings summary { cursor: pointer; font-weight: 700; min-height: 24px; }
+.simr-flags ul, .simr-settings ul { margin: 8px 0; padding-left: 18px; }
+.simr-flags[open] ul { color: #7a4b00; }
+
+/* Porcentaje bajo los archivos de la entrega (revisión) y en la tabla de la actividad */
+.simr-badge { margin: 12px 0; }
+.simr-badge-card { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 12px; width: 100%; max-width: 460px; padding: 10px 14px 10px 10px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); color: var(--tinta); text-align: left; font: inherit; cursor: pointer; box-shadow: var(--shadow-sm); }
+.simr-badge-card:hover { border-color: var(--line-strong); box-shadow: var(--shadow); }
+.simr-badge-pct { display: grid; place-items: center; min-width: 58px; height: 44px; padding: 0 8px; border-radius: var(--radius-sm); color: #fff; font: 800 22px/1 var(--condensada); font-stretch: 80%; font-variant-numeric: tabular-nums; }
+.simr-badge-pct.sim-high { background: #b3123a; }
+.simr-badge-pct.sim-mid { background: #8f5300; }
+.simr-badge-pct.sim-low { background: #2f6b45; }
+.simr-badge-text { display: grid; gap: 2px; min-width: 0; }
+.simr-badge-text small { font-size: 13px; color: var(--ink-soft); overflow-wrap: anywhere; }
+.simr-badge-go { width: 9px; height: 9px; border-right: 2px solid var(--ink-soft); border-bottom: 2px solid var(--ink-soft); transform: rotate(-45deg); }
+.simr-badge-stale { margin: 6px 0 0; font-size: 13px; color: #7a4b00; }
+.simr-badge-empty { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; max-width: 520px; padding: 12px 14px; border: 1px dashed var(--line-strong); border-radius: var(--radius); background: var(--surface); }
+.simr-badge-empty div { display: grid; gap: 2px; }
+.simr-badge-empty small { font-size: 13px; color: var(--ink-soft); }
+.simr-badge-busy { margin: 0; color: var(--ink-soft); }
+.simr-chip { min-width: 52px; min-height: 28px; padding: 2px 10px; border: 0; border-radius: 14px; color: #fff; font: 800 14px/1 var(--condensada); font-stretch: 85%; font-variant-numeric: tabular-nums; cursor: pointer; box-shadow: none; }
+.simr-chip.sim-high { background: #b3123a; }
+.simr-chip.sim-mid { background: #8f5300; }
+.simr-chip.sim-low { background: #2f6b45; }
+.simr-chip.is-stale { outline: 2px dashed #8f5300; outline-offset: 2px; }
+
+@media (max-width: 960px) {
+  .simr { grid-template-columns: minmax(0, 1fr); grid-template-areas: 'side' 'doc'; }
+  .simr-side { position: static; max-height: none; }
+}
+@media (max-width: 720px) {
+  .simr-doc { padding: 10px; margin: 0 -8px; }
+  .simr-head-actions { width: 100%; }
+  .simr-head-actions button { flex: 1 1 auto; }
+  .simr-score-pct { font-size: 48px; }
+  .simr-margin-num { min-width: 14px; height: 14px; padding: 0 3px; font-size: 9px; }
+}
