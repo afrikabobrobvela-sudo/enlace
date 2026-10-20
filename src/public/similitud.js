@@ -321,37 +321,6 @@ function simPairView(result, me, other) {
   };
 }
 
-/** HTML del texto con lo coincidente resaltado (`cov`: 1 idéntico, 2 cercano) y lo excluido atenuado. */
-function simHighlightHtml(doc, cov, frags, side) {
-  const fragOf = new Int32Array(doc.n).fill(-1);
-  frags.forEach((f, k) => {
-    const [from, to] = f[side];
-    for (let x = from; x < to; x++) if (fragOf[x] < 0) fragOf[x] = k;
-  });
-  const cls = (x) => (doc.reason[x] ? 'ex:' + doc.reason[x] : cov?.[x] === 1 ? 'lit:' + fragOf[x] : cov?.[x] === 2 ? 'near:' + fragOf[x] : '');
-  let html = '';
-  let at = 0;
-  for (let x = 0; x < doc.n; ) {
-    const c = cls(x);
-    if (!c) {
-      x++;
-      continue;
-    }
-    let y = x;
-    while (y + 1 < doc.n && cls(y + 1) === c) y++;
-    const [kind, extra] = c.split(':');
-    html += esc(doc.text.slice(at, doc.tokens[x].s));
-    const inner = esc(doc.text.slice(doc.tokens[x].s, doc.tokens[y].e));
-    html +=
-      kind === 'ex'
-        ? `<span class="sim-ex" title="Excluido: ${esc(extra)}">${inner}</span>`
-        : `<mark class="sim-${kind}" data-sim-frag="${extra}" title="${kind === 'lit' ? 'Texto idéntico' : 'Reescritura cercana'}">${inner}</mark>`;
-    at = doc.tokens[y].e;
-    x = y + 1;
-  }
-  return html + esc(doc.text.slice(at));
-}
-
 /**
  * Categoría de equipos para no comparar a integrantes del mismo equipo (12.83). La de la actividad si es por equipo;
  * si no, la que agrupa a más de quienes entregaron (por ejemplo, los equipos de laboratorio de una actividad individual).
@@ -490,30 +459,87 @@ function simWarnings(notes, doc) {
 /**
  * Informe de cada entrega para guardarlo: porcentajes, fuentes (otras entregas, de mayor a menor) y, por fuente, los
  * bloques de palabras que coinciden, con el texto de la otra entrega con que coincide cada uno.
- * `items[i]` = { submission, member, version, notes } de `docs[i]`; `skip(i, j)` = el par no se comparó (mismo equipo).
+ * `items[i]` = { submission, member, version, notes, team } de `docs[i]`; `skip(i, j)` = el par no se comparó (mismo
+ * equipo). 12.87: las fuentes van por unidad (`units`, de simUnits): un equipo es una sola fuente aunque coincida con
+ * varios de sus integrantes, y cada bloque guarda dónde está en la otra entrega (`data.others`, para verlas lado a
+ * lado): [fuente, desde, hasta, tipo, fragmento, otra, desde en la otra, hasta en la otra].
  */
-function simBuildReports(items, docs, result, { settings = {}, skip = () => false } = {}) {
+function simBuildReports(items, docs, result, { settings = {}, skip = () => false, units = null } = {}) {
+  units ??= simUnits(docs.length, skip);
+  const unitKey = new Map(); // unidad → id de entrega que la nombra (la menor), estable entre análisis
+  items.forEach((item, i) => {
+    const key = unitKey.get(units[i]);
+    if (key === undefined || item.submission < key) unitKey.set(units[i], item.submission);
+  });
   return items.map((item, i) => {
     const doc = docs[i];
     const r = result.docs[i];
+    // Fuentes agrupadas por unidad: la cobertura de la unidad es la unión de la de sus integrantes.
+    const groups = new Map();
+    for (const source of r.sources) {
+      const u = units[source.doc];
+      if (!groups.has(u)) groups.set(u, []);
+      groups.get(u).push(source); // ya vienen de mayor a menor porcentaje
+    }
+    const merged = [...groups.values()].map((list) => {
+      const cov = new Uint8Array(doc.n);
+      const views = list.map((source) => ({ doc: source.doc, view: simPairView(result, i, source.doc) }));
+      for (const { view } of views)
+        for (let x = 0; x < doc.n; x++) {
+          const v = view.mine?.[x];
+          if (v === 1) cov[x] = 1;
+          else if (v === 2 && !cov[x]) cov[x] = 2;
+        }
+      let any = 0;
+      let lit = 0;
+      for (let x = 0; x < doc.n; x++) if (cov[x]) (any++, cov[x] === 1 && lit++);
+      return { list, views, cov, pct: doc.eligible ? any / doc.eligible : 0, literal: doc.eligible ? lit / doc.eligible : 0 };
+    });
+    merged.sort((a, b) => b.pct - a.pct);
     const blocks = [];
-    const sources = r.sources.map((source, k) => {
-      const view = simPairView(result, i, source.doc);
+    const others = [];
+    const otherIndex = new Map();
+    const otherOf = (d) => {
+      if (!otherIndex.has(d)) {
+        otherIndex.set(d, others.length);
+        others.push({ submission: items[d].submission, hash: simHash(docs[d].text), words: docs[d].n });
+      }
+      return otherIndex.get(d);
+    };
+    const sources = merged.map((group, k) => {
       let words = 0;
       let count = 0;
-      for (const [from, to, type] of simRuns(view.mine)) {
+      for (const [from, to, type] of simRuns(group.cov)) {
         words += to - from;
         count++;
-        let a = Infinity;
-        let b = -1;
-        for (const f of view.frags)
-          if (f.mine[0] < to && f.mine[1] > from) {
-            a = Math.min(a, f.theirs[0]);
-            b = Math.max(b, f.theirs[1]);
+        // La pareja del bloque: en el primer integrante (de mayor porcentaje) que tenga un fragmento ahí.
+        let pair = null;
+        for (const { doc: d, view } of group.views) {
+          let a = Infinity;
+          let b = -1;
+          for (const f of view.frags)
+            if (f.mine[0] < to && f.mine[1] > from) {
+              a = Math.min(a, f.theirs[0]);
+              b = Math.max(b, f.theirs[1]);
+            }
+          if (b > a) {
+            pair = { d, a, b };
+            break;
           }
-        blocks.push([k, from, to, type, b > a ? simSnippet(docs[source.doc], a, b) : '']);
+        }
+        blocks.push(pair ? [k, from, to, type, simSnippet(docs[pair.d], pair.a, pair.b), otherOf(pair.d), pair.a, pair.b] : [k, from, to, type, '']);
       }
-      return { submission: items[source.doc].submission, member: items[source.doc].member, pct: simRound(source.pct), literal: simRound(source.literal), words, blocks: count };
+      const lead = group.list[0].doc;
+      return {
+        submission: items[lead].submission,
+        member: items[lead].member,
+        members: [...new Set(group.list.map((source) => items[source.doc].member))],
+        team: items[lead].team || '',
+        pct: simRound(group.pct),
+        literal: simRound(group.literal),
+        words,
+        blocks: count,
+      };
     });
     const excluded = [];
     for (let x = 0; x < doc.n; ) {
@@ -528,7 +554,7 @@ function simBuildReports(items, docs, result, { settings = {}, skip = () => fals
     }
     let skipped = 0;
     for (let j = 0; j < docs.length; j++) if (j !== i && skip(Math.min(i, j), Math.max(i, j))) skipped++;
-    const data = { v: 1, hash: simHash(doc.text), words: doc.n, eligible: doc.eligible, excluded: excluded.slice(0, 5000), blocks: blocks.slice(0, 2000) };
+    const data = { v: 2, hash: simHash(doc.text), words: doc.n, eligible: doc.eligible, excluded: excluded.slice(0, 5000), blocks: blocks.slice(0, 2000), others: others.slice(0, 400) };
     // Un informe enorme (cientos de bloques): primero se recortan los fragmentos y, si no basta, los últimos bloques.
     if (JSON.stringify(data).length > SIM_MAX_REPORT) for (const b of data.blocks) b[4] = b[4].slice(0, 60);
     while (JSON.stringify(data).length > SIM_MAX_REPORT && data.blocks.length) data.blocks.length = Math.floor(data.blocks.length * 0.8);
@@ -538,7 +564,17 @@ function simBuildReports(items, docs, result, { settings = {}, skip = () => fals
       version: item.version,
       total: simRound(r.total),
       literal: simRound(r.literal),
-      summary: { sources, notes: simWarnings(item.notes, doc).slice(0, 30), settings, compared: docs.length - 1 - skipped, skipped, commonShare: simRound(doc.common || 0) },
+      summary: {
+        format: 2,
+        unit: unitKey.get(units[i]),
+        team: item.team || '',
+        sources,
+        notes: simWarnings(item.notes, doc).slice(0, 30),
+        settings,
+        compared: new Set(units.filter((u) => u !== units[i])).size,
+        skipped,
+        commonShare: simRound(doc.common || 0),
+      },
       data,
     };
   });
@@ -599,11 +635,10 @@ function simReportView(data, count, { hidden = new Set(), focus = null } = {}) {
 
 /* ---------- Interfaz (solo quien enseña) ---------- */
 
-const simState = { task: null, live: null, reports: null, loading: false, busy: false, progress: '', saving: '', compare: null, pendingCompare: null, opts: { minRun: 8, quotes: true, bibliography: true, instructions: true, common: true, teams: '' } };
+const simState = { task: null, reports: null, loading: false, busy: false, progress: '', saving: '', opts: { minRun: 8, quotes: true, bibliography: true, instructions: true, common: true, teams: '' } };
 const simTextCache = new Map(); // entrega + huella → { text, notes, parts }
 const simFileCache = new Map(); // archivo → texto leído (un archivo no cambia)
 const simRunning = new Map(); // actividad → análisis en curso (la pantalla de similitud y la revisión comparten el mismo)
-let simCompareRequest = null; // cotejo pedido desde un informe: [entrega, otra entrega]
 const SIM_MAX_FILE = 20 * 1024 * 1024;
 const SIM_MAX_TEXT = 300000;
 
@@ -748,7 +783,8 @@ function simRun(t, opts, onProgress = () => {}) {
     const docs = entries.map((e) => simPrepare(e.text, { quotes: opts.quotes, bibliography: opts.bibliography, instructions: guide, minRun: opts.minRun }));
     // Integrantes de un mismo equipo trabajan juntos: no se comparan entre sí.
     const skip = simSkipper(entries.map((e) => ({ member: e.member, fileIds: e.submission.data.fileIds })), records('group'), opts.teams);
-    if (opts.common !== false) simExcludeCommon(docs, { minRun: opts.minRun, units: simUnits(docs.length, skip) });
+    const units = simUnits(docs.length, skip);
+    if (opts.common !== false) simExcludeCommon(docs, { minRun: opts.minRun, units });
     let last = Date.now();
     const onStep = async (done, total) => {
       if (Date.now() - last < 60) return;
@@ -758,8 +794,9 @@ function simRun(t, opts, onProgress = () => {}) {
     };
     const result = await simAnalyze(docs, { minRun: opts.minRun, skip, onStep });
     const analyzedAt = new Date().toISOString();
-    const items = entries.map((e) => ({ submission: e.submission.id, member: e.member, version: simVersionOf(e.submission), notes: e.notes }));
-    const reports = simBuildReports(items, docs, result, { settings: { ...opts }, skip }).map((r) => ({ ...r, analyzedAt }));
+    const groups = records('group');
+    const items = entries.map((e) => ({ submission: e.submission.id, member: e.member, version: simVersionOf(e.submission), notes: e.notes, team: simTeamOf(groups, opts.teams, e.member)?.data.title || '' }));
+    const reports = simBuildReports(items, docs, result, { settings: { ...opts }, skip, units }).map((r) => ({ ...r, analyzedAt }));
     onProgress('Guardando los informes…');
     let saveError = '';
     try {
@@ -767,9 +804,8 @@ function simRun(t, opts, onProgress = () => {}) {
     } catch (error) {
       saveError = error.message;
     }
-    const live = { entries, docs, result };
-    if (simState.task === t.id) Object.assign(simState, { live, reports, opts: { ...opts }, saving: saveError ? 'No se guardaron los informes: ' + saveError : '' });
-    return { live, reports, saveError };
+    if (simState.task === t.id) Object.assign(simState, { reports, opts: { ...opts }, saving: saveError ? 'No se guardaron los informes: ' + saveError : '' });
+    return { reports, saveError };
   })();
   simRunning.set(t.id, job);
   const done = () => simRunning.delete(t.id);
@@ -790,73 +826,71 @@ const simRefresh = (t) => {
 async function runSimilarity(t) {
   if (simState.busy) return;
   simState.busy = true;
-  simState.compare = null;
   simRefresh(t);
   try {
-    const out = await simRun(t, { ...simState.opts }, simProgress);
-    if (simState.task === t.id && simState.pendingCompare) {
-      const [a, b] = simState.pendingCompare.map((id) => out.live.entries.findIndex((e) => e.submission.id === id));
-      if (a >= 0 && b >= 0) simState.compare = [a, b];
-    }
+    await simRun(t, { ...simState.opts }, simProgress);
   } catch (error) {
     toast('No se pudo completar el análisis: ' + error.message);
   } finally {
     simState.busy = false;
     simState.progress = '';
-    simState.pendingCompare = null;
     simRefresh(t);
-    if (simState.compare) document.getElementById('simCompare')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 }
 
 const simPct = (x) => `${Math.round(x * 100)} %`;
 const simLevel = (x) => (x >= 0.4 ? 'sim-high' : x >= 0.15 ? 'sim-mid' : 'sim-low');
 
+/** Nombre de una fuente o de un renglón: el equipo (12.87) o el alumno. */
+const simSourceName = (src) => src.team || simName(src.member);
+const simMembersText = (members) => members.map(simName).sort((a, b) => a.localeCompare(b, 'es')).join(', ');
+
+/**
+ * Tabla de resultados: un renglón por equipo (o por alumno sin equipo). El renglón muestra el informe del integrante con
+ * más similitud; los de los demás quedan a un clic.
+ */
 function simResultHtml() {
   const reports = simState.reports || [];
   if (!reports.length) return '<p class="empty">Todavía no hay entregas con texto o archivos en esta actividad.</p>';
-  const groups = records('group');
-  const order = [...reports].sort((a, b) => b.total - a.total || byName({ name: simName(a.member) }, { name: simName(b.member) }));
-  const flagged = reports.filter((r) => r.total >= 0.15).length;
-  const warned = reports.filter((r) => r.summary.notes.length).length;
+  const units = new Map();
+  for (const r of reports) {
+    const key = r.summary.unit || r.submission;
+    if (!units.has(key)) units.set(key, []);
+    units.get(key).push(r);
+  }
+  const rows = [...units.values()].map((list) => {
+    list.sort((a, b) => b.total - a.total || byName({ name: simName(a.member) }, { name: simName(b.member) }));
+    return { lead: list[0], list };
+  });
+  rows.sort((a, b) => b.lead.total - a.lead.total || simSourceName(a.lead.summary).localeCompare(simSourceName(b.lead.summary), 'es'));
+  const flagged = rows.filter((row) => row.lead.total >= 0.15).length;
+  const warned = rows.filter((row) => row.list.some((r) => r.summary.notes.length)).length;
   const latest = reports.reduce((at, r) => (r.analyzedAt > at ? r.analyzedAt : at), '');
   const common = reports.filter((r) => r.summary.commonShare > 0);
   const commonAvg = common.reduce((sum, r) => sum + r.summary.commonShare, 0) / (common.length || 1);
-  const rows = order
-    .map((r) => {
+  const html = rows
+    .map(({ lead: r, list }) => {
       const best = r.summary.sources[0];
-      const team = simTeamOf(groups, r.summary.settings?.teams, r.member);
-      const notes = r.summary.notes;
-      return `<tr><td><b>${esc(simName(r.member))}</b>${team ? `<div class="table-subtext">Equipo: ${esc(team.data.title)}</div>` : ''}${courseSections().length ? `<div class="table-subtext">${esc(sectionName(current.members.find((m) => m.id === r.member)?.section) || 'Sin sección')}</div>` : ''}</td>
+      const notes = [...new Set(list.flatMap((x) => x.summary.notes))];
+      const section = courseSections().length ? sectionName(current.members.find((m) => m.id === r.member)?.section) || 'Sin sección' : '';
+      const who = r.summary.team
+        ? `<b>${esc(r.summary.team)}</b><div class="table-subtext">${esc(simMembersText(list.map((x) => x.member)))}</div>`
+        : `<b>${esc(simName(r.member))}</b>`;
+      const rest = list.slice(1).filter((x) => x.total !== r.total || x.summary.sources.length !== r.summary.sources.length);
+      return `<tr><td>${who}${section ? `<div class="table-subtext">${esc(section)}</div>` : ''}</td>
         <td><div class="sim-score ${simLevel(r.total)}"><span class="sim-bar"><i style="width:${Math.round(r.total * 100)}%"></i></span><b>${simPct(r.total)}</b></div><div class="table-subtext">${simPct(r.literal)} idéntico</div>${r.summary.commonShare ? `<div class="table-subtext">Sin contar ${simPct(r.summary.commonShare)} de formato común</div>` : ''}</td>
-        <td>${best ? `${esc(simName(best.member))} <b>${simPct(best.pct)}</b>${r.summary.sources.length > 1 ? `<div class="table-subtext">y ${r.summary.sources.length - 1} más</div>` : ''}` : '<span class="muted">Ninguna</span>'}</td>
+        <td>${best ? `${esc(simSourceName(best))} <b>${simPct(best.pct)}</b>${best.team ? `<div class="table-subtext">${esc(simMembersText(best.members || [best.member]))}</div>` : ''}${r.summary.sources.length > 1 ? `<div class="table-subtext">y ${r.summary.sources.length - 1} más</div>` : ''}` : '<span class="muted">Ninguna</span>'}</td>
         <td>${notes.length ? `<ul class="sim-warn">${notes.map((w) => `<li>${esc(w)}</li>`).join('')}</ul>` : '<span class="muted">—</span>'}</td>
-        <td class="sim-actions"><button type="button" class="table-link" data-simr-open="${esc(r.submission)}">Ver informe →</button>${best ? `<button type="button" class="text-btn" data-sim-compare="${esc(r.submission)}:${esc(best.submission)}">Cotejar</button>` : ''}</td></tr>`;
+        <td class="sim-actions"><button type="button" class="table-link" data-simr-open="${esc(r.submission)}">Ver informe →</button>${best ? `<button type="button" class="text-btn" data-simr-side="${esc(r.submission)}">Lado a lado</button>` : ''}${
+          rest.length ? `<div class="table-subtext sim-rest">Otros informes del equipo: ${rest.map((x) => `<button type="button" class="text-btn" data-simr-open="${esc(x.submission)}">${esc(simName(x.member))} · ${simPct(x.total)}</button>`).join(' ')}</div>` : ''
+        }</td></tr>`;
     })
     .join('');
-  return `<div class="sim-summary"><span><b>${reports.length}</b> entregas analizadas</span><span><b>${flagged}</b> con 15 % o más</span>${warned ? `<span><b>${warned}</b> con avisos</span>` : ''}${latest ? `<span class="muted">Analizado ${esc(fmt(latest))}</span>` : ''}</div>
+  const teams = rows.filter((row) => row.lead.summary.team).length;
+  return `<div class="sim-summary"><span><b>${rows.length}</b> ${rows.length === 1 ? 'trabajo analizado' : 'trabajos analizados'}${teams ? ` (${teams} de equipo)` : ''}</span><span class="muted">${reports.length} entregas</span><span><b>${flagged}</b> con 15 % o más</span>${warned ? `<span><b>${warned}</b> con avisos</span>` : ''}${latest ? `<span class="muted">Analizado ${esc(fmt(latest))}</span>` : ''}</div>
     ${common.length ? `<p class="sim-common">Se quitó el texto que comparten muchas entregas (el formato de la práctica, una plantilla o la marca de agua de un escaneo): en promedio, ${simPct(commonAvg)} de cada entrega. Lo que queda es lo que cada quien escribió.</p>` : ''}
     ${simState.saving ? `<p class="error">${esc(simState.saving)}</p>` : ''}
-    <div class="table-wrap keep-table"><table class="sim-table"><caption class="sr-only">Similitud de cada entrega con las demás</caption><thead><tr><th scope="col">Alumno</th><th scope="col">Similitud total</th><th scope="col">Mayor coincidencia</th><th scope="col">Avisos</th><th scope="col">Informe</th></tr></thead><tbody>${rows}</tbody></table></div>
-    <div id="simCompare">${simState.compare && simState.live ? simCompareHtml() : ''}</div>`;
-}
-
-function simCompareHtml() {
-  const { entries, docs, result } = simState.live;
-  const [me, other] = simState.compare;
-  const view = simPairView(result, me, other);
-  const source = result.docs[me].sources.find((s) => s.doc === other);
-  const back = result.docs[other].sources.find((s) => s.doc === me);
-  const options = result.docs[me].sources.map((s) => `<option value="${s.doc}" ${s.doc === other ? 'selected' : ''}>${esc(simName(entries[s.doc].member))} · ${simPct(s.pct)}</option>`).join('');
-  return `<section class="sim-compare" aria-label="Cotejo de dos entregas">
-    <div class="panel-head"><h2>${esc(simName(entries[me].member))} y ${esc(simName(entries[other].member))}</h2><button type="button" class="text-btn" data-sim-close>Cerrar cotejo</button></div>
-    <div class="sim-compare-bar"><label>Comparar con <select data-sim-other="${me}">${options}</select></label>
-      <span class="sim-legend"><mark class="sim-lit">Texto idéntico</mark> <mark class="sim-near">Reescritura cercana</mark> <span class="sim-ex">Excluido</span></span></div>
-    <p class="muted">${esc(simName(entries[me].member))}: ${simPct(source?.pct || 0)} de su texto coincide con ${esc(simName(entries[other].member))}. ${esc(simName(entries[other].member))}: ${simPct(back?.pct || 0)} coincide con ${esc(simName(entries[me].member))}. Toca un fragmento resaltado para ver su pareja.</p>
-    <div class="sim-columns">
-      <article class="sim-doc" data-sim-side="mine"><h3>${esc(simName(entries[me].member))}</h3><div class="sim-text">${simHighlightHtml(docs[me], view.mine, view.frags, 'mine')}</div></article>
-      <article class="sim-doc" data-sim-side="theirs"><h3>${esc(simName(entries[other].member))}</h3><div class="sim-text">${simHighlightHtml(docs[other], view.theirs, view.frags, 'theirs')}</div></article>
-    </div></section>`;
+    <div class="table-wrap keep-table"><table class="sim-table"><caption class="sr-only">Similitud de cada trabajo con los demás</caption><thead><tr><th scope="col">Equipo o alumno</th><th scope="col">Similitud total</th><th scope="col">Mayor coincidencia</th><th scope="col">Avisos</th><th scope="col">Informe</th></tr></thead><tbody>${html}</tbody></table></div>`;
 }
 
 function renderSimilarity() {
@@ -866,36 +900,24 @@ function renderSimilarity() {
     return renderTasks();
   }
   const count = simSubmissions(t).length;
-  if (simState.task !== t.id || simCompareRequest) {
+  if (simState.task !== t.id) {
     // Al abrir la pantalla se muestran los informes guardados; si faltan o alguna entrega cambió, se vuelve a analizar.
-    const sameTask = simState.task === t.id;
-    const pending = simCompareRequest;
-    simCompareRequest = null;
-    if (sameTask && simState.live) {
-      const [a, b] = pending.map((id) => simState.live.entries.findIndex((e) => e.submission.id === id));
-      if (a >= 0 && b >= 0) simState.compare = [a, b];
-      else if (!simState.busy) {
-        simState.pendingCompare = pending;
-        runSimilarity(t);
-      }
-    } else {
-      Object.assign(simState, { task: t.id, live: null, reports: null, compare: null, pendingCompare: pending, saving: '', loading: true, opts: simOptsFor(t, null) });
-      simLoadReports(t).then(
-        (rows) => {
-          if (simState.task !== t.id) return;
-          simState.loading = false;
-          if (rows.length) Object.assign(simState, { reports: rows, opts: simOptsFor(t, rows) });
-          if (count && (!rows.length || !simReportsFresh(t, rows) || simState.pendingCompare)) return runSimilarity(t);
-          simRefresh(t);
-        },
-        (error) => {
-          if (simState.task !== t.id) return;
-          simState.loading = false;
-          toast(error.message);
-          if (count) runSimilarity(t);
-        },
-      );
-    }
+    Object.assign(simState, { task: t.id, reports: null, saving: '', loading: true, opts: simOptsFor(t, null) });
+    simLoadReports(t).then(
+      (rows) => {
+        if (simState.task !== t.id) return;
+        simState.loading = false;
+        if (rows.length) Object.assign(simState, { reports: rows, opts: simOptsFor(t, rows) });
+        if (count && (!rows.length || !simReportsFresh(t, rows))) return runSimilarity(t);
+        simRefresh(t);
+      },
+      (error) => {
+        if (simState.task !== t.id) return;
+        simState.loading = false;
+        toast(error.message);
+        if (count) runSimilarity(t);
+      },
+    );
   }
   const categories = [...new Set(records('group').map((g) => g.data.category).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'es'));
   const o = simState.opts;
@@ -948,38 +970,6 @@ document.addEventListener('click', async (e) => {
   } catch (error) {
     return toast(error.message);
   }
-  const compare = e.target.closest('[data-sim-compare]');
-  if (compare) {
-    const ids = compare.dataset.simCompare.split(':');
-    const [a, b] = ids.map((id) => simState.live?.entries.findIndex((x) => x.submission.id === id) ?? -1);
-    if (a < 0 || b < 0) {
-      // Los informes guardados no traen el texto de las dos entregas: se vuelve a leer y comparar.
-      simState.pendingCompare = ids;
-      const t = find(simState.task);
-      return t && runSimilarity(t);
-    }
-    simState.compare = [a, b];
-    document.getElementById('simCompare').innerHTML = simCompareHtml();
-    return document.getElementById('simCompare').scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }
-  if (e.target.closest('[data-sim-close]')) {
-    simState.compare = null;
-    return (document.getElementById('simCompare').innerHTML = '');
-  }
-  const mark = e.target.closest('.sim-compare mark[data-sim-frag]');
-  if (mark) {
-    const side = mark.closest('[data-sim-side]').dataset.simSide === 'mine' ? 'theirs' : 'mine';
-    const twin = document.querySelector(`.sim-compare [data-sim-side="${side}"] mark[data-sim-frag="${mark.dataset.simFrag}"]`);
-    document.querySelectorAll('.sim-compare mark.is-active').forEach((m) => m.classList.remove('is-active'));
-    document.querySelectorAll(`.sim-compare mark[data-sim-frag="${mark.dataset.simFrag}"]`).forEach((m) => m.classList.add('is-active'));
-    twin?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  }
-});
-document.addEventListener('change', (e) => {
-  const other = e.target.closest('[data-sim-other]');
-  if (!other) return;
-  simState.compare = [Number(other.dataset.simOther), Number(other.value)];
-  document.getElementById('simCompare').innerHTML = simCompareHtml();
 });
 document.addEventListener('submit', (e) => {
   if (e.target.id !== 'simOptions') return;

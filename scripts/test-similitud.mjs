@@ -95,6 +95,20 @@ assert.equal(commonRow.summary.settings.common, false);
 assert.equal(commonRow.data.excluded[0][2], 'p');
 await call('docente', '/api/similarity', { course: c, task: task.id, reports: [report(anaSub, { data: { ...report(anaSub).data, excluded: [[3, 4, 'x']] } })] }, 400);
 checks += 3;
+// 12.87: fuentes por equipo y pareja de cada bloque en la otra entrega.
+const teamReport = report(anaSub, {
+  summary: { ...report(anaSub).summary, format: 2, unit: anaSub.id, team: 'Mesa 1', sources: [{ ...report(anaSub).summary.sources[0], members: [memberOf(betoSub.id)], team: 'Mesa 2' }] },
+  data: { ...report(anaSub).data, v: 2, blocks: [[0, 0, 2, 1, 'El reporte', 0, 0, 3]], others: [{ submission: betoSub.id, hash: 'h.1', words: 4 }] },
+});
+await call('docente', '/api/similarity', { course: c, task: task.id, reports: [teamReport] });
+const teamRow = (await call('docente', `/api/similarity/report?course=${c}&submission=${anaSub.id}`)).report;
+assert.equal(teamRow.summary.format, 2);
+assert.equal(teamRow.summary.sources[0].team, 'Mesa 2');
+assert.equal(JSON.stringify(teamRow.data.blocks[0]), JSON.stringify([0, 0, 2, 1, 'El reporte', 0, 0, 3]));
+assert.equal(teamRow.data.others[0].submission, betoSub.id);
+await call('docente', '/api/similarity', { course: c, task: task.id, reports: [{ ...teamReport, data: { ...teamReport.data, blocks: [[0, 0, 2, 1, '', 0, 2, 9]] } }] }, 400);
+await call('docente', '/api/similarity', { course: c, task: task.id, reports: [{ ...teamReport, data: { ...teamReport.data, blocks: [[0, 0, 2, 1, '', 3, 0, 1]] } }] }, 400);
+checks += 6;
 // Volver a analizar reemplaza el informe.
 await call('docente', '/api/similarity', { course: c, task: task.id, reports: [report(anaSub, { version: 'v2', total: 0.05 })] });
 list = (await call('docente', '/api/similarity?course=' + c + '&task=' + task.id)).reports;
@@ -112,7 +126,7 @@ const context = vm.createContext({
   esc: (s) => String(s ?? '').replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch]),
 });
 vm.runInContext(fs.readFileSync(new URL('../src/public/similitud.js', import.meta.url), 'utf8'), context);
-const { simPrepare, simAnalyze, simHighlightHtml, simPairView, simCanon, simPickTeamCategory, simTeamOf, simSkipper, simBuildReports, simReportView, simHash, simVersionOf, simUnits, simExcludeCommon } = context;
+const { simPrepare, simAnalyze, simPairView, simCanon, simPickTeamCategory, simTeamOf, simSkipper, simBuildReports, simReportView, simHash, simVersionOf, simUnits, simExcludeCommon } = context;
 const analyze = async (texts, opts = {}) => {
   const docs = texts.map((t) => simPrepare(t, { minRun: 8, ...opts }));
   return { docs, result: await simAnalyze(docs, { minRun: 8, ...opts }) };
@@ -292,13 +306,39 @@ const lab = await simAnalyze(mesa, { minRun: 8, skip: (i, j) => simTeamOf(groups
 assert.equal(JSON.stringify(lab.docs[0].sources.map((x) => x.doc)), '[2]', 'Mesa 1 no se compara entre sí, sí con otra mesa');
 checks += 7;
 
-// Resaltado: escapa el texto y empareja los fragmentos de ambos lados.
-r = await analyze([`<script>alert(1)</script> ${original}`, original]);
-const view = simPairView(r.result, 0, 1);
-const html = simHighlightHtml(r.docs[0], view.mine, view.frags, 'mine');
-assert.ok(!html.includes('<script>') && html.includes('&lt;script&gt;'), 'El texto del alumno se escapa');
-assert.match(html, /<mark class="sim-lit" data-sim-frag="0"/);
-assert.match(simHighlightHtml(r.docs[1], view.theirs, view.frags, 'theirs'), /data-sim-frag="0"/);
+// Fuentes por equipo (12.87): si una entrega coincide con tres integrantes de otro equipo, es una sola fuente, y cada
+// bloque sabe dónde está su pareja en el otro trabajo.
+const robo = `${original} ${distinto}`;
+const equipos = [robo, `${original} Agregamos una conclusión propia sobre la evaluación del grupo de laboratorio.`, original, `${original} ${pendulo()}`, propio];
+r = await analyze(equipos);
+const teamSkip = (i, j) => i >= 1 && i <= 3 && j >= 1 && j <= 3; // 1, 2 y 3 son la Mesa 5
+const teamItems = equipos.map((_, i) => ({ submission: 's' + i, member: 'm' + i, version: 'v', team: i >= 1 && i <= 3 ? 'Mesa 5' : '' }));
+const teamReports = simBuildReports(teamItems, r.docs, r.result, { skip: teamSkip });
+const fuentes = teamReports[0].summary.sources;
+assert.equal(fuentes.length, 1, 'Los tres integrantes de la Mesa 5 son una sola fuente');
+assert.equal(fuentes[0].team, 'Mesa 5');
+assert.equal(JSON.stringify([...fuentes[0].members].sort()), '["m1","m2","m3"]');
+assert.ok(Math.abs(fuentes[0].pct - r.result.docs[0].sources[0].pct) < 0.02, 'El porcentaje del equipo es la unión de sus integrantes');
+assert.equal(teamReports[1].summary.unit, teamReports[3].summary.unit, 'Los integrantes comparten unidad (un renglón en la tabla)');
+assert.notEqual(teamReports[0].summary.unit, teamReports[1].summary.unit);
+assert.equal(teamReports[1].summary.skipped, 2);
+assert.equal(teamReports[0].summary.compared, 2, 'Comparada con 2 trabajos: la Mesa 5 y el alumno sin equipo');
+const pareja = teamReports[0].data.blocks.find((b) => b.length === 8);
+const otra = teamReports[0].data.others[pareja[5]];
+const otraDoc = r.docs[Number(otra.submission.slice(1))];
+assert.equal(otra.hash, simHash(equipos[Number(otra.submission.slice(1))]));
+assert.ok(pareja[7] <= otraDoc.n && otraDoc.text.slice(otraDoc.tokens[pareja[6]].s, otraDoc.tokens[pareja[7] - 1].e).includes('evaluación formativa'), 'La pareja apunta al texto copiado');
+checks += 10;
+
+// El visor (similitud-informe.js) escapa el texto del alumno.
+vm.runInContext(fs.readFileSync(new URL('../src/public/similitud-informe.js', import.meta.url), 'utf8'), Object.assign(context, { current: { members: [], files: [] }, simName: (id) => 'Alumno ' + id }));
+const malicioso = `<script>alert(1)</script> ${original}`;
+const vistaToks = context.simTokens(malicioso);
+const st = { read: { text: malicioso }, report: { summary: { sources: [{ member: 'm1', team: '<b>Equipo</b>' }] } }, active: null };
+const marcado = context.simrTextHtml(st, [{ s: vistaToks[3].s, e: vistaToks[10].e, m: { src: 0, type: 1, block: 0, label: true } }], { from: 0, to: malicioso.length });
+assert.ok(!marcado.includes('<script>') && marcado.includes('&lt;script&gt;'), 'El texto del alumno se escapa');
+assert.ok(!marcado.includes('<b>Equipo</b>'), 'El nombre del equipo se escapa');
+assert.match(marcado, /<mark class="simr-mark" style="--src:[^"]+" data-simr-mark="0" data-simr-block="0"/);
 checks += 3;
 
 // Rendimiento: 40 entregas de ~1500 palabras en poco tiempo.

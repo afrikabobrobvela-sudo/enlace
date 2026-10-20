@@ -814,26 +814,12 @@ dialog.annotator:not([open]) { display: none; }
 .sim-score.sim-low { color: #2f6b45; }
 .sim-score b { color: var(--ink, #15202b); font-variant-numeric: tabular-nums; }
 .sim-warn { margin: 0; padding-left: 18px; font-size: 13px; color: #7a4b00; }
-.sim-compare { margin-top: 24px; padding-top: 8px; border-top: 2px solid var(--line, #d5dde6); scroll-margin-top: 80px; }
-.sim-compare-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; margin: 8px 0; }
-.sim-compare-bar label { display: flex; align-items: center; gap: 8px; margin: 0; }
-.sim-compare-bar select { width: auto; }
-.sim-legend { display: flex; flex-wrap: wrap; gap: 8px; font-size: 13px; }
-.sim-columns { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-.sim-doc { border: 1px solid var(--line, #d5dde6); border-radius: 12px; background: #fff; min-width: 0; }
-.sim-doc h3 { margin: 0; padding: 10px 14px; border-bottom: 1px solid var(--line, #d5dde6); font-size: 15px; }
-.sim-text { max-height: 70vh; overflow: auto; padding: 12px 14px; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.6; font-size: 15px; }
-mark.sim-lit { background: #ffd7df; color: inherit; border-radius: 3px; box-shadow: inset 0 -2px 0 #d9466a; }
-mark.sim-near { background: #ffefc2; color: inherit; border-radius: 3px; box-shadow: inset 0 -2px 0 #c98a00; }
-.sim-compare mark { cursor: pointer; }
-.sim-compare mark.is-active { outline: 2px solid #0a7383; outline-offset: 1px; }
-.sim-ex { color: var(--ink-faint, #5f6f7e); background: #f1f4f7; border-radius: 3px; }
 @media (max-width: 720px) {
-  .sim-columns { grid-template-columns: 1fr; }
-  .sim-text { max-height: 50vh; }
   .sim-options .primary { margin-left: 0; width: 100%; }
 }
 .sim-actions { white-space: nowrap; }
+.sim-rest { white-space: normal; margin-top: 6px; }
+.sim-rest .text-btn { margin: 0 8px 0 0; font-size: 13px; }
 .sim-common { margin: 0 0 12px; padding: 10px 14px; border-left: 4px solid #56627a; border-radius: var(--radius-sm); background: #f2f4f7; color: var(--ink-soft); max-width: 90ch; }
 .sim-actions .text-btn { margin-left: 10px; }
 
@@ -850,7 +836,7 @@ mark.sim-near { background: #ffefc2; color: inherit; border-radius: 3px; box-sha
 .simr-empty h2 { margin-top: 0; }
 .simr-banner { margin: 0 0 14px; padding: 10px 14px; border-left: 4px solid #b25400; border-radius: var(--radius-sm); background: #fff4e5; color: #5a2d00; }
 .simr-unread { margin: 0 0 14px; padding: 10px 14px 10px 32px; border-radius: var(--radius-sm); background: var(--surface); color: #7a4b00; }
-.simr-part { margin: 18px auto 10px; max-width: 860px; font-size: 15px; font-stretch: 85%; color: var(--ink-soft); overflow-wrap: anywhere; }
+.simr-part { margin: 18px auto 10px; font-weight: 750; max-width: 860px; font-size: 15px; font-stretch: 85%; color: var(--ink-soft); overflow-wrap: anywhere; }
 .simr-part:first-of-type { margin-top: 0; }
 .simr-page { position: relative; max-width: 860px; margin: 0 auto 16px; background: #fff; box-shadow: 0 1px 3px rgba(17, 26, 46, 0.18), 0 6px 18px rgba(17, 26, 46, 0.08); }
 .simr-pdf { width: 100%; }
@@ -942,7 +928,24 @@ mark.sim-near { background: #ffefc2; color: inherit; border-radius: 3px; box-sha
 .simr-chip.sim-low { background: #2f6b45; }
 .simr-chip.is-stale { outline: 2px dashed #8f5300; outline-offset: 2px; }
 
+/* Lado a lado (12.87): el trabajo del alumno y el de la fuente, cada uno con su propio desplazamiento. */
+.simr.is-split { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-areas: 'bar bar' 'mine theirs'; gap: 14px; }
+.simr-splitbar { grid-area: bar; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; padding: 12px 16px; border: 1px solid var(--line); border-left: 4px solid var(--src); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow-sm); }
+.simr-splitbar label { display: flex; align-items: center; gap: 8px; margin: 0; font-weight: 700; }
+.simr-splitbar select { width: auto; max-width: 100%; }
+.simr-split-help { color: var(--ink-soft); font-size: 13px; }
+.simr-splitbar .secondary { margin-left: auto; }
+.simr-pane { min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+.simr-pane:nth-of-type(1) { grid-area: mine; }
+.simr-pane:nth-of-type(2) { grid-area: theirs; }
+.simr-pane-title { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; margin: 0; font-size: 18px; font-stretch: 80%; }
+.simr-pane-title small { font-size: 13px; font-weight: 500; font-stretch: 100%; color: var(--ink-soft); }
+.simr-pane-title .simr-num { align-self: center; min-width: 22px; height: 22px; border-radius: 11px; font-size: 12px; vertical-align: 0; }
+.simr-pane .simr-doc { max-height: calc(100vh - 230px); min-height: 360px; overflow: auto; overscroll-behavior: contain; padding: 14px; }
 @media (max-width: 960px) {
+  .simr.is-split { grid-template-columns: minmax(0, 1fr); grid-template-areas: 'bar' 'mine' 'theirs'; }
+  .simr-pane .simr-doc { max-height: 70vh; }
+  .simr-splitbar .secondary { margin-left: 0; }
   .simr { grid-template-columns: minmax(0, 1fr); grid-template-areas: 'side' 'doc'; }
   .simr-side { position: static; max-height: none; }
 }

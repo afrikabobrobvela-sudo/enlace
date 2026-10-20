@@ -47,8 +47,8 @@ async function simSaveReports(t, reports) {
   simReportsCache.set(current.course.id + ':' + t.id, { at: Date.now(), promise: Promise.resolve(rows) });
 }
 
-/** Informes guardados antes de 12.85 (sin la opción de texto común): el análisis de ahora es distinto. */
-const simReportsOld = (rows) => rows.some((r) => !('common' in (r.summary?.settings || {})));
+/** Informes guardados con un detector anterior (12.84–12.86: sin texto común o con fuentes por integrante, no por equipo). */
+const simReportsOld = (rows) => rows.some((r) => (r.summary?.format || 1) < 2);
 
 /** ¿Todas las entregas de la actividad tienen informe de su contenido actual, hecho con el detector de ahora? */
 function simReportsFresh(t, rows) {
@@ -80,7 +80,7 @@ function simBadgeInner(t, id, rows, fresh) {
     return `<div class="simr-badge-empty"><div><b>Informe de similitud</b><small>Esta entrega todavía no se compara con las demás de la actividad.</small></div><button type="button" class="secondary" data-simr-generate="${esc(t.id)}">Generar informe</button></div>`;
   const best = r.summary.sources[0];
   const stale = s && r.version !== simVersionOf(s);
-  return `<button type="button" class="simr-badge-card" data-simr-open="${esc(id)}"><span class="simr-badge-pct ${simLevel(r.total)}">${simPct(r.total)}</span><span class="simr-badge-text"><b>Informe de similitud de Enlace</b><small>${best ? `Mayor coincidencia: ${esc(simName(best.member))} (${simPct(best.pct)})` : 'Sin coincidencias con otras entregas'}</small></span><span class="simr-badge-go" aria-hidden="true"></span></button>${
+  return `<button type="button" class="simr-badge-card" data-simr-open="${esc(id)}"><span class="simr-badge-pct ${simLevel(r.total)}">${simPct(r.total)}</span><span class="simr-badge-text"><b>Informe de similitud de Enlace</b><small>${best ? `Mayor coincidencia: ${esc(simSourceName(best))} (${simPct(best.pct)})` : 'Sin coincidencias con otras entregas'}</small></span><span class="simr-badge-go" aria-hidden="true"></span></button>${
     stale || !fresh ? `<p class="simr-badge-stale">${stale ? 'La entrega cambió después del análisis.' : simReportsOld(rows) ? 'El detector mejoró desde este análisis.' : 'Hay entregas nuevas o corregidas desde el análisis.'} <button type="button" class="text-btn" data-simr-generate="${esc(t.id)}">Actualizar</button></p>` : ''
   }`;
 }
@@ -152,6 +152,8 @@ function renderSimReport() {
   simrMount(t, s);
 }
 
+let simrSplitRequest = null; // fuente que se abre lado a lado al cargar el informe (botón «Lado a lado» de la tabla)
+
 async function simrMount(t, s) {
   const root = $('#simReport');
   const show = (html) => {
@@ -178,8 +180,9 @@ async function simrMount(t, s) {
   }
   const viewer = {
     pdfs: read.parts.map((p) => p.pdf).filter(Boolean),
+    observers: [],
     destroy() {
-      this.observer?.disconnect();
+      this.observers.forEach((o) => o.disconnect());
       this.watch?.disconnect();
       this.pdfs.forEach((pdf) => pdf.destroy());
       this.pdfs = [];
@@ -196,19 +199,124 @@ async function simrMount(t, s) {
   });
   viewer.watch.observe($('#main'), { childList: true });
   const tokens = simTokens(read.text);
-  const st = { t, s, report, read, tokens, matches: simHash(read.text) === report.data.hash && tokens.length === report.data.words, hidden: new Set(), focus: null, overlap: false, open: null, active: null };
+  const st = { t, s, report, read, tokens, matches: simHash(read.text) === report.data.hash && tokens.length === report.data.words, hidden: new Set(), focus: null, overlap: false, open: null, active: null, split: null };
   viewer.state = st;
-  const stale = report.version !== simVersionOf(s);
   root.removeAttribute('aria-busy');
-  root.innerHTML = `<section class="simr-side" id="simrSide" aria-label="Similitud y fuentes"></section>
-    <div class="simr-doc" id="simrDoc">
-      ${stale ? `<p class="simr-banner">La entrega cambió después del análisis. <button type="button" class="text-btn" data-simr-generate="${esc(t.id)}">Volver a analizar</button></p>` : ''}
-      ${!st.matches && !stale ? `<p class="simr-banner">El texto que se leyó ahora no es igual al analizado, así que no se marcan las coincidencias en el documento. <button type="button" class="text-btn" data-simr-generate="${esc(t.id)}">Volver a analizar</button></p>` : ''}
-      ${read.notes.length ? `<ul class="simr-unread">${read.notes.map((n) => `<li>${esc(n)}</li>`).join('')}</ul>` : ''}
-      ${simrDocHtml(st)}
-    </div>`;
+  const k = simrSplitRequest;
+  simrSplitRequest = null;
+  if (k !== null && report.summary.sources[k]) return simrOpenSplit(st, k);
+  simrLayout(st);
+}
+
+function simrBanners(st) {
+  const stale = st.report.version !== simVersionOf(st.s);
+  const again = `<button type="button" class="text-btn" data-simr-generate="${esc(st.t.id)}">Volver a analizar</button>`;
+  return `${stale ? `<p class="simr-banner">La entrega cambió después del análisis. ${again}</p>` : ''}
+    ${!st.matches && !stale ? `<p class="simr-banner">El texto que se leyó ahora no es igual al analizado, así que no se marcan las coincidencias en el documento. ${again}</p>` : ''}
+    ${st.read.notes.length ? `<ul class="simr-unread">${st.read.notes.map((n) => `<li>${esc(n)}</li>`).join('')}</ul>` : ''}`;
+}
+
+/** Dibuja el informe: el documento con la columna de fuentes, o (12.87) los dos trabajos lado a lado. */
+function simrLayout(st) {
+  const root = $('#simReport');
+  if (!root || !simrViewer) return;
+  simrViewer.observers.forEach((o) => o.disconnect());
+  simrViewer.observers = [];
+  root.classList.toggle('is-split', Boolean(st.split));
+  if (!st.split) {
+    root.innerHTML = `<section class="simr-side" id="simrSide" aria-label="Similitud y fuentes"></section>
+      <div class="simr-doc" id="simrDoc">${simrBanners(st)}${simrDocHtml(st)}</div>`;
+    st.root = $('#simrDoc');
+    simrPaint(st);
+    simrObservePages(st);
+    return;
+  }
+  const sp = st.split;
+  const sources = st.report.summary.sources;
+  const src = sources[sp.k];
+  const options = sources.map((x, i) => `<option value="${i}" ${i === sp.k ? 'selected' : ''}>Fuente ${i + 1}: ${esc(simSourceName(x))} · ${simPct(x.pct)}</option>`).join('');
+  const choices = sp.choices.length > 1 ? `<label>Trabajo de <select data-simr-split-other>${sp.choices.map((c) => `<option value="${c.index}" ${c.index === sp.other ? 'selected' : ''}>${esc(simName(c.member))}</option>`).join('')}</select></label>` : '';
+  root.innerHTML = `<div class="simr-splitbar" style="--src:${simColor(sp.k)}">
+      <label>Lado a lado con <select data-simr-split-source>${options}</select></label>${choices}
+      <span class="simr-split-help">Toca una coincidencia para ver su pareja en el otro trabajo.</span>
+      <button type="button" class="secondary" data-simr-unsplit>Volver al informe</button>
+    </div>
+    <section class="simr-pane" aria-label="Trabajo de ${esc(simName(st.s.data.member))}">
+      <h2 class="simr-pane-title">${esc(simName(st.s.data.member))}<small>${simPct(src.pct)} de su texto coincide con la fuente ${sp.k + 1}</small></h2>
+      <div class="simr-doc" id="simrDoc">${simrBanners(st)}${simrDocHtml(st)}</div>
+    </section>
+    <section class="simr-pane" aria-label="Trabajo de ${esc(simName(sp.member))}">
+      <h2 class="simr-pane-title" style="--src:${simColor(sp.k)}"><span class="simr-num">${sp.k + 1}</span>${esc(simName(sp.member))}<small>${esc(src.team ? `${src.team} · ${simMembersText(src.members || [src.member])}` : 'Entrega de un compañero')}</small></h2>
+      <div class="simr-doc" id="simrOther">${sp.pane ? simrOtherBanner(st) + simrDocHtml(sp.pane) : '<p class="simr-loading" role="status">Abriendo el otro trabajo…</p>'}</div>
+    </section>`;
+  st.root = $('#simrDoc');
   simrPaint(st);
-  simrObservePages(st, viewer);
+  simrObservePages(st, st.root);
+  if (sp.pane) {
+    sp.pane.root = $('#simrOther');
+    simrPaintOther(st);
+    simrObservePages(sp.pane, sp.pane.root);
+  }
+}
+
+function simrOtherBanner(st) {
+  const sp = st.split;
+  if (sp.other < 0) return '<p class="simr-banner">Este informe es de una versión anterior del detector: vuelve a analizar en «Similitud» para marcar las coincidencias en los dos trabajos.</p>';
+  if (!sp.pane.matches) return '<p class="simr-banner">Este trabajo cambió después del análisis, así que no se marcan sus coincidencias.</p>';
+  return sp.pane.read.notes.length ? `<ul class="simr-unread">${sp.pane.read.notes.map((n) => `<li>${esc(n)}</li>`).join('')}</ul>` : '';
+}
+
+/**
+ * Abre los dos trabajos lado a lado (12.87): a la izquierda el del alumno con solo los bloques de la fuente `k`, a la
+ * derecha el de la fuente en su formato original con la pareja de cada bloque. Si la fuente es un equipo con trabajos
+ * distintos, `otherIndex` elige cuál (por omisión, el que tiene más bloques).
+ */
+async function simrOpenSplit(st, k, otherIndex = null) {
+  const others = st.report.data.others || [];
+  const counts = new Map();
+  for (const b of st.report.data.blocks) if (b[0] === k && b.length === 8) counts.set(b[5], (counts.get(b[5]) || 0) + 1);
+  const memberOf = (id) => records('submission').find((x) => x.id === id)?.data.member;
+  let choices = [...counts.keys()].sort((a, b) => counts.get(b) - counts.get(a)).map((index) => ({ index, submission: others[index].submission, member: memberOf(others[index].submission) }));
+  const src = st.report.summary.sources[k];
+  if (!choices.length) choices = [{ index: -1, submission: src.submission, member: src.member }];
+  const pick = choices.find((c) => c.index === otherIndex) || choices[0];
+  if (st.split?.pane) simrDropPane(st.split.pane);
+  if (!st.split) st.prevFocus = st.focus;
+  Object.assign(st, { focus: k, open: k, active: null, split: { k, other: pick.index, choices, member: pick.member, submission: pick.submission, pane: null } });
+  simrLayout(st);
+  const s2 = records('submission').find((x) => x.id === pick.submission);
+  const box = () => document.getElementById('simrOther');
+  if (!s2) return box() && (box().innerHTML = '<p class="muted">Esa entrega ya no está disponible.</p>');
+  let read;
+  try {
+    read = await simSubmissionText(s2, true);
+  } catch (error) {
+    return box() && (box().innerHTML = `<p class="error">No se pudo leer ese trabajo: ${esc(error.message)}</p>`);
+  }
+  const pdfs = read.parts.map((p) => p.pdf).filter(Boolean);
+  // Si mientras se leía se cambió de fuente o se salió del informe, este trabajo ya no se muestra.
+  if (simrViewer?.state !== st || st.split?.submission !== pick.submission || st.split.k !== k || !box()) return pdfs.forEach((pdf) => pdf.destroy());
+  simrViewer.pdfs.push(...pdfs);
+  const tokens = simTokens(read.text);
+  const other = others[pick.index];
+  st.split.pane = { read, tokens, matches: Boolean(other) && simHash(read.text) === other.hash && tokens.length === other.words, report: st.report, active: null };
+  box().innerHTML = simrOtherBanner(st) + simrDocHtml(st.split.pane);
+  st.split.pane.root = box();
+  simrPaintOther(st);
+  simrObservePages(st.split.pane, st.split.pane.root);
+}
+
+function simrDropPane(pane) {
+  const pdfs = pane.read.parts.map((p) => p.pdf).filter(Boolean);
+  if (simrViewer) simrViewer.pdfs = simrViewer.pdfs.filter((pdf) => !pdfs.includes(pdf));
+  pdfs.forEach((pdf) => pdf.destroy());
+}
+
+function simrCloseSplit(st) {
+  if (st.split?.pane) simrDropPane(st.split.pane);
+  st.split = null;
+  st.focus = st.prevFocus ?? null;
+  simrLayout(st);
 }
 
 function simrDocHtml(st) {
@@ -216,7 +324,7 @@ function simrDocHtml(st) {
   return st.read.parts
     .map((part, k) => {
       const file = part.kind === 'file' ? current.files.find((f) => f.id === part.id) : null;
-      const head = `<h2 class="simr-part">${esc(part.kind === 'body' ? 'Texto escrito en Enlace' : file?.name || 'Archivo')}</h2>`;
+      const head = `<h3 class="simr-part">${esc(part.kind === 'body' ? 'Texto escrito en Enlace' : file?.name || 'Archivo')}</h3>`;
       if (part.from >= st.read.text.length) return head + '<p class="muted">El análisis llega hasta aquí (el texto de la entrega es muy largo).</p>';
       if (!part.pdf) return `${head}<div class="simr-page simr-textpage"><div class="simr-text" data-part="${k}"></div></div>`;
       const pages = part.pages.slice(0, SIMR_MAX_PAGES);
@@ -231,26 +339,27 @@ function simrDocHtml(st) {
     .join('');
 }
 
-/** Dibuja las páginas del PDF cuando se acercan a la pantalla (las marcas ya están encima). */
-function simrObservePages(st, viewer) {
-  const slots = [...document.querySelectorAll('#simrDoc .simr-pdf')];
-  if (!slots.length) return;
-  viewer.observer = new IntersectionObserver(
+/** Dibuja las páginas del PDF cuando se acercan a la vista (las marcas ya están encima). `scroller`: el panel que se desplaza. */
+function simrObservePages(pane, scroller = null) {
+  const slots = [...pane.root.querySelectorAll('.simr-pdf')];
+  if (!slots.length || !simrViewer) return;
+  const observer = new IntersectionObserver(
     (entries) => {
       for (const entry of entries) {
         if (!entry.isIntersecting || entry.target.dataset.drawn) continue;
         entry.target.dataset.drawn = '1';
-        viewer.observer.unobserve(entry.target);
-        simrDrawPage(st, entry.target).catch(() => (entry.target.querySelector('.simr-canvas').textContent = 'No se pudo dibujar esta página.'));
+        observer.unobserve(entry.target);
+        simrDrawPage(pane, entry.target).catch(() => (entry.target.querySelector('.simr-canvas').textContent = 'No se pudo dibujar esta página.'));
       }
     },
-    { rootMargin: '900px 0px' },
+    { root: scroller, rootMargin: '900px 0px' },
   );
-  slots.forEach((slot) => viewer.observer.observe(slot));
+  slots.forEach((slot) => observer.observe(slot));
+  simrViewer.observers.push(observer);
 }
 
-async function simrDrawPage(st, slot) {
-  const part = st.read.parts[Number(slot.dataset.part)];
+async function simrDrawPage(pane, slot) {
+  const part = pane.read.parts[Number(slot.dataset.part)];
   if (!part?.pdf || !simrViewer?.pdfs.includes(part.pdf)) return;
   const page = await part.pdf.getPage(Number(slot.dataset.page));
   const ratio = Math.min(2, window.devicePixelRatio || 1);
@@ -292,7 +401,7 @@ const simrPlace = (r) => `left:${r.left.toFixed(3)}%;top:${r.top.toFixed(3)}%;wi
 function simrSpans(st, view) {
   if (!st.matches) return [];
   const { tokens } = st;
-  const spans = view.marks.map((m, i) => ({ s: tokens[m.from].s, e: tokens[m.to - 1].e, m, i }));
+  const spans = view.marks.map((m) => ({ s: tokens[m.from].s, e: tokens[m.to - 1].e, m }));
   for (const [from, to, code] of st.report.data.excluded) spans.push({ s: tokens[from].s, e: tokens[to - 1].e, ex: code });
   return spans.sort((a, b) => a.s - b.s);
 }
@@ -301,7 +410,7 @@ function simrSpans(st, view) {
 function simrMarkAttrs(st, x, box = '') {
   const source = st.report.summary.sources[x.m.src];
   const cls = `${box ? 'simr-box ' : ''}simr-mark${x.m.type === 2 ? ' is-near' : ''}${st.active === x.m.block ? ' is-active' : ''}`;
-  return `class="${cls}" style="${box ? box + ';' : ''}--src:${simColor(x.m.src)}" data-simr-mark="${x.m.src}" data-simr-block="${x.m.block}" title="Fuente ${x.m.src + 1}: ${esc(simName(source?.member))} · ${x.m.type === 1 ? 'texto idéntico' : 'reescritura cercana'}"`;
+  return `class="${cls}" style="${box ? box + ';' : ''}--src:${simColor(x.m.src)}" data-simr-mark="${x.m.src}" data-simr-block="${x.m.block}" title="Fuente ${x.m.src + 1}: ${esc(source ? simSourceName(source) : '')} · ${x.m.type === 1 ? 'texto idéntico' : 'reescritura cercana'}"`;
 }
 
 function simrTextHtml(st, spans, part) {
@@ -370,26 +479,46 @@ function simrView(st) {
   return simReportView(st.report.data, st.report.summary.sources.length, { hidden: st.hidden, focus: st.focus });
 }
 
-/** Vuelve a dibujar las marcas del documento y la columna de fuentes. */
-function simrPaint(st) {
-  const view = simrView(st);
-  const spans = simrSpans(st, view);
-  st.read.parts.forEach((part, k) => {
+/** Marcas de un documento (el del alumno o el de la fuente) en su lugar: texto o páginas del PDF. */
+function simrPaintPane(pane, spans) {
+  pane.read.parts.forEach((part, k) => {
     if (part.pdf) {
-      const marks = simrPdfMarks(st, spans, part);
-      document.querySelectorAll(`#simrDoc .simr-overlay[data-part="${k}"]`).forEach((el) => (el.innerHTML = marks.get(Number(el.dataset.page)) || ''));
+      const marks = simrPdfMarks(pane, spans, part);
+      pane.root.querySelectorAll(`.simr-overlay[data-part="${k}"]`).forEach((el) => (el.innerHTML = marks.get(Number(el.dataset.page)) || ''));
     } else {
-      const box = document.querySelector(`#simrDoc .simr-text[data-part="${k}"]`);
-      if (box) box.innerHTML = simrTextHtml(st, spans, part);
+      const box = pane.root.querySelector(`.simr-text[data-part="${k}"]`);
+      if (box) box.innerHTML = simrTextHtml(pane, spans, part);
     }
   });
+}
+
+/** Vuelve a dibujar las marcas del documento, la columna de fuentes y, lado a lado, el otro trabajo. */
+function simrPaint(st) {
+  const view = simrView(st);
+  simrPaintPane(st, simrSpans(st, view));
   simrPaintSide(st, view);
+  if (st.split) simrPaintOther(st);
+}
+
+/** En el otro trabajo se marca la pareja de cada bloque de la fuente (mismo número de bloque que a la izquierda). */
+function simrPaintOther(st) {
+  const pane = st.split?.pane;
+  if (!pane?.root) return;
+  pane.active = st.active;
+  const spans = !pane.matches
+    ? []
+    : st.report.data.blocks
+        .map((b, i) => [b, i])
+        .filter(([b]) => b[0] === st.split.k && b[5] === st.split.other)
+        .map(([b, i]) => ({ s: pane.tokens[b[6]].s, e: pane.tokens[b[7] - 1].e, m: { src: b[0], type: b[3], block: i, label: true } }))
+        .sort((a, b) => a.s - b.s);
+  simrPaintPane(pane, spans);
 }
 
 function simrPaintSide(st, view = simrView(st)) {
   const side = document.getElementById('simrSide');
   if (!side) return;
-  const { report, t, s } = st;
+  const { report, t } = st;
   const { summary, data } = report;
   const eligible = data.eligible || 0;
   const share = (words) => simPct(eligible ? words / eligible : 0);
@@ -401,11 +530,12 @@ function simrPaintSide(st, view = simrView(st)) {
       const stats = st.overlap || st.hidden.has(k) ? view.own[k] : view.shown[k];
       const open = st.open === k;
       const blocks = data.blocks.map((b, i) => [b, i]).filter(([b]) => b[0] === k);
-      const name = esc(simName(src.member));
+      const name = esc(simSourceName(src));
+      const who = src.team ? simMembersText(src.members || [src.member]) : 'Entrega de un compañero';
       return `<li class="simr-source${st.hidden.has(k) ? ' is-excluded' : ''}${open ? ' is-open' : ''}${st.focus === k ? ' is-focus' : ''}" style="--src:${simColor(k)}">
         <button type="button" class="simr-source-main" data-simr-source="${k}" aria-expanded="${open}">
           <span class="simr-num">${k + 1}</span>
-          <span class="simr-source-text"><b>${name}</b><small>Entrega de un compañero</small><small>${stats.blocks} ${stats.blocks === 1 ? 'bloque de texto' : 'bloques de texto'} · ${stats.words} ${stats.words === 1 ? 'palabra coincidente' : 'palabras coincidentes'}</small></span>
+          <span class="simr-source-text"><b>${name}</b><small>${esc(who)}</small><small>${stats.blocks} ${stats.blocks === 1 ? 'bloque de texto' : 'bloques de texto'} · ${stats.words} ${stats.words === 1 ? 'palabra coincidente' : 'palabras coincidentes'}</small></span>
           <span class="simr-source-pct">${st.hidden.has(k) ? 'Excluida' : share(stats.words)}</span>
         </button>
         <label class="simr-exclude"><input type="checkbox" data-simr-exclude="${k}" ${st.hidden.has(k) ? 'checked' : ''}> Excluir esta fuente</label>
@@ -417,7 +547,7 @@ function simrPaintSide(st, view = simrView(st)) {
                     `<li><button type="button" class="simr-block${st.active === i ? ' is-active' : ''}" data-simr-goto="${i}"><span class="simr-block-head">${b[3] === 1 ? 'Texto idéntico' : 'Reescritura cercana'} · ${b[2] - b[1]} ${b[2] - b[1] === 1 ? 'palabra' : 'palabras'}</span>${b[4] ? `<span class="simr-snippet">En su entrega: «${esc(b[4])}»</span>` : ''}</button></li>`,
                 )
                 .join('')}</ol>
-            <p class="simr-source-links"><button type="button" class="text-btn" data-simr-focus="${k}">${st.focus === k ? 'Marcar todas las fuentes' : 'Marcar solo esta fuente'}</button><button type="button" class="text-btn" data-simr-compare="${esc(t.id)}:${esc(s.id)}:${esc(src.submission)}">Cotejar lado a lado</button><button type="button" class="text-btn" data-simr-open="${esc(src.submission)}">Su informe</button></p>`
+            <p class="simr-source-links"><button type="button" class="text-btn" data-simr-focus="${k}">${st.focus === k ? 'Marcar todas las fuentes' : 'Marcar solo esta fuente'}</button><button type="button" class="text-btn" data-simr-split="${k}">Ver lado a lado</button><button type="button" class="text-btn" data-simr-open="${esc(src.submission)}">Su informe</button></p>`
             : ''
         }
       </li>`;
@@ -426,7 +556,7 @@ function simrPaintSide(st, view = simrView(st)) {
   const notes = summary.notes || [];
   const yes = (on) => (on ? 'excluido' : 'incluido');
   side.innerHTML = `<div class="simr-score ${simLevel(view.total)}"><span class="simr-score-pct">${simPct(view.total)}</span><span class="simr-score-label">Similitud</span></div>
-    <p class="simr-score-sub">${simPct(view.literal)} es texto idéntico. Comparada con ${summary.compared} ${summary.compared === 1 ? 'entrega' : 'entregas'} de la actividad${summary.skipped ? `; no con ${summary.skipped} del mismo equipo` : ''}.</p>
+    <p class="simr-score-sub">${simPct(view.literal)} es texto idéntico. Comparada con ${summary.compared} ${summary.compared === 1 ? 'trabajo' : 'trabajos'} de la actividad${summary.skipped ? `; no con ${summary.skipped === 1 ? 'su compañero' : `sus ${summary.skipped} compañeros`} de equipo` : ''}.</p>
     ${summary.commonShare ? `<p class="simr-side-note">No cuenta el ${simPct(summary.commonShare)} de esta entrega que comparten muchas otras (formato de la práctica, plantilla o marca de agua).</p>` : ''}
     ${st.hidden.size ? `<p class="simr-hidden-note">${st.hidden.size === 1 ? 'Una fuente excluida' : `${st.hidden.size} fuentes excluidas`}. <button type="button" class="text-btn" data-simr-include-all>Incluirlas</button></p>` : ''}
     <div class="simr-side-head"><h2>Fuentes <span class="simr-count">${listed.length}</span></h2>
@@ -450,18 +580,21 @@ function simrGoTo(st, index) {
   if (!block) return;
   st.open = block[0];
   st.active = index;
-  let target = document.querySelector(`#simrDoc [data-simr-block="${index}"]`);
+  let target = st.root.querySelector(`[data-simr-block="${index}"]`);
   if (!target) {
     st.focus = block[0];
     simrPaint(st);
-    target = document.querySelector(`#simrDoc [data-simr-block="${index}"]`);
+    target = st.root.querySelector(`[data-simr-block="${index}"]`);
   } else simrMarkActive(st);
   target?.scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 
 function simrMarkActive(st) {
-  document.querySelectorAll('#simrDoc .is-active').forEach((el) => el.classList.remove('is-active'));
-  document.querySelectorAll(`#simrDoc [data-simr-block="${st.active}"]`).forEach((el) => el.classList.add('is-active'));
+  for (const root of [st.root, st.split?.pane?.root].filter(Boolean)) {
+    root.querySelectorAll('.is-active').forEach((el) => el.classList.remove('is-active'));
+    root.querySelectorAll(`[data-simr-block="${st.active}"]`).forEach((el) => el.classList.add('is-active'));
+  }
+  if (st.split?.pane) st.split.pane.active = st.active;
   simrPaintSide(st);
 }
 
@@ -473,21 +606,23 @@ document.addEventListener('click', (e) => {
     detail = open.dataset.simrOpen;
     return render();
   }
+  const side = e.target.closest('[data-simr-side]');
+  if (side) {
+    simrSplitRequest = 0;
+    section = 'simreport';
+    detail = side.dataset.simrSide;
+    return render();
+  }
   const generate = e.target.closest('[data-simr-generate]');
   if (generate) {
     const t = find(generate.dataset.simrGenerate);
     return t && simGenerate(t);
   }
-  const compare = e.target.closest('[data-simr-compare]');
-  if (compare) {
-    const [task, a, b] = compare.dataset.simrCompare.split(':');
-    simCompareRequest = [a, b];
-    section = 'similarity';
-    detail = task;
-    return render();
-  }
   const st = simrViewer?.state;
   if (!st || !e.target.closest('#simReport')) return;
+  const split = e.target.closest('[data-simr-split]');
+  if (split) return simrOpenSplit(st, Number(split.dataset.simrSplit));
+  if (e.target.closest('[data-simr-unsplit]')) return simrCloseSplit(st);
   const source = e.target.closest('[data-simr-source]');
   if (source) {
     const k = Number(source.dataset.simrSource);
@@ -506,17 +641,23 @@ document.addEventListener('click', (e) => {
     st.hidden.clear();
     return simrPaint(st);
   }
-  const mark = e.target.closest('#simrDoc [data-simr-block]');
+  const mark = e.target.closest('#simrDoc [data-simr-block], #simrOther [data-simr-block]');
   if (mark) {
     st.open = Number(mark.dataset.simrMark);
     st.active = Number(mark.dataset.simrBlock);
     simrMarkActive(st);
-    document.querySelector('#simrSide .simr-block.is-active')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    if (st.split) {
+      // Lado a lado: la pareja en el otro trabajo.
+      const other = mark.closest('#simrOther') ? st.root : st.split.pane?.root;
+      other?.querySelector(`[data-simr-block="${st.active}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    } else document.querySelector('#simrSide .simr-block.is-active')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }
 });
 document.addEventListener('change', (e) => {
   const st = simrViewer?.state;
   if (!st) return;
+  if (e.target.closest('[data-simr-split-source]')) return simrOpenSplit(st, Number(e.target.value));
+  if (e.target.closest('[data-simr-split-other]')) return simrOpenSplit(st, st.split.k, Number(e.target.value));
   const exclude = e.target.closest('[data-simr-exclude]');
   if (exclude) {
     const k = Number(exclude.dataset.simrExclude);
