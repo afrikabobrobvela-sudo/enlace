@@ -2,10 +2,12 @@
 // y guarda aquí una fila por entrega: así la revisión de cada entrega muestra su porcentaje y el informe con las fuentes
 // se abre sin volver a comparar todo. Solo quien enseña los lee y los escribe; el alumno no recibe nada de esto.
 //
-// `summary` (pequeño, va en la lista): { sources: [{ submission, member, pct, literal, words, blocks }], notes, settings,
-// compared, skipped }. `data` (solo en el informe): { v, hash, words, eligible, excluded: [[desde, hasta, motivo]],
-// blocks: [[fuente, desde, hasta, tipo, fragmento]] } en índices de palabra del texto que leyó el navegador; `hash` es la
-// huella de ese texto para no dibujar marcas sobre otro.
+// `summary` (pequeño, va en la lista): { format, unit, team, sources: [{ submission, member, members, team, pct,
+// literal, words, blocks }], notes, settings, compared, skipped, commonShare }. `unit` agrupa a un equipo en la tabla
+// (12.87) y cada fuente es un equipo o una entrega. `data` (solo en el informe): { v, hash, words, eligible,
+// excluded: [[desde, hasta, motivo]], blocks: [[fuente, desde, hasta, tipo, fragmento, otra, desde, hasta]],
+// others: [{ submission, hash, words }] } en índices de palabra del texto que leyó el navegador; `hash` es la huella de
+// ese texto para no dibujar marcas sobre otro, y `otra` señala en `others` la entrega donde está la pareja del bloque.
 import { access, requireTeacher } from './access.js';
 import { all, fail, json, nowIso, one, readJson, run } from './http.js';
 
@@ -15,6 +17,8 @@ const MAX_DATA = 300_000; // por informe
 const MAX_SOURCES = 300;
 const MAX_BLOCKS = 2000;
 const MAX_EXCLUDED = 5000;
+const MAX_OTHERS = 400;
+const MAX_MEMBERS = 60;
 const MAX_WORDS = 500_000;
 const EXCLUDED = new Set(['c', 'b', 'i', 'p']); // cita, bibliografía, instrucciones, texto común a muchas entregas
 
@@ -42,9 +46,14 @@ export function cleanSummary(input) {
   const s = input && typeof input === 'object' ? input : bad();
   const settings = s.settings && typeof s.settings === 'object' ? s.settings : {};
   return {
+    format: int(s.format ?? 1, 10),
+    unit: s.unit === undefined ? '' : text(s.unit),
+    team: short(s.team, 100),
     sources: list(s.sources, MAX_SOURCES).map((x) => ({
       submission: text(x?.submission),
       member: text(x?.member),
+      members: list(x?.members, MAX_MEMBERS).map((m) => text(m)),
+      team: short(x?.team, 100),
       pct: share(x?.pct),
       literal: share(x?.literal),
       words: int(x?.words, MAX_WORDS),
@@ -69,9 +78,10 @@ export function cleanSummary(input) {
 export function cleanData(input, sources) {
   const d = input && typeof input === 'object' ? input : bad();
   const words = int(d.words, MAX_WORDS);
-  const range = (from, to) => int(from, words) < int(to, words) || bad();
+  const range = (from, to, max = words) => int(from, max) < int(to, max) || bad();
+  const others = list(d.others, MAX_OTHERS).map((o) => ({ submission: text(o?.submission), hash: text(o?.hash, 40), words: int(o?.words, MAX_WORDS) }));
   return {
-    v: 1,
+    v: d.v === 2 ? 2 : 1,
     hash: text(d.hash, 40),
     words,
     eligible: int(d.eligible, words),
@@ -81,10 +91,17 @@ export function cleanData(input, sources) {
       return [x[0], x[1], x[2]];
     }),
     blocks: list(d.blocks, MAX_BLOCKS).map((x) => {
-      if (!Array.isArray(x) || (x[3] !== 1 && x[3] !== 2) || !sources) bad();
+      if (!Array.isArray(x) || (x.length !== 5 && x.length !== 8) || (x[3] !== 1 && x[3] !== 2) || !sources) bad();
       range(x[1], x[2]);
-      return [int(x[0], sources - 1), x[1], x[2], x[3], short(x[4], 400)];
+      const block = [int(x[0], sources - 1), x[1], x[2], x[3], short(x[4], 400)];
+      if (x.length === 8) {
+        const other = others[int(x[5], others.length - 1)] || bad();
+        range(x[6], x[7], other.words);
+        block.push(x[5], x[6], x[7]);
+      }
+      return block;
     }),
+    others,
   };
 }
 

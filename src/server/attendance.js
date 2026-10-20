@@ -624,6 +624,30 @@ export const attendanceRoutes = {
     return json({ ok: true });
   },
 
+  // 12.86: el registro con código se abre con una primera lectura rápida; el teléfono del docente sigue afinando y manda
+  // una más precisa. Solo mientras el registro está abierto, y solo si mejora la que había.
+  'POST /api/attendance/checkin/location': async ({ db, user, request }) => {
+    const body = await readJson(request);
+    requireTeacher(await access(db, user, body.course));
+    const session = await sessionOf(db, body.session, body.course);
+    const place = validLocation(body.location);
+    if (!place) fail('Ubicación no válida.');
+    const result = await run(
+      db,
+      `UPDATE aula_sessions SET checkin_lat=?, checkin_lng=?, checkin_accuracy=?
+       WHERE id=? AND course=? AND checkin_mode='code' AND checkin_radius>0 AND checkin_code IS NOT NULL AND checkin_until>?
+         AND (checkin_lat IS NULL OR checkin_accuracy IS NULL OR ?<checkin_accuracy)`,
+      place.lat,
+      place.lng,
+      place.accuracy,
+      session.id,
+      body.course,
+      nowIso(),
+      place.accuracy,
+    );
+    return json({ updated: result.meta.changes > 0 });
+  },
+
   'POST /api/attendance/checkin/close': async (ctx) => {
     const { db, user, request } = ctx;
     const body = await readJson(request);

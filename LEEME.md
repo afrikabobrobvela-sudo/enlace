@@ -5,6 +5,23 @@ No es el código de D2L Brightspace ni una plataforma oficial de la BUAP.
 
 Esta versión se despliega en **tu propia cuenta de Cloudflare** (Workers + D1 + R2, plan gratuito) y ya no depende de ChatGPT Sites.
 
+## Novedades de la versión 12.87 (similitud por equipo y trabajos lado a lado)
+
+- **Un equipo, un renglón.** En la tabla de similitud cada equipo aparece una sola vez, con sus integrantes. Antes salía un renglón por integrante, y cada uno con todas las combinaciones contra los integrantes del otro equipo. El renglón muestra el informe del integrante con más similitud; los de los demás quedan en «Otros informes del equipo».
+- Las **fuentes también van por equipo**: si un trabajo coincide con tres integrantes de la Mesa 5, aparece una sola fuente, «Mesa 5», con el porcentaje de todo lo que coincide con ese equipo.
+- **Lado a lado en formato original.** Con «Lado a lado» (en la tabla o en cada fuente del informe) se ve el trabajo del alumno a la izquierda y el de la fuente a la derecha, los dos como el PDF original y con las mismas coincidencias resaltadas del mismo color.
+  - Al tocar una coincidencia de un lado, el otro se desplaza a su pareja.
+  - Arriba se elige otra fuente y, si es un equipo con trabajos distintos, el de qué integrante.
+  - «Volver al informe» regresa a la vista con las fuentes.
+- Los análisis hechos con versiones anteriores se repiten solos al abrir «Similitud».
+
+## Novedades de la versión 12.86 (el código de asistencia sale al instante)
+
+- **Más rápido:** al abrir el registro de asistencia con código, el código tardaba de 5 a 25 segundos en aparecer, porque tu teléfono esperaba a que el GPS afinara la ubicación del salón. Ahora sale en uno a tres segundos, con la primera lectura buena de tu teléfono.
+- Mientras el registro está abierto, Enlace sigue afinando la ubicación del salón en segundo plano. Si encuentra una más precisa, la usa para revisar a quienes se registren después.
+- Si el GPS todavía no responde al abrir, el registro se abre de todos modos («Buscando tu ubicación…») y la ubicación se agrega en cuanto llega. Solo se te pregunta si no diste permiso de ubicación.
+- Los alumnos no cambian: su teléfono sigue esperando la lectura más precisa antes de registrar.
+
 ## Novedades de la versión 12.85 (similitud: el formato de la práctica ya no cuenta como copia)
 
 - **Arreglo:** en reportes de laboratorio, casi toda la clase salía con 99–100 % de similitud y cada alumno con decenas de fuentes. Pasaba porque todos llenan **el mismo formato de reporte** (objetivo, marco teórico, procedimiento de la guía), y el detector lo tomaba como copia entre todos. Ocurre lo mismo con los PDF **escaneados con una app**, cuyo único texto es la marca de agua «Escaneado con…».
