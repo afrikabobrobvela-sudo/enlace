@@ -59,6 +59,14 @@ assert.match(abierto.code, /^[A-HJKMNP-Z2-9]{6}$/, 'Seis caracteres sin letras c
 assert.deepEqual([abierto.mode, abierto.radius, abierto.strict, abierto.located, abierto.pin], ['code', 150, false, true, '']);
 checks += 2;
 
+// 12.86: el registro se abre con una lectura rápida y el docente manda después una más precisa (solo si mejora).
+await call('ana', '/api/attendance/checkin/location', { course: c, session: hoy, location: salon }, 403);
+const peor = await call('docente', '/api/attendance/checkin/location', { course: c, session: hoy, location: { ...salon, lat: salon.lat + 0.01, accuracy: 80 } });
+assert.equal(peor.updated, false, 'Una lectura menos precisa no reemplaza la del salón');
+assert.equal((await call('docente', '/api/attendance/checkin/location', { course: c, session: hoy, location: { ...salon, accuracy: 8 } })).updated, true);
+await call('docente', '/api/attendance/checkin/location', { course: c, session: hoy, location: { lat: 'x' } }, 400);
+checks += 2;
+
 const registrar = (quien, extra = {}, status = 200, ip = ESCUELA) =>
   call(quien, '/api/attendance/checkin/code', { code: abierto.code, device: 'tel-' + quien + '-0001', ...extra }, status, ip);
 const cerca = { lat: salon.lat + 0.0003, lng: salon.lng, accuracy: 25 }; // ~33 m
@@ -120,6 +128,8 @@ checks += 2;
 
 // Cerrar: se borra la ubicación del salón y la red; el código ya no sirve.
 await call('docente', '/api/attendance/checkin/close', { course: c, session: hoy });
+assert.equal((await call('docente', '/api/attendance/checkin/location', { course: c, session: hoy, location: { ...salon, accuracy: 3 } })).updated, false, 'Cerrado, ya no se guarda la ubicación');
+checks++;
 const sesion = store.raw().prepare('SELECT * FROM aula_sessions WHERE id=?').get(hoy);
 assert.deepEqual([sesion.checkin_lat, sesion.checkin_lng, sesion.checkin_network, sesion.checkin_code], [null, null, null, null]);
 await call('fer', '/api/attendance/checkin/code', { code: nuevo, device: 'tel-fer-0001' }, 404);

@@ -81,7 +81,7 @@ function useCheckin(open, serverNow) {
 // Captura la ubicación lo más exacta posible. Adentro de edificios, la primera lectura suele venir de la red
 // (antena o Wi-Fi): llega al instante pero puede estar a cientos de metros. Por eso damos tiempo a que el GPS
 // afine (`floor` mínimo antes de aceptar incluso una lectura buena) y nos quedamos con la de menor imprecisión.
-function currentLocation(timeout = 25000, settle = 14000, floor = 5000) {
+function currentLocation(timeout = 25000, settle = 14000, floor = 5000, good = 20) {
   return new Promise((resolve) => {
     if (!navigator.geolocation) return resolve({ error: 'unavailable' });
     const started = Date.now();
@@ -104,7 +104,7 @@ function currentLocation(timeout = 25000, settle = 14000, floor = 5000) {
         if (!best || reading.accuracy < best.accuracy) best = reading;
         // Un fijo preciso (≤ 20 m) basta, pero solo tras `floor`: así una primera lectura de red (rápida pero
         // posiblemente lejana) alcanza a ser corregida por el GPS antes de enviarla.
-        if (best.accuracy <= 20 && Date.now() - started >= floor) finish({ location: best });
+        if (best.accuracy <= good && Date.now() - started >= floor) finish({ location: best });
       },
       (e) => {
         if (e.code === 1) finish({ error: 'denied' });
@@ -112,6 +112,27 @@ function currentLocation(timeout = 25000, settle = 14000, floor = 5000) {
       { enableHighAccuracy: true, timeout, maximumAge: 0 },
     );
   });
+}
+
+/** Afina la ubicación del salón en segundo plano y la manda si es más precisa que la del inicio (12.86). */
+async function refineCheckinLocation(session, course, first) {
+  const mine = () => checkinState?.session === session;
+  const show = () => {
+    const box = document.getElementById('codeWhere');
+    if (mine() && box) box.textContent = codeWhereText(checkinState);
+  };
+  if (mine() && !first) {
+    checkinState.locating = true;
+    show();
+  }
+  const place = await currentLocation();
+  let updated = false;
+  if (place.location && (!first || place.location.accuracy < first.accuracy))
+    updated = (await request('/api/attendance/checkin/location', { course, session, location: place.location }).catch(() => ({}))).updated;
+  if (!mine()) return;
+  checkinState.locating = false;
+  if (updated) checkinState.located = true;
+  show();
 }
 
 const formatBoardCode = (code) => `${code.slice(0, 3)} ${code.slice(3)}`;
@@ -168,8 +189,12 @@ function startCodeCheckin() {
       const radius = Number(f.get('radius'));
       let place = {};
       if (radius) {
-        place = await currentLocation();
-        if (place.error && !confirm(`No se pudo obtener tu ubicación (${place.error === 'denied' ? 'no diste permiso' : 'el teléfono no la encontró'}). ¿Abrir el registro de todos modos? Solo se comparará la red de internet, que es menos confiable.`)) {
+        // 12.86: el código sale en unos segundos con una primera lectura (≤ 3 s, o antes si ya es buena); la ubicación
+        // del salón se sigue afinando con el GPS mientras el registro está abierto (refineCheckinLocation()).
+        place = await currentLocation(4000, 3000, 0, 50);
+        // Si el GPS aún no responde, se abre igual: refineCheckinLocation() la agrega en cuanto llegue. Solo se pregunta
+        // cuando no hay permiso (entonces no llegará).
+        if (place.error === 'denied' && !confirm('No diste permiso para ver tu ubicación. ¿Abrir el registro de todos modos? Solo se comparará la red de internet, que es menos confiable.')) {
           throw new Error('Registro no abierto. Permite la ubicación en el navegador y vuelve a intentarlo.');
         }
       }
@@ -184,6 +209,7 @@ function startCodeCheckin() {
         late_minutes: Number(f.get('late_minutes') || 0),
       });
       useCheckin(open, open.serverNow);
+      if (radius && place.error !== 'denied') refineCheckinLocation(attendanceSessionId, current.course.id, place.location);
       return 'Registro abierto.';
     },
     'Abrir registro',
@@ -221,14 +247,20 @@ function renderCheckinScreen() {
 }
 
 /** Pantalla del docente para el registro con código: se puede ver en el teléfono mientras se camina por el salón. */
-function renderCodeScreen() {
-  const s = checkinState;
-  const session = attendanceData.sessions.find((x) => x.id === s.session);
-  const where = !s.radius
+function codeWhereText(s) {
+  return !s.radius
     ? 'Sin revisar ubicación.'
     : s.located
       ? `Se revisa que estén a menos de ${s.radius} m de ti. ${s.strict ? 'Si no, no se registran.' : 'Si no, quedan por revisar.'}`
-      : 'Sin tu ubicación: solo se compara la red de internet (menos confiable).';
+      : s.locating
+        ? 'Buscando tu ubicación para revisar la distancia (unos segundos)…'
+        : 'Sin tu ubicación: solo se compara la red de internet (menos confiable).';
+}
+
+function renderCodeScreen() {
+  const s = checkinState;
+  const session = attendanceData.sessions.find((x) => x.id === s.session);
+  const where = codeWhereText(s);
   $('#main').innerHTML = `<div class="checkin-screen code-screen" id="checkinScreen">
     <div class="checkin-side">
       <p class="muted">${esc(current.course.name)} · ${esc(sessionLabel(session, 'long'))}</p>
@@ -236,7 +268,7 @@ function renderCodeScreen() {
       <p class="checkin-step">Escríbelo en el pizarrón. Los alumnos entran a Enlace → <strong>Registrar asistencia</strong>.</p>
       <p class="board-code" id="boardCode" aria-label="Código">${esc(formatBoardCode(s.code))}</p>
       <p class="muted" id="checkinClock"></p>
-      <p class="muted">${where}</p>
+      <p class="muted" id="codeWhere">${where}</p>
       <p class="checkin-count" id="checkinCount" aria-live="polite"></p>
       <section class="checkin-flags" id="checkinFlags" hidden></section>
       <ul class="checkin-recent" id="checkinRecent" aria-label="Últimos registros"></ul>
