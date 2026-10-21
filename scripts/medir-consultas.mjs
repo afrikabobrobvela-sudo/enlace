@@ -231,8 +231,9 @@ for (let v = 0; v < vueltas; v++) {
   for (const [i, a] of alumnos.entries()) {
     const answers = Object.fromEntries(Array.from({ length: v + 1 }, (_, k) => [k, (k + i) % 4]));
     await call(a, '/api/attempt/progress', { ...ctx, answers, position: v, events: [] });
-    // Cada alumno sale y regresa tres veces (una notificación, cambiar de app un momento).
-    if (v % 8 === 4) {
+    // Cada alumno sale y regresa dos veces (una notificación, cambiar de app un momento); desde la 12.30, la tercera
+    // salida corta bloquea el examen, así que aquí no se llega a ella.
+    if (v % 8 === 4 && v < 16) {
       await call(a, '/api/attempt/away', ctx);
       await call(a, '/api/attempt/back', { ...ctx, seconds: 2 });
       await call(a, '/api/attempt/progress', { ...ctx, answers, position: v, events: [{ kind: 'left', seconds: 2 }] });
