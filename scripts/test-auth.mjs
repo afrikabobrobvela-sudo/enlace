@@ -162,7 +162,7 @@ checks += 2;
 // ---- Vigilancia ----
 const salud = await fetchWorker('/salud');
 assert.equal(salud.status, 200);
-assert.deepEqual(await salud.json(), { ok: true, migracion: null }); // el adaptador de pruebas no tiene d1_migrations
+assert.deepEqual(await salud.json(), { ok: true, migracion: null, alerta: false }); // el adaptador de pruebas no tiene d1_migrations; sin errores, sin alerta (12.88)
 const caida = await fetchWorker('/salud', {}, { ...baseEnv, DB: { prepare: () => ({ first: async () => { throw new Error('D1 caída'); } }) } });
 assert.equal(caida.status, 503);
 // Publicado con el correo de ejemplo de wrangler.toml: la vigilancia debe avisar.

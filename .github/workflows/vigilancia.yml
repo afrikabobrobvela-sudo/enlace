@@ -19,7 +19,11 @@ jobs:
         run: |
           for intento in 1 2 3; do
             code=$(curl -s -o respuesta.json -w '%{http_code}' --max-time 20 "$SITE_URL/salud" || true)
-            if [ "$code" = "200" ] && grep -q '"ok":true' respuesta.json; then echo "Enlace responde bien."; exit 0; fi
+            if [ "$code" = "200" ] && grep -q '"ok":true' respuesta.json; then
+              # 12.88: responde, pero con más errores de lo normal en la última hora.
+              if grep -q '"alerta":true' respuesta.json; then echo "::error::Enlace responde, pero tuvo muchos errores en la última hora. Revisa Reportes → Errores."; exit 1; fi
+              echo "Enlace responde bien."; exit 0
+            fi
             echo "Intento $intento: código $code"; sleep 30
           done
           echo "::error::Enlace no responde en $SITE_URL/salud (código $code)."

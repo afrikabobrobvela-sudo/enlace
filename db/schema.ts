@@ -995,3 +995,23 @@ export const similarityReports = sqliteTable(
   },
   (t) => [index('aula_similarity_task').on(t.course, t.task)],
 );
+
+/**
+ * Migración 0048 (12.88): registro de errores. Una fila por error inesperado del servidor (`api`), de una tarea
+ * programada (`tarea`) o del navegador (`cliente`), con el número que ve la persona; `alerta` marca el último aviso por
+ * correo. Se guardan 30 días (src/server/errores.js).
+ */
+export const errorLog = sqliteTable(
+  'aula_errors',
+  {
+    id: text('id').primaryKey(),
+    at: text('at').notNull(),
+    kind: text('kind').notNull(),
+    status: integer('status').notNull().default(500),
+    route: text('route').notNull().default(''),
+    message: text('message').notNull().default(''),
+    userId: text('user_id').notNull().default(''),
+    detail: text('detail').notNull().default(''),
+  },
+  (t) => [index('aula_errors_at').on(t.at)],
+);
