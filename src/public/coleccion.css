@@ -963,3 +963,54 @@ dialog.annotator:not([open]) { display: none; }
 .error-detail summary { cursor: pointer; font-size: 13px; color: var(--ink-soft); min-height: 24px; }
 .error-detail pre { max-width: 70ch; max-height: 220px; overflow: auto; margin: 6px 0 0; padding: 8px 10px; border-radius: var(--radius-sm); background: #f2f4f7; font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
 #errorsAdmin [data-error-search] { width: min(100%, 420px); }
+
+/* Vista previa de Word, PowerPoint, Excel y texto (12.89, vista-oficina.js). El escenario del visor es oscuro:
+   las páginas y diapositivas se ven como hojas sobre la mesa. */
+.viewer-stage.viewer-docx, .viewer-stage.viewer-slides, .viewer-stage.viewer-sheet, .viewer-stage.viewer-csv, .viewer-stage.viewer-text { display: block; }
+.viewer-stage .docx-frame { min-width: min-content; }
+.viewer-stage .docx-wrapper { background: transparent !important; padding: 16px 8px !important; }
+.viewer-stage .docx-wrapper > section.docx { box-shadow: 0 2px 12px rgba(0, 0, 0, 0.45); margin-bottom: 16px !important; }
+.viewer-stage .docx a { color: #0a58ca; }
+/* Las reglas generales de tablas de Enlace no deben tocar el documento (especificidad mínima: gana el estilo del .docx). */
+:where(.viewer-stage .docx) :is(table, th, td) { width: auto; min-width: 0; padding: 0; border: 0; background: none; color: inherit; font: inherit; letter-spacing: normal; word-spacing: normal; text-align: inherit; vertical-align: top; }
+:where(.viewer-stage .docx) th { border-bottom: 0 !important; }
+
+.pp-deck { margin: 0 auto; padding: 12px 0 24px; }
+.pp-slide-wrap { margin: 0 0 18px; }
+.pp-slide { position: relative; overflow: hidden; container-type: inline-size; --pp-font: 'Calibri', 'Carlito', 'Archivo', sans-serif; color: #000; box-shadow: 0 2px 12px rgba(0, 0, 0, 0.45); line-height: 1.2; }
+.pp-slide-wrap figcaption { margin-top: 6px; color: #d7e3ea; font-size: 13px; text-align: center; }
+.pp-item { position: absolute; box-sizing: border-box; }
+.pp-image { overflow: hidden; }
+.pp-image img { position: absolute; max-width: none; }
+.pp-text { display: flex; flex-direction: column; box-sizing: border-box; width: 100%; height: 100%; overflow-wrap: break-word; }
+.pp-text p { margin: 0; }
+.pp-nowrap { white-space: pre; }
+.pp-vertical { writing-mode: vertical-rl; }
+.pp-bullet { display: inline-block; text-indent: 0; }
+.pp-table th { border-bottom: 0 !important; }
+.pp-table table { min-width: 0; font-size: inherit; width: 100%; height: 100%; table-layout: fixed; border-collapse: collapse; }
+.pp-table td { padding: calc(4 * var(--pp-pt)) calc(7 * var(--pp-pt)); border: calc(0.75 * var(--pp-pt)) solid #fff; vertical-align: top; background: rgba(68, 114, 196, 0.08); }
+.pp-chart { display: flex; align-items: center; justify-content: center; padding: 8px; border: 1px dashed #8a97a8; background: rgba(240, 243, 247, 0.85); color: #3b475c; font-size: calc(12 * var(--pp-pt)); text-align: center; }
+
+.sheet-tabs { position: sticky; top: 0; z-index: 3; display: flex; gap: 4px; overflow-x: auto; padding: 8px 8px 0; background: #16242f; }
+.sheet-tabs button { flex: none; min-height: 36px; padding: 0 14px; border: 0; border-radius: 6px 6px 0 0; background: #2c3e4c; color: #e8eef2; font: inherit; font-size: 14px; cursor: pointer; }
+.sheet-tabs button[aria-selected="true"] { background: #fff; color: var(--ink); font-weight: 700; }
+.sheet-tabs button:focus-visible { outline: 3px solid #00a6b2; outline-offset: -3px; }
+.sheet-note { margin: 8px; padding: 8px 12px; border-radius: 6px; background: #fff7d6; color: #3b3200; font-size: 14px; }
+.sheet-scroll { margin: 0 8px 8px; overflow: auto; max-height: calc(100% - 64px); background: #fff; color: var(--ink); }
+.viewer-stage.viewer-sheet, .viewer-stage.viewer-csv { display: flex; flex-direction: column; overflow: hidden; }
+.viewer-sheet .sheet-scroll, .viewer-csv .sheet-scroll { flex: 1; min-height: 0; max-height: none; }
+.sheet-table { width: max-content; min-width: 0; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+.sheet-table th, .sheet-table td { border: 1px solid #d8dde5 !important; font-family: inherit; font-stretch: normal; letter-spacing: normal; word-spacing: normal; padding: 3px 8px; white-space: pre; min-width: 6ch; text-align: left; vertical-align: top; }
+.sheet-long { max-width: 40ch; white-space: pre-wrap; overflow-wrap: anywhere; }
+.sheet-table td.num { text-align: right; white-space: nowrap; }
+.sheet-table td.bold { font-weight: 700; }
+.sheet-table thead th { position: sticky; top: 0; z-index: 2; background: #eceff3; color: var(--ink-soft); font-weight: 600; text-align: center; }
+.sheet-table tbody th { position: sticky; left: 0; z-index: 1; background: #eceff3; color: var(--ink-soft); font-weight: 600; text-align: right; width: 1%; min-width: 3ch; }
+.sheet-table .sheet-corner { left: 0; z-index: 3; }
+
+.viewer-text { margin: 8px; padding: 14px 16px; border-radius: 6px; background: #fff; color: var(--ink); font: 13px/1.5 ui-monospace, 'SFMono-Regular', Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; tab-size: 4; }
+@media (max-width: 720px) {
+  .sheet-tabs button { min-height: 44px; }
+  .pp-deck { padding-top: 8px; }
+}

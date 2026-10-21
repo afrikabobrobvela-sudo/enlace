@@ -1,5 +1,5 @@
-/* Vista previa de archivos: PDF (pdf.js), imágenes con zoom y giro, audio y video.
-   Word, Excel y PowerPoint solo se descargan por ahora. */
+/* Vista previa de archivos: PDF (pdf.js), imágenes con zoom y giro, audio y video; Word, PowerPoint, Excel, CSV y
+   texto con vista-oficina.js (12.89). Los formatos antiguos (.doc, .ppt, .xls) solo se descargan. */
 
 const PDFJS_BASE = '/vendor/pdfjs-5.6.205/';
 const PREVIEW_KINDS = {
@@ -7,7 +7,14 @@ const PREVIEW_KINDS = {
   png: 'image', jpg: 'image', jpeg: 'image', gif: 'image', webp: 'image', heic: 'image',
   mp3: 'audio', m4a: 'audio', wav: 'audio', ogg: 'audio', aac: 'audio',
   mp4: 'video', m4v: 'video', mov: 'video', webm: 'video',
+  docx: 'docx', docm: 'docx', dotx: 'docx',
+  pptx: 'slides', pptm: 'slides', ppsx: 'slides', potx: 'slides',
+  xlsx: 'sheet', xlsm: 'sheet', xltx: 'sheet', csv: 'csv',
+  txt: 'text', md: 'text', log: 'text', json: 'text', xml: 'text', tex: 'text', bib: 'text', py: 'text', m: 'text',
+  r: 'text', js: 'text', java: 'text', c: 'text', h: 'text', cpp: 'text', cs: 'text', sql: 'text', yml: 'text',
+  yaml: 'text', ini: 'text', html: 'text', css: 'text', ino: 'text', f90: 'text', jl: 'text', sh: 'text',
 };
+const OFFICE_PREVIEW_KINDS = new Set(['docx', 'slides', 'sheet', 'csv', 'text']);
 let pdfjsLibPromise = null;
 let dialogPreview = null;
 let inlinePreview = null;
@@ -52,7 +59,7 @@ function mountPreview(target, fileId, siblings = [fileId], { inline = false } = 
          <span class="viewer-count">${index + 1} de ${list.length}</span>
          <button type="button" class="viewer-btn" data-viewer="next" aria-label="Archivo siguiente" ${index < list.length - 1 ? '' : 'disabled'}>›</button>`
       : '';
-    const zoomable = kind === 'pdf' || kind === 'image';
+    const zoomable = kind === 'pdf' || kind === 'image' || kind === 'docx' || kind === 'slides';
     toolbar.innerHTML = `
       <span class="viewer-name" title="${esc(file.name)}">${esc(file.name)}</span>
       <span class="viewer-group">${count}</span>
@@ -82,6 +89,7 @@ function mountPreview(target, fileId, siblings = [fileId], { inline = false } = 
     controls(kind, file);
     stage.className = 'viewer-stage viewer-' + (kind || 'none');
     if (kind === 'pdf') return showPdf(url, file);
+    if (OFFICE_PREVIEW_KINDS.has(kind)) return showOffice(kind, file);
     if (kind === 'image') return showImage(url, file);
     if (kind === 'audio' || kind === 'video') {
       const media = document.createElement(kind);
@@ -101,6 +109,43 @@ function mountPreview(target, fileId, siblings = [fileId], { inline = false } = 
       return;
     }
     message('La vista previa de este tipo de archivo todavía no está disponible.', file);
+  }
+
+  async function showOffice(kind, file) {
+    const abort = new AbortController();
+    const extra = [];
+    const view = {
+      get zoom() {
+        return zoom;
+      },
+      get destroyed() {
+        return destroyed || abort.signal.aborted;
+      },
+      signal: abort.signal,
+      onCleanup: (fn) => extra.push(fn),
+    };
+    const onResize = () => stage.relayout?.();
+    cleanup = () => {
+      abort.abort();
+      extra.forEach((fn) => fn());
+      window.removeEventListener('resize', onResize);
+      stage.onclick = null;
+      stage.relayout = null;
+    };
+    try {
+      const relayout = await showOfficePreview(kind, stage, file, view);
+      if (view.destroyed) return;
+      stage.relayout = relayout || null;
+      window.addEventListener('resize', onResize);
+    } catch (error) {
+      if (view.destroyed) return;
+      message(
+        error?.tooBig
+          ? 'El archivo es demasiado grande para verlo aquí. Descárgalo para abrirlo.'
+          : 'No se pudo mostrar este archivo (puede estar dañado o usar funciones que la vista previa no conoce). Descárgalo para abrirlo.',
+        file,
+      );
+    }
   }
 
   function showImage(url, file) {

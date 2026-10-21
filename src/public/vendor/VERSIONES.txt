@@ -1,2 +1,3 @@
 pdf.js 5.6.205 (Apache-2.0) y KaTeX 0.16.45 (MIT), sin modificar salvo katex.min.css (solo fuentes woff2).
 Archivo (SIL OFL 1.1, Omnibus-Type, descargada de Google Fonts en octubre de 2026, variable de ancho 62–125 % y peso 100–900), subconjuntos latino y latino extendido de Google Fonts, sin modificar.
+docx-preview 0.4.1 (Apache-2.0, LICENSE-docx-preview) y JSZip 3.10.2 (MIT, aviso en el encabezado de jszip.min.js), de npm, sin modificar: vista previa de Word (12.89), se cargan solo al abrir un .docx.

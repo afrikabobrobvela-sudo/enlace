@@ -108,7 +108,8 @@ check(pasted.errors.length === 2 && /no está inscrito/.test(pasted.errors[0]) &
 check(run(`previewKind('Reporte.PDF')`) === 'pdf');
 check(run(`previewKind('IMG_1644.HEIC')`) === 'image');
 check(run(`previewKind('clase.mov')`) === 'video');
-check(run(`previewKind('tarea.docx')`) === null, 'Word se descarga, no se previsualiza');
+check(run(`previewKind('tarea.docx')`) === 'docx', 'Word tiene vista previa (12.89)');
+check(run(`previewKind('tarea.doc')`) === null, 'Word 97-2003 se descarga');
 check(run(`previewKind('sin-extension')`) === null);
 
 // ---- Revisión en secuencia ----
@@ -125,7 +126,7 @@ run(`
     ],
     files: [
       { id: 'f-pdf', name: 'reporte.pdf', size: 2048 },
-      { id: 'f-xls', name: 'datos.xlsx', size: 4096 },
+      { id: 'f-xls', name: 'datos.xls', size: 4096 },
     ],
     records: [
       { id: 't1', kind: 'task', data: { title: 'Práctica 1', visible: true } },
@@ -142,7 +143,7 @@ check(/data-member="m-caro" >Siguiente ›/.test(page), 'Siguiente: Caro');
 check(/<option value="m-beto" selected>2\. Beto &lt;b&gt; \(sin calificar\)<\/option>/.test(page), 'Selector con la posición y nombre escapado');
 check(page.includes('Guardar y siguiente'));
 check(page.includes('1 de 3 calificados'));
-check((page.match(/data-preview=/g) || []).length === 1, 'Vista previa solo para el PDF, no para Excel');
+check((page.match(/data-preview=/g) || []).length === 1, 'Vista previa solo para el PDF, no para Excel 97-2003');
 check(JSON.stringify(run('inlineCalls.at(-1)')) === JSON.stringify({ id: 'f-pdf', list: ['f-pdf'] }), 'El PDF se abre junto al formulario');
 
 run(`reviewOnlyPending = true; reviewMember = 'm-beto'; renderReview();`);

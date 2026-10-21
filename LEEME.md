@@ -5,6 +5,18 @@ No es el código de D2L Brightspace ni una plataforma oficial de la BUAP.
 
 Esta versión se despliega en **tu propia cuenta de Cloudflare** (Workers + D1 + R2, plan gratuito) y ya no depende de ChatGPT Sites.
 
+## Novedades de la versión 12.89 (vista previa de Word, PowerPoint, Excel y texto)
+
+- **Vista previa sin descargar.** Además de PDF, imágenes, audio y video, ahora el botón **Vista previa** abre dentro de Enlace:
+  - **Word (.docx):** páginas con su formato, tablas, imágenes, encabezados y pies.
+  - **PowerPoint (.pptx):** cada diapositiva con su diseño, textos, viñetas, imágenes, tablas, formas y fondos. Las gráficas se marcan con un recuadro (para verlas hay que descargar el archivo).
+  - **Excel (.xlsx) y CSV:** todas las hojas en pestañas, con fechas, porcentajes y celdas combinadas (hasta 2000 filas y 60 columnas por hoja).
+  - **Texto y código** (.txt, .md, .py, .m, .tex, .json…).
+- Sirve igual para los materiales del docente, para las entregas de los alumnos y en la pantalla de revisión (junto al formulario de calificación). Con «−», «Ajustar» y «+» se acerca o aleja.
+- **Privacidad:** todo se dibuja en el navegador de quien lo abre. Los archivos no se mandan a visores externos (como el de Microsoft o Google).
+- Los formatos antiguos (.doc, .ppt, .xls de Office 97-2003) no se pueden mostrar en el navegador: se siguen descargando. Si un alumno entrega en ese formato, pídele .docx o PDF.
+- El lector de Word (docx-preview, código abierto) se descarga solo la primera vez que alguien abre un .docx. No hay migraciones en esta versión.
+
 ## Novedades de la versión 12.88 (errores con número, alerta y prueba de carga)
 
 - **Número de error.** Si algo falla de forma inesperada en el servidor, la persona ve un mensaje con un número corto, por ejemplo «No se pudo completar la operación (error E-7K2QMA)… comparte este código con quien administra Enlace». Con ese número encuentras el caso exacto en **Reportes → Errores**: qué pasó, en qué pantalla, a quién y a qué hora.

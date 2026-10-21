@@ -443,7 +443,8 @@ function prefetchPreview(taskId, memberId) {
     return;
   const link = document.createElement('link');
   link.rel = 'prefetch';
-  link.href = `/api/file/${encodeURIComponent(file.id)}?preview=1`;
+  // Word, PowerPoint, Excel y texto se leen sin ?preview=1 (vista-oficina.js pide el archivo tal cual).
+  link.href = `/api/file/${encodeURIComponent(file.id)}${['pdf', 'image', 'audio', 'video'].includes(previewKind(file.name)) ? '?preview=1' : ''}`;
   link.dataset.prefetch = file.id;
   document.head.append(link);
 }
