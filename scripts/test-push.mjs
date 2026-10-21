@@ -212,11 +212,15 @@ ok(got.length === 1 && got[0].title === 'Entrega actualizada: Reporte', 'entrega
 ok(sent[sent.length - 1].headers.Topic === topicA, 'misma actividad, mismo Topic (el servicio junta las pendientes)');
 
 // ---- Asistencia -------------------------------------------------------------------------------------------------
-const clase = (await call('docente', '/api/attendance/session', { course: c, date: '2026-10-05' }, 201)).id;
+// Fechas relativas a hoy: la campana solo muestra faltas de clases recientes (con fechas fijas, la prueba se vencía).
+const haceDias = (n) => new Date(Date.now() - n * 864e5).toISOString().slice(0, 10);
+const dma = (fecha) => fecha.split('-').reverse().join('/');
+const [dia1, dia2, dia3] = [haceDias(3), haceDias(2), haceDias(1)];
+const clase = (await call('docente', '/api/attendance/session', { course: c, date: dia1 }, 201)).id;
 mark = sent.length;
 await call('docente', '/api/attendance/mark', { course: c, session: clase, marks: [{ member: id('ana'), status: 'absent' }, { member: id('beto'), status: 'present' }] });
 got = await inbox(anaPhone, mark);
-ok(got.length === 1 && got[0].title === 'Inasistencia registrada' && got[0].body === 'Física · clase del 05/10/2026', 'inasistencia');
+ok(got.length === 1 && got[0].title === 'Inasistencia registrada' && got[0].body === `Física · clase del ${dma(dia1)}`, 'inasistencia');
 ok(got[0].url === `/#c=${c}&s=attendance`, 'abre la asistencia');
 mark = sent.length;
 await call('docente', '/api/attendance/mark', { course: c, session: clase, marks: [{ member: id('ana'), status: 'absent', note: 'Sin justificante' }] });
@@ -226,7 +230,7 @@ ok((await inbox(anaPhone, mark)).length === 0, 'asistencia: nada');
 await call('docente', '/api/attendance/mark', { course: c, session: clase, marks: [{ member: id('ana'), status: 'late' }] });
 ok((await inbox(anaPhone, mark)).length === 0, 'retardo: nada');
 
-const clase2 = (await call('docente', '/api/attendance/session', { course: c, date: '2026-10-06' }, 201)).id;
+const clase2 = (await call('docente', '/api/attendance/session', { course: c, date: dia2 }, 201)).id;
 mark = sent.length;
 await call('docente', '/api/attendance/checkin/open', { course: c, session: clase2, minutes: 10 });
 got = await inbox(anaPhone, mark);
@@ -235,26 +239,26 @@ ok((await inbox(daniPhone, mark)).length === 0, 'otro curso no');
 mark = sent.length;
 await call('docente', '/api/attendance/checkin/close', { course: c, session: clase2 });
 got = await inbox(anaPhone, mark);
-ok(got.length === 1 && got[0].title === 'Inasistencia registrada' && got[0].body === 'Física · clase del 06/10/2026', 'falta al cerrar el registro sin registrarse');
+ok(got.length === 1 && got[0].title === 'Inasistencia registrada' && got[0].body === `Física · clase del ${dma(dia2)}`, 'falta al cerrar el registro sin registrarse');
 mark = sent.length;
 await call('docente', '/api/attendance/checkin/close', { course: c, session: clase2 });
 ok((await inbox(anaPhone, mark)).length === 0, 'cerrar otra vez no repite');
 
 // 12.75: la falta también sale en la campana (para quien no activó las notificaciones), solo mientras siga siendo falta.
 let bell = (await call('ana', '/api/notifications')).items.filter((i) => i.type === 'absence');
-ok(bell.length === 1 && bell[0].id === clase2 && bell[0].title === 'Clase del 06/10/2026' && bell[0].fresh, 'falta en la campana');
+ok(bell.length === 1 && bell[0].id === clase2 && bell[0].title === `Clase del ${dma(dia2)}` && bell[0].fresh, 'falta en la campana');
 ok((await call('beto', '/api/notifications')).items.every((i) => i.type !== 'absence' || i.id !== clase), 'la clase a la que asistió no sale en la campana');
 await call('docente', '/api/attendance/mark', { course: c, session: clase2, marks: [{ member: id('ana'), status: 'excused' }] });
 ok((await call('ana', '/api/notifications')).items.every((i) => i.type !== 'absence'), 'justificada: sale de la campana');
 // 12.75: un pase de lista vencido se completa solo cada 5 minutos (tarea programada), aunque nadie abra la asistencia.
-const clase3 = (await call('docente', '/api/attendance/session', { course: c, date: '2026-10-07' }, 201)).id;
+const clase3 = (await call('docente', '/api/attendance/session', { course: c, date: dia3 }, 201)).id;
 await call('docente', '/api/attendance/checkin/open', { course: c, session: clase3, minutes: 10 });
-await env.DB.prepare("UPDATE aula_sessions SET checkin_until='2026-10-07T15:00:00.000Z' WHERE id=?").bind(clase3).run();
+await env.DB.prepare('UPDATE aula_sessions SET checkin_until=? WHERE id=?').bind(`${dia3}T00:00:00.000Z`, clase3).run();
 mark = sent.length;
 await fillAbsences(env.DB, null);
 await sendQueued(env, 40);
 got = await inbox(anaPhone, mark);
-ok(got.length === 1 && got[0].title === 'Inasistencia registrada' && got[0].body === 'Física · clase del 07/10/2026', 'falta por registro vencido, desde la tarea programada');
+ok(got.length === 1 && got[0].title === 'Inasistencia registrada' && got[0].body === `Física · clase del ${dma(dia3)}`, 'falta por registro vencido, desde la tarea programada');
 mark = sent.length;
 await fillAbsences(env.DB, null);
 await sendQueued(env, 40);

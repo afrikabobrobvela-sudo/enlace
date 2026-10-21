@@ -250,6 +250,7 @@ async function renderReports() {
       <thead><tr><th>Academia</th><th>Unidad</th><th>Cursos</th><th>Docentes</th><th>Alumnos</th><th>Actividades</th><th>Entregas</th><th>Archivos</th></tr></thead>
       <tbody>${groupRows || '<tr><td colspan="8">Todavía no hay cursos.</td></tr>'}</tbody></table></div>
     <p class="real-status">La academia y unidad de cada curso son las de quien lo creó. ${courses.length} cursos en total; el CSV incluye el detalle de cada uno.</p>
+    ${errorsPanel()}
     ${mailPanel()}
     ${backupPanel()}
     <section class="panel admin-block" id="storageAdmin">
@@ -259,7 +260,58 @@ async function renderReports() {
       <div id="orphanResult"></div>
     </section>`;
   loadMailStatus();
+  loadErrors();
 }
+
+// ---- Errores (12.88) ----
+
+function errorsPanel() {
+  return `<section class="panel admin-block" id="errorsAdmin">
+      <h2>Errores</h2>
+      <p class="muted">Errores inesperados de los últimos 7 días: del servidor, de las tareas programadas y del navegador de quienes usan Enlace. Cuando alguien te mande un número como «E-7K2QMA», búscalo aquí. Si en una hora hay más de lo normal, te llega un correo (si el correo de avisos está configurado) y la vigilancia de GitHub también avisa.</p>
+      <div id="errorsStatus" aria-live="polite"><p class="muted">Consultando…</p></div>
+    </section>`;
+}
+
+const ERROR_KINDS = { api: 'Servidor', tarea: 'Tarea programada', cliente: 'Navegador', alerta: 'Aviso enviado' };
+
+async function loadErrors() {
+  const box = document.querySelector('#errorsStatus');
+  if (!box) return;
+  let data;
+  try {
+    data = await request('/api/errors?days=7');
+  } catch (error) {
+    box.innerHTML = `<p class="warning-note">${esc(error.message)}</p>`;
+    return;
+  }
+  const tile = (kind) => `<div class="stat-tile"><strong>${data.last24h[kind] || 0}</strong><span>${ERROR_KINDS[kind].toLowerCase()} · últimas 24 h</span></div>`;
+  const rows = data.errors
+    .map((e) => {
+      let detail = e.detail;
+      try {
+        const d = JSON.parse(e.detail);
+        detail = [d.source && `${d.source}:${d.line}:${d.column}`, d.stack, d.agent].filter(Boolean).join('\n');
+      } catch {
+        // detalle de servidor: la pila tal cual
+      }
+      return `<tr data-error-row><td><code>${esc(e.id)}</code><div class="table-subtext">${esc(fmt(e.at))}</div></td><td>${esc(ERROR_KINDS[e.kind] || e.kind)}</td>
+        <td>${esc(e.message || '—')}<div class="table-subtext">${esc(e.route)}</div>${detail ? `<details class="error-detail"><summary>Detalle</summary><pre>${esc(detail)}</pre></details>` : ''}</td>
+        <td>${e.name || e.email ? `${esc(e.name)}<div class="table-subtext">${esc(e.email)}</div>` : '<span class="muted">—</span>'}</td></tr>`;
+    })
+    .join('');
+  box.innerHTML = `<div class="stat-tiles">${['api', 'tarea', 'cliente'].map(tile).join('')}</div>
+    <div class="toolbar"><input type="search" data-error-search placeholder="Buscar número, mensaje o persona…" aria-label="Buscar error"></div>
+    <div class="table-wrap keep-table"><table class="report-table error-table"><thead><tr><th>Número</th><th>Dónde</th><th>Qué pasó</th><th>Persona</th></tr></thead>
+      <tbody>${rows || '<tr><td colspan="4">Sin errores en los últimos 7 días.</td></tr>'}</tbody></table></div>`;
+}
+
+document.addEventListener('input', (e) => {
+  const search = e.target.closest('[data-error-search]');
+  if (!search) return;
+  const q = search.value.trim().toLowerCase();
+  document.querySelectorAll('#errorsAdmin [data-error-row]').forEach((row) => (row.hidden = q !== '' && !row.textContent.toLowerCase().includes(q)));
+});
 
 // ---- Correo de avisos (12.19) ----
 

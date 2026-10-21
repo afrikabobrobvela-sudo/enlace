@@ -5,6 +5,25 @@ No es el código de D2L Brightspace ni una plataforma oficial de la BUAP.
 
 Esta versión se despliega en **tu propia cuenta de Cloudflare** (Workers + D1 + R2, plan gratuito) y ya no depende de ChatGPT Sites.
 
+## Novedades de la versión 12.88 (errores con número, alerta y prueba de carga)
+
+- **Número de error.** Si algo falla de forma inesperada en el servidor, la persona ve un mensaje con un número corto, por ejemplo «No se pudo completar la operación (error E-7K2QMA)… comparte este código con quien administra Enlace». Con ese número encuentras el caso exacto en **Reportes → Errores**: qué pasó, en qué pantalla, a quién y a qué hora.
+- **Errores del navegador.** Si la interfaz falla en el teléfono o la computadora de alguien, Enlace lo registra solo, aunque la persona no diga nada.
+  - Como máximo se registran 5 por página y 300 por hora en total.
+  - Solo de personas con sesión iniciada, y sin contraseñas ni contenido de entregas.
+  - Se ignoran los fallos de extensiones del navegador.
+- **Alerta.** Si en una hora hay más errores de lo normal (10 del servidor, 3 de tareas programadas o 40 del navegador), te llega un correo a la cuenta principal con los más frecuentes; como máximo uno cada 6 horas.
+  - Para el correo necesitas el correo de avisos configurado (`npm run correo`).
+  - Además, `/salud` lo reporta y la vigilancia de GitHub también te avisa, aunque Enlace siga respondiendo.
+- **Tareas programadas.** Si falla una tarea programada (completar faltas, enviar notificaciones, el resumen por correo), también queda registrada.
+- Los errores se guardan 30 días. Migración `0048_registro_errores.sql`: solo agrega la tabla `aula_errors`.
+- **Prueba de carga:** `npm run carga` simula 100 alumnos a la vez y su docente con el monitor del examen y la asistencia. Cada alumno abre Enlace, pasa lista con código, entrega una actividad, hace un examen y revisa la campana.
+  - Corre en tu computadora: no toca la producción ni tu cuenta de Cloudflare.
+  - Falla si hay un error, si algo no cuadra (una entrega, una asistencia y un examen por alumno), si una solicitud pasa de 50 consultas o si el tiempo p95 de un paso pasa de 1.5 s.
+  - Resultado actual: 100 alumnos en unos 3 s, sin errores, máximo 14 consultas por solicitud. Con 300 alumnos también pasa.
+  - Va incluida en `npm test`. Con `--usuarios 300` cambias el número y con `--d1-local` usas el motor local de Cloudflare (sus tiempos salen más altos de lo real, porque atiende las consultas de una en una).
+- Arreglo: una prueba de notificaciones usaba fechas fijas de octubre y fallaba a partir del 21; ahora usa fechas relativas a hoy.
+
 ## Novedades de la versión 12.87 (similitud por equipo y trabajos lado a lado)
 
 - **Un equipo, un renglón.** En la tabla de similitud cada equipo aparece una sola vez, con sus integrantes. Antes salía un renglón por integrante, y cada uno con todas las combinaciones contra los integrantes del otro equipo. El renglón muestra el informe del integrante con más similitud; los de los demás quedan en «Otros informes del equipo».

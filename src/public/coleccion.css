@@ -956,3 +956,10 @@ dialog.annotator:not([open]) { display: none; }
   .simr-score-pct { font-size: 48px; }
   .simr-margin-num { min-width: 14px; height: 14px; padding: 0 3px; font-size: 9px; }
 }
+
+/* Errores (12.88, Reportes) */
+.error-table td { vertical-align: top; }
+.error-table code { font-size: 13px; font-weight: 700; white-space: nowrap; }
+.error-detail summary { cursor: pointer; font-size: 13px; color: var(--ink-soft); min-height: 24px; }
+.error-detail pre { max-width: 70ch; max-height: 220px; overflow: auto; margin: 6px 0 0; padding: 8px 10px; border-radius: var(--radius-sm); background: #f2f4f7; font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
+#errorsAdmin [data-error-search] { width: min(100%, 420px); }

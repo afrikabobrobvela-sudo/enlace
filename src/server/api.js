@@ -57,6 +57,7 @@ import { VISIBLE_TO_STUDENT, annotationRoutes } from './anotaciones.js';
 import { messageRoutes } from './mensajes.js';
 import { h5pRoutes } from './h5p.js';
 import { similarityRoutes } from './similitud.js';
+import { errorId, errorRoutes, recordError } from './errores.js';
 import { courseUrl, flushPush, gradeNotice, pushRoutes, pushSql, pushToMembers, pushToTeachers } from './push.js';
 import { clearSessionCookie, identity, lastLogins, revokeAllStatements } from './auth.js';
 import {
@@ -116,12 +117,13 @@ const EXAM_ROUTES = new Set([
   'POST /api/attempt/back',
   'POST /api/attempt/unlock',
   'POST /api/privacy/accept',
+  'POST /api/client-error',
 ]);
 const ACTIVE_EXAM_MESSAGE = 'Estás contestando un examen: hasta que lo envíes (o se acabe el tiempo) solo puedes usar el examen.';
 
 // ---- Foto de perfil obligatoria para los alumnos -------------------------------------------------------
 // Un alumno sin foto solo puede tomársela (y lo mínimo para llegar ahí): la interfaz le muestra la cámara.
-const PHOTO_FREE_ROUTES = new Set(['GET /api/me', 'POST /api/privacy/accept', 'POST /api/profile/photo', 'POST /api/logout-all']);
+const PHOTO_FREE_ROUTES = new Set(['GET /api/me', 'POST /api/privacy/accept', 'POST /api/profile/photo', 'POST /api/logout-all', 'POST /api/client-error']);
 export const PHOTO_REQUIRED_MESSAGE = 'Antes de continuar, tómate tu foto de perfil.';
 
 export const photoRequired = (env, user) => env.FOTO_OBLIGATORIA === '1' && user.role === 'student' && !user.photo;
@@ -141,10 +143,11 @@ function assertExamRoute(route, url, user) {
 }
 
 export async function api(request, env, exec) {
+  let user = null;
+  const url = new URL(request.url);
+  const route = `${request.method} ${url.pathname}`;
   try {
-    const user = await identity(request, env);
-    const url = new URL(request.url);
-    const route = `${request.method} ${url.pathname}`;
+    user = await identity(request, env);
     if (!['GET', 'HEAD'].includes(request.method)) {
       requireSameOrigin(request);
       await assertWritable(env.DB, route, url, request); // un curso archivado es de solo lectura
@@ -154,18 +157,27 @@ export async function api(request, env, exec) {
     // waitUntil: trabajo después de responder (envío de notificaciones, 12.72); en las pruebas no existe.
     const ctx = { db: env.DB, env, user, url, request, waitUntil: exec?.waitUntil ? (promise) => exec.waitUntil(promise) : null };
     const handler =
-      routes[route] || attendanceRoutes[route] || gradingRoutes[route] || directoryRoutes[route] || privacyRoutes[route] || periodRoutes[route] || dashboardRoutes[route] || reportRoutes[route] || demoRoutes[route] || backupRoutes[route] || userRoutes[route] || bankRoutes[route] || sectionRoutes[route] || photoRoutes[route] || digestRoutes[route] || accessRoutes[route] || specialAccessRoutes[route] || forumRoutes[route] || importRoutes[route] || coverRoutes[route] || certificateRoutes[route] || joinRoutes[route] || annotationRoutes[route] || messageRoutes[route] || h5pRoutes[route] || pushRoutes[route] || similarityRoutes[route];
+      routes[route] || attendanceRoutes[route] || gradingRoutes[route] || directoryRoutes[route] || privacyRoutes[route] || periodRoutes[route] || dashboardRoutes[route] || reportRoutes[route] || demoRoutes[route] || backupRoutes[route] || userRoutes[route] || bankRoutes[route] || sectionRoutes[route] || photoRoutes[route] || digestRoutes[route] || accessRoutes[route] || specialAccessRoutes[route] || forumRoutes[route] || importRoutes[route] || coverRoutes[route] || certificateRoutes[route] || joinRoutes[route] || annotationRoutes[route] || messageRoutes[route] || h5pRoutes[route] || pushRoutes[route] || similarityRoutes[route] || errorRoutes[route];
     if (handler) return await handler(ctx);
     if (request.method === 'GET' && url.pathname.startsWith('/api/file/')) return await downloadFile(ctx, url.pathname.slice(10));
     if (request.method === 'GET' && url.pathname.startsWith('/api/photo/')) return await servePhoto(ctx, url.pathname.slice(11));
     if (request.method === 'GET' && url.pathname.startsWith('/api/course-cover/')) return await serveCourseCover(ctx, url.pathname.slice(18));
     fail('Ruta no encontrada.', 404);
   } catch (error) {
-    console.error('aula-api', error.status || 500, error.status ? error.message : error);
-    const message = error.status
-      ? error.message
-      : 'No se pudo completar la operación. Tu información no se ha descartado; vuelve a intentarlo.';
-    return json({ error: message, ...(error.extra || {}) }, error.status || 500);
+    if (error.status) {
+      console.error('aula-api', error.status, error.message);
+      return json({ error: error.message, ...(error.extra || {}) }, error.status);
+    }
+    // Error inesperado (12.88): se guarda con un número que también ve la persona, para encontrar el caso exacto.
+    const id = errorId();
+    console.error('aula-api', 500, id, route, error);
+    const saved = recordError(env.DB, { id, kind: 'api', route, message: error?.message || String(error), userId: user?.id || '', detail: error?.stack || '' });
+    if (exec?.waitUntil) exec.waitUntil(saved);
+    else await saved;
+    return json(
+      { error: `No se pudo completar la operación (error ${id}). Tu información no se ha descartado; vuelve a intentarlo. Si vuelve a pasar, comparte este código con quien administra Enlace.`, errorId: id },
+      500,
+    );
   }
 }
 

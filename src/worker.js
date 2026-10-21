@@ -13,6 +13,7 @@ import { serveCertificatePage } from './server/constancias.js';
 import { serveH5p } from './server/h5p.js';
 import { PUSH_CRON, runPush } from './server/push.js';
 import { fillAbsences } from './server/attendance.js';
+import { checkErrorAlert, errorPulse, recordError } from './server/errores.js';
 
 const TYPES = {
   html: 'text/html; charset=utf-8',
@@ -39,14 +40,22 @@ export default {
   // el resumen diario de avisos por correo.
   async scheduled(event, env, ctx) {
     // Cada 5 minutos: primero se completan los pases de lista vencidos (las faltas encolan su aviso) y luego se envía.
+    // Un error de una tarea queda en el registro de errores (12.88), como los de la API.
+    const failed = (name) => (error) => {
+      console.error(name, error);
+      return recordError(env.DB, { kind: 'tarea', route: name, message: error?.message || String(error), detail: error?.stack || '' });
+    };
     if (event.cron === PUSH_CRON)
       ctx.waitUntil(
         fillAbsences(env.DB, null)
-          .catch((error) => console.error('aula-asistencia programada', error))
+          .catch(failed('aula-asistencia programada'))
           .then(() => runPush(env))
-          .catch((error) => console.error('aula-push programado', error)),
+          .catch(failed('aula-push programado'))
+          // Cada 5 minutos: si la última hora tuvo más errores de lo normal, se avisa por correo (uno cada 6 h).
+          .then(() => checkErrorAlert(env.DB, env))
+          .catch(failed('aula-alerta de errores')),
       );
-    else ctx.waitUntil(runDigest(env.DB, env).catch((error) => console.error('aula-mail resumen', error)));
+    else ctx.waitUntil(runDigest(env.DB, env).catch(failed('aula-mail resumen')));
   },
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
@@ -76,7 +85,9 @@ export default {
             headers: { 'Content-Type': 'application/json', ...SECURITY_HEADERS },
           });
         }
-        return new Response(JSON.stringify({ ok: true, migracion: last?.name || null }), { headers: { 'Content-Type': 'application/json', ...SECURITY_HEADERS } });
+        // Muchos errores en la última hora (12.88): la vigilancia de GitHub también avisa. Sin detalles: es pública.
+        const pulse = await errorPulse(env.DB).catch(() => ({ over: [] }));
+        return new Response(JSON.stringify({ ok: true, migracion: last?.name || null, alerta: pulse.over.length > 0 }), { headers: { 'Content-Type': 'application/json', ...SECURITY_HEADERS } });
       } catch (error) {
         console.error('aula-salud', error);
         return new Response(JSON.stringify({ ok: false }), { status: 503, headers: { 'Content-Type': 'application/json', ...SECURITY_HEADERS } });
