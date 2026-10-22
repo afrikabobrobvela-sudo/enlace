@@ -147,13 +147,13 @@ async function renderProgress() {
     .map(
       (r) => `<tr data-search-row>
       <td class="risk-pick"><input type="checkbox" data-risk-pick="${esc(r.member.id)}" ${progressChosen.has(r.member.id) ? 'checked' : ''} aria-label="Elegir a ${esc(r.member.name)}"></td>
-      <td>${esc(r.member.name)}<div class="muted">${esc(r.member.matricula || '')}</div></td>
+      <td class="risk-name">${esc(r.member.name)}<div class="muted">${esc(r.member.matricula || '')}</div></td>
       <td>${r.level ? `<span class="risk-pill ${r.level}">${r.level === 'alto' ? 'Alto' : 'Medio'}</span><div class="risk-why">${r.flags.map((f) => esc(RISK_LABELS[f])).join(' · ')}</div>` : '<span class="muted">Sin alertas</span>'}</td>
       <td>${lastSeenText(r)}</td>
       <td>${r.attendance && r.attendance.percent !== null ? percentPill(r.attendance, settings.min_percent) : '—'}</td>
-      <td>${r.missing.length ? `<strong>${r.missing.length}</strong><div class="muted">${r.missing.map((t) => esc(t.data.title)).join(', ')}</div>` : '0'}</td>
-      <td><progress value="${r.delivered}" max="${Math.max(tasks.length, 1)}"></progress> ${r.delivered} de ${tasks.length}</td>
-      <td>${contentTotal ? `<progress value="${contentDone(r.member.id)}" max="${contentTotal}"></progress> ${contentDone(r.member.id)} de ${contentTotal}` : '—'}</td>
+      <td class="risk-missing">${r.missing.length ? `<strong>${r.missing.length}</strong><div class="risk-list">${r.missing.map((t) => esc(t.data.title)).join(' · ')}</div>` : '0'}</td>
+      <td><span class="risk-bar"><progress value="${r.delivered}" max="${Math.max(tasks.length, 1)}"></progress><span>${r.delivered} de ${tasks.length}</span></span></td>
+      <td>${contentTotal ? `<span class="risk-bar"><progress value="${contentDone(r.member.id)}" max="${contentTotal}"></progress><span>${contentDone(r.member.id)} de ${contentTotal}</span></span>` : '—'}</td>
       <td class="${r.average === null ? '' : r.average >= RISK_PASSING ? 'grade-pass' : 'grade-low'}">${r.average === null ? '—' : r.average.toFixed(2)}</td>
       <td><button type="button" class="text-btn" data-message-thread="${esc(r.member.id)}" aria-label="Escribir a ${esc(r.member.name)}">Escribir</button></td>
     </tr>`,

@@ -181,7 +181,7 @@ document.addEventListener('click', (event) => {
  */
 function labelTables(root = document) {
   for (const table of root?.querySelectorAll?.('table') || []) {
-    if (table.closest('.gradebook, .rubric-editor, .keep-table')) continue;
+    if (table.closest('.gradebook, .rubric-editor, .keep-table, .viewer-stage')) continue;
     const headRow = table.tHead?.rows[table.tHead.rows.length - 1];
     if (!headRow) continue;
     const heads = [];

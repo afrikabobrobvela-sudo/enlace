@@ -6,15 +6,19 @@ import { all, fail, json, nowIso, one, optionalText, readJson, run, text } from 
 const KINDS = { academy: 'aula_academies', unit: 'aula_units' };
 const MAX_BULK = 200;
 
-/** Dominios de correo que pueden pedir ser docentes (TEACHER_EMAIL_DOMAINS, separados por comas). */
+/** Dominios de correo que pueden pedir ser docentes (TEACHER_EMAIL_DOMAINS, separados por comas; vacío = cualquiera,
+ * y la administración aprueba cada solicitud). */
 export function teacherDomains(env) {
-  return String(env.TEACHER_EMAIL_DOMAINS ?? 'correo.buap.mx')
+  return String(env.TEACHER_EMAIL_DOMAINS ?? '')
     .split(',')
     .map((d) => d.trim().toLowerCase())
     .filter(Boolean);
 }
 
-export const canRequestTeacher = (env, user) => user.role === 'student' && teacherDomains(env).includes(user.email.split('@')[1]);
+export const canRequestTeacher = (env, user) => {
+  const domains = teacherDomains(env);
+  return user.role === 'student' && (!domains.length || domains.includes(user.email.split('@')[1]));
+};
 
 /** Clave para detectar duplicados: sin mayúsculas, acentos ni espacios repetidos ("Física" = "FISICA"). */
 const nameKey = (name) => name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();

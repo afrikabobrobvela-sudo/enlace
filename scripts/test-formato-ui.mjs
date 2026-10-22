@@ -25,9 +25,9 @@ has(html, '<p>Otro párrafo.</p>', 'Párrafos separados por línea vacía');
 html = rich('- uno\n- dos\n1. primero\n2. segundo\n> cita\n---');
 has(html, '<ul><li>uno</li><li>dos</li></ul><ol><li>primero</li><li>segundo</li></ol>', 'Listas');
 has(html, '<blockquote>cita</blockquote><hr>', 'Cita y separador');
-html = rich('Ver [simulador](https://phet.colorado.edu/es/) y https://buap.mx/fisica.');
+html = rich('Ver [simulador](https://phet.colorado.edu/es/) y https://example.org/fisica.');
 has(html, '<a href="https://phet.colorado.edu/es/" target="_blank" rel="noopener noreferrer">simulador</a>', 'Enlace con texto');
-has(html, '<a href="https://buap.mx/fisica" target="_blank" rel="noopener noreferrer">https://buap.mx/fisica</a>.', 'Enlace suelto sin el punto final');
+has(html, '<a href="https://example.org/fisica" target="_blank" rel="noopener noreferrer">https://example.org/fisica</a>.', 'Enlace suelto sin el punto final');
 has(rich('Texto de siempre, sin marcas: 3 * 4 = 12'), '<p>Texto de siempre, sin marcas: 3 * 4 = 12</p>', 'El texto anterior se ve igual');
 
 // ---- Fórmulas: se conservan tal cual para KaTeX ----

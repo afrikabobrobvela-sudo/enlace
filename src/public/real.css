@@ -1,11 +1,11 @@
 :root {
-  --buap: #003b5c;
-  --buap-accent: #00a6b2;
+  --marino: #003b5c;
+  --marino-acento: #00a6b2;
   color: #252b31;
 }
 
 .primary {
-  background: var(--buap);
+  background: var(--marino);
 }
 
 .primary:hover {

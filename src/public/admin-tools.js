@@ -147,7 +147,7 @@ function bulkMembersModal() {
   modal(
     'Importar lista de alumnos',
     `<p>Pega la lista desde Excel o un archivo CSV: una fila por alumno con <strong>nombre</strong>, <strong>correo</strong> y, si la tienes, <strong>matrícula</strong>, en cualquier orden.</p>
-     <label>Lista<textarea name="roster" required spellcheck="false" placeholder="Ana Pérez López	202612345	ana.perez@alumno.buap.mx"></textarea></label>
+     <label>Lista<textarea name="roster" required spellcheck="false" placeholder="Ana Pérez López	202612345	ana.perez@correo.mx"></textarea></label>
      <label>Sección de esta lista<select name="sectionId"><option value="">${courseSections().length ? 'Sin sección (o la de la columna «Sección»)' : 'Sin sección'}</option>${courseSections().map((s) => `<option value="${esc(s.id)}" ${selectedSection() === s.id ? 'selected' : ''}>${esc(s.name)}</option>`).join('')}</select></label>
      <p class="muted">¿Varios grupos en una sola lista? Agrega una primera fila de encabezado con una columna <strong>Sección</strong> (por ejemplo 5AV, 5BV): las secciones que no existan se crean solas.</p>
      <p class="roster-preview" id="rosterPreview" role="status">Aún no hay filas.</p>

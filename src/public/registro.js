@@ -38,7 +38,7 @@ function registrationBanner() {
   const rejected = r?.status === 'rejected'
     ? `<p class="register-reason">Tu solicitud anterior no se aprobó: ${esc(r.reason)}</p>`
     : '';
-  return `<section class="register-banner"><div><strong>¿Eres docente de la BUAP?</strong>
+  return `<section class="register-banner"><div><strong>¿Eres docente?</strong>
     <p>Solicita acceso para crear tus cursos. La administración revisa cada solicitud.</p>${rejected}</div>
     <button class="primary" data-registro="request">${rejected ? 'Enviar otra solicitud' : 'Solicitar acceso de docente'}</button></section>`;
 }

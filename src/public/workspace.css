@@ -1,6 +1,6 @@
 :root {
-  --buap: #003b5c;
-  --buap-accent: #00a6b2;
+  --marino: #003b5c;
+  --marino-acento: #00a6b2;
   --link: #00679e;
   --line: #dce3e8;
   --ink: #20262d;
@@ -9,7 +9,7 @@
 }
 
 body {
-  border-top: 4px solid var(--buap);
+  border-top: 4px solid var(--marino);
 }
 
 header {
@@ -68,9 +68,9 @@ header {
 }
 
 #topnav>button.active {
-  color: var(--buap);
+  color: var(--marino);
   font-weight: 600;
-  border-color: var(--buap-accent);
+  border-color: var(--marino-acento);
 }
 
 #topnav .more-menu summary {
@@ -87,7 +87,7 @@ header {
 
 #topnav .menu-panel button.active {
   background: #eef7fa;
-  border-left-color: var(--buap-accent);
+  border-left-color: var(--marino-acento);
 }
 
 main {
@@ -125,7 +125,7 @@ h2 {
 }
 
 .primary {
-  background: var(--buap);
+  background: var(--marino);
 }
 
 .text-btn,
@@ -237,8 +237,8 @@ h2 {
   height: 132px;
   border-radius: 7px 7px 0 0;
   padding: 22px;
-  border-bottom: 4px solid var(--buap-accent);
-  background: var(--buap)!important;
+  border-bottom: 4px solid var(--marino-acento);
+  background: var(--marino)!important;
   align-items: flex-end;
   overflow: visible;
 }
@@ -398,7 +398,7 @@ h2 {
   margin: -36px -28px 30px;
   min-height: 175px;
   padding: 48px 30px 28px;
-  background: var(--buap);
+  background: var(--marino);
 }
 
 .hub-banner h1 {
@@ -591,7 +591,7 @@ tbody tr:hover {
 }
 
 .toc-all.selected {
-  border-left: 4px solid var(--buap-accent);
+  border-left: 4px solid var(--marino-acento);
   font-weight: 600;
 }
 
@@ -614,9 +614,9 @@ tbody tr:hover {
 
 .tree-unit>button.active {
   outline: 0;
-  border-left-color: var(--buap-accent);
+  border-left-color: var(--marino-acento);
   background: #eaf5f8;
-  color: var(--buap);
+  color: var(--marino);
   font-weight: 600;
 }
 
@@ -681,7 +681,7 @@ tbody tr:hover {
   justify-content: space-between;
   gap: 12px;
   cursor: pointer;
-  color: var(--buap);
+  color: var(--marino);
   list-style: none;
 }
 
@@ -823,7 +823,7 @@ tbody tr:hover {
   top: -100px;
   padding: 12px;
   background: white;
-  color: var(--buap);
+  color: var(--marino);
   z-index: 100;
 }
 

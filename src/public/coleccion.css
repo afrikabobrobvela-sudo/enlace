@@ -963,3 +963,157 @@ dialog.annotator:not([open]) { display: none; }
 .error-detail summary { cursor: pointer; font-size: 13px; color: var(--ink-soft); min-height: 24px; }
 .error-detail pre { max-width: 70ch; max-height: 220px; overflow: auto; margin: 6px 0 0; padding: 8px 10px; border-radius: var(--radius-sm); background: #f2f4f7; font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
 #errorsAdmin [data-error-search] { width: min(100%, 420px); }
+
+/* Vista previa de Word, PowerPoint, Excel y texto (12.89, vista-oficina.js). El escenario del visor es oscuro:
+   las páginas y diapositivas se ven como hojas sobre la mesa. */
+.viewer-stage.viewer-docx, .viewer-stage.viewer-slides, .viewer-stage.viewer-sheet, .viewer-stage.viewer-csv, .viewer-stage.viewer-text { display: block; }
+.viewer-stage .docx-frame { min-width: min-content; }
+.viewer-stage .docx-wrapper { background: transparent !important; padding: 16px 8px !important; }
+.viewer-stage .docx-wrapper > section.docx { box-shadow: 0 2px 12px rgba(0, 0, 0, 0.45); margin-bottom: 16px !important; }
+.viewer-stage .docx a { color: #0a58ca; }
+/* Las reglas generales de tablas de Enlace no deben tocar el documento (especificidad mínima: gana el estilo del .docx). */
+:where(.viewer-stage .docx) :is(table, th, td) { width: auto; min-width: 0; padding: 0; border: 0; background: none; color: inherit; font: inherit; letter-spacing: normal; word-spacing: normal; text-align: inherit; vertical-align: top; }
+:where(.viewer-stage .docx) th { border-bottom: 0 !important; }
+
+.pp-deck { margin: 0 auto; padding: 12px 0 24px; }
+.pp-slide-wrap { margin: 0 0 18px; }
+.pp-slide { position: relative; overflow: hidden; container-type: inline-size; --pp-font: 'Calibri', 'Carlito', 'Archivo', sans-serif; color: #000; box-shadow: 0 2px 12px rgba(0, 0, 0, 0.45); line-height: 1.2; }
+.pp-slide-wrap figcaption { margin-top: 6px; color: #d7e3ea; font-size: 13px; text-align: center; }
+.pp-item { position: absolute; box-sizing: border-box; }
+.pp-image { overflow: hidden; }
+.pp-image img { position: absolute; max-width: none; }
+.pp-text { display: flex; flex-direction: column; box-sizing: border-box; width: 100%; height: 100%; overflow-wrap: break-word; }
+.pp-text p { margin: 0; }
+.pp-nowrap { white-space: pre; }
+.pp-vertical { writing-mode: vertical-rl; }
+.pp-bullet { display: inline-block; text-indent: 0; }
+.pp-table th { border-bottom: 0 !important; }
+.pp-table table { min-width: 0; font-size: inherit; width: 100%; height: 100%; table-layout: fixed; border-collapse: collapse; }
+.pp-table td { padding: calc(4 * var(--pp-pt)) calc(7 * var(--pp-pt)); border: calc(0.75 * var(--pp-pt)) solid #fff; vertical-align: top; background: rgba(68, 114, 196, 0.08); }
+.pp-chart { display: flex; align-items: center; justify-content: center; padding: 8px; border: 1px dashed #8a97a8; background: rgba(240, 243, 247, 0.85); color: #3b475c; font-size: calc(12 * var(--pp-pt)); text-align: center; }
+
+.sheet-tabs { position: sticky; top: 0; z-index: 3; display: flex; gap: 4px; overflow-x: auto; padding: 8px 8px 0; background: #16242f; }
+.sheet-tabs button { flex: none; min-height: 36px; padding: 0 14px; border: 0; border-radius: 6px 6px 0 0; background: #2c3e4c; color: #e8eef2; font: inherit; font-size: 14px; cursor: pointer; }
+.sheet-tabs button[aria-selected="true"] { background: #fff; color: var(--ink); font-weight: 700; }
+.sheet-tabs button:focus-visible { outline: 3px solid #00a6b2; outline-offset: -3px; }
+.sheet-note { margin: 8px; padding: 8px 12px; border-radius: 6px; background: #fff7d6; color: #3b3200; font-size: 14px; }
+.sheet-scroll { margin: 0 8px 8px; overflow: auto; max-height: calc(100% - 64px); background: #fff; color: var(--ink); }
+.viewer-stage.viewer-sheet, .viewer-stage.viewer-csv { display: flex; flex-direction: column; overflow: hidden; }
+.viewer-sheet .sheet-scroll, .viewer-csv .sheet-scroll { flex: 1; min-height: 0; max-height: none; }
+.sheet-table { width: max-content; min-width: 0; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+.sheet-table th, .sheet-table td { border: 1px solid #d8dde5 !important; font-family: inherit; font-stretch: normal; letter-spacing: normal; word-spacing: normal; padding: 3px 8px; white-space: pre; min-width: 6ch; text-align: left; vertical-align: top; }
+.sheet-long { max-width: 40ch; white-space: pre-wrap; overflow-wrap: anywhere; }
+.sheet-table td.num { text-align: right; white-space: nowrap; }
+.sheet-table td.bold { font-weight: 700; }
+.sheet-table thead th { position: sticky; top: 0; z-index: 2; background: #eceff3; color: var(--ink-soft); font-weight: 600; text-align: center; }
+.sheet-table tbody th { position: sticky; left: 0; z-index: 1; background: #eceff3; color: var(--ink-soft); font-weight: 600; text-align: right; width: 1%; min-width: 3ch; }
+.sheet-table .sheet-corner { left: 0; z-index: 3; }
+
+.viewer-text { margin: 8px; padding: 14px 16px; border-radius: 6px; background: #fff; color: var(--ink); font: 13px/1.5 ui-monospace, 'SFMono-Regular', Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; tab-size: 4; }
+@media (max-width: 720px) {
+  .sheet-tabs button { min-height: 44px; }
+  .pp-deck { padding-top: 8px; }
+}
+
+/* ---- Pulido 12.90 (impeccable, revisión profunda) ------------------------------------------------------------
+   Una sola regla por problema, encima de las capas viejas. */
+
+/* El filete de 2 px subraya el título, no el ancho del contenedor: igual en todas las pantallas. */
+#main h1 { width: fit-content; max-width: 100%; }
+
+/* Pie de página sin institución: nombre y aviso de privacidad, separados. */
+.shell > footer { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 18px; }
+
+/* Portada del curso: como la del estante, etiqueta del grupo y título abajo a la izquierda; el botón de editar
+   arriba a la derecha sin tocar el título. */
+.hub-banner { align-items: flex-start; justify-content: flex-end; min-height: 200px; padding-top: 64px; }
+.hub-eyebrow { order: 0; margin: 0; padding: 4px 10px; color: #fff; font-size: 13px; letter-spacing: 0.02em; }
+.hub-banner h1 { order: 1; max-width: 22ch; text-wrap: balance; }
+.hub-banner .hub-edit { top: 18px; right: 18px; }
+.hub-info.is-empty { display: none; }
+.hub-facts { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; margin: 4px 0 12px; }
+.hub-facts dt { color: var(--ink-faint); font-size: 13px; font-weight: 600; }
+.hub-facts dd { margin: 0; font-weight: 700; font-variant-numeric: tabular-nums; }
+.hub-info .muted { font-size: 14px; }
+
+/* Etiqueta de las unidades: la misma voz que los demás enlaces de la tinta. */
+.module-card .module-label { padding: 14px 20px 16px; font-size: 15px; font-weight: 700; color: var(--tomo); }
+.module-card .module-label::after { content: ' →'; }
+.module-card:hover .module-label { color: var(--tomo-lomo); text-decoration: underline; text-underline-offset: 3px; }
+
+/* Fechas y textos secundarios sobre el papel de la tinta: contraste AA. */
+.deadline, .notice p { color: var(--ink-soft); }
+
+/* Avisos de pantalla (antes con franja de color a la izquierda): borde completo de 1 px y fondo de papel. Las
+   franjas solo quedan donde codifican un dato (color de cada fuente de similitud, tipo de evento del calendario). */
+.grade-note, .task-materials, .team-banner, .exam-intro, .checkin-picks, .real-status, .quiz-result, .quiz-result.is-new,
+.history-list li, .my-grade-item .grade-feedback, .att-list li.att-missing, .answer-review li {
+  border: 1px solid var(--line) !important;
+  border-radius: var(--radius-sm);
+}
+.grade-note, .real-status, .team-banner, .checkin-picks, .my-grade-item .grade-feedback, .history-list li {
+  background: var(--tomo-papel) !important; border-color: color-mix(in srgb, var(--tomo) 22%, var(--line)) !important; color: var(--ink);
+}
+.task-materials { background: var(--surface) !important; padding: 20px 22px; }
+.task-materials h2 { color: var(--tinta); }
+.grade-note { max-width: 78ch; }
+.draft-note, .simr-banner, .login-alert, .sim-common { border-left-width: 1px !important; border-style: solid; border-radius: var(--radius-sm); }
+.draft-note, .simr-banner { border-color: #e7b97a !important; }
+.login-alert { border-color: #e9b4ae !important; }
+.sim-common { border-color: var(--line) !important; }
+
+/* Calendario: la hora y el título de la actividad no se pegan. */
+.cal-chip .cal-time { margin-right: 6px; font-variant-numeric: tabular-nums; }
+
+/* Libro de calificaciones: los títulos de las actividades en su escritura normal (las mayúsculas cuestan leerlas). */
+.gradebook thead th.gb-task-col .gb-col-head > span { text-transform: none; letter-spacing: 0; font-size: 13px; line-height: 1.2; text-wrap: balance; }
+.gradebook thead th.final-col small, .gradebook thead th.final-col .muted { text-transform: none; letter-spacing: 0; }
+
+/* Asistencia: la casilla sin registro se distingue sin depender de un punto casi invisible. */
+button.att-mark.none { color: var(--ink-faint); background: var(--surface); border: 1px dashed var(--line-strong); }
+
+/* Participación: columnas legibles en la computadora y conteos que no se parten en el teléfono. */
+.risk-table .risk-name { min-width: 11rem; }
+.risk-table td:nth-child(3) { min-width: 12rem; }
+.risk-table .risk-missing { min-width: 11rem; }
+.risk-list { margin-top: 2px; font-size: 13px; color: var(--ink-soft); line-height: 1.35; }
+.risk-bar { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }
+.risk-bar progress { width: 64px; }
+
+/* Botones con dos renglones (teléfono): interlineado que se lee. */
+button, .primary, .secondary { line-height: 1.3; }
+
+/* Contenido: los conteos del índice y de los materiales no bajan de 12 px. */
+#main .content-layout small, #main .toc-all span { font-size: 12px; }
+/* Objetivos de al menos 24 px también en la computadora (migas, archivos, «Abrir →»). */
+.crumbs button, .file-item > a, .hub-side .text-btn { min-height: 24px; display: inline-flex; align-items: center; }
+/* «tardía» sobre las casillas de color del libro: contraste AA. */
+.late-tag { color: #5c3b00; }
+/* Calendario: los días de otros meses quedan tenues, pero legibles. */
+.cal-cell.is-outside .cal-daynum { color: var(--ink-faint); font-weight: 400; }
+
+/* Mis cursos: menú de administración alineado a la derecha para que no se salga de la pantalla. */
+.admin-tools-menu .more-actions-panel { left: auto; right: 0; }
+.admin-tools-menu > summary .badge-count { margin-left: 2px; }
+
+@media (max-width: 720px) {
+  /* Asistencia en el teléfono: columna de nombres más angosta y fechas compactas (se ven tres o cuatro a la vez). */
+  .att-grid table { min-width: 0 !important; width: max-content; }
+  .att-grid td:not(.sticky-name), .att-grid thead th:not(.sticky-name) { min-width: 56px !important; width: 56px; padding: 6px 4px !important; }
+  .att-grid .sticky-name { width: 40vw; max-width: 40vw; }
+  .att-grid .sticky-name > .muted, .att-grid .att-who .att-pill { font-size: 12px !important; }
+  /* Mis calificaciones: el promedio y la asistencia en dos franjas, sin columnas de dos palabras. */
+  .my-grade-summary { flex-wrap: wrap; align-items: flex-start; }
+  .my-grade-summary > div:not(.my-attendance) { flex: 1 1 0; min-width: 0; }
+  .my-grade-summary .my-attendance { flex: 1 1 100%; margin: 0; padding-top: 12px; border-top: 1px solid var(--line); text-align: left; display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 12px; }
+  .my-grade-summary .my-attendance h2 { flex: 1 1 100%; }
+  .hub-banner { min-height: 0; padding-top: 58px; }
+  .hub-banner .hub-edit { top: 12px; right: 12px; }
+  .admin-tools-menu { grid-column: span 1; }
+  .admin-tools-menu > summary { width: 100%; justify-content: center; }
+}
+/* Asistencia: el aviso de guardado conserva su renglón (sin saltos al aparecer), pero sin hueco extra debajo. */
+.att-sync { color: var(--ink-soft); }
+.att-sync + .toolbar { margin-top: 8px; }
+/* La flecha de los menús no se encoge cuando el botón ocupa todo el ancho (teléfono). */
+#topnav .more-menu > summary::after, .more-actions > summary::after, .section-filter > summary::after { flex: none; }

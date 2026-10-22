@@ -20,7 +20,7 @@ async function boot({ search = '', login }) {
 const google = await boot({ search: '?login_error=domain&curso=abc', login: { google: true, email: false } });
 assert.match(google.html, /href="\/auth\/google\/start\?return_to=%2F%3Fcurso%3Dabc"/, 'Regresa a donde estaba, sin el código de error');
 assert.match(google.html, />Continuar con Google</);
-assert.match(google.html, /Entra con tu correo institucional de la BUAP\./);
+assert.match(google.html, /Entra con tu correo institucional\./);
 assert.doesNotMatch(google.html, /chatgpt/i);
 assert.doesNotMatch(google.html, /loginEmail/, 'Sin formulario de correo si no está configurado');
 assert.equal(google.location.search, '?curso=abc', 'El código de error se retira de la barra de direcciones');
@@ -36,7 +36,7 @@ assert.doesNotMatch(both.html, /login-alert/, 'Sin error, no hay aviso');
 
 // Sin ningún método configurado: mensaje claro en lugar de un botón que no funciona.
 const ms = await boot({ login: { google: true, microsoft: true, email: false } });
-assert.match(ms.html, /href="\/auth\/microsoft\/start\?return_to=[^"]*">.*Continuar con Microsoft \(correo BUAP\)</s);
+assert.match(ms.html, /href="\/auth\/microsoft\/start\?return_to=[^"]*">.*Continuar con Microsoft \(correo institucional\)</s);
 assert.doesNotMatch(ms.html, /login-google/, 'Con Microsoft activo no se ofrece Google en la pantalla de acceso');
 const admin = await boot({ search: '?acceso=google', login: { google: true, microsoft: true, email: false } });
 assert.ok(admin.html.indexOf('login-microsoft') < admin.html.indexOf('login-google'), 'Con /?acceso=google aparece Google, después de Microsoft');

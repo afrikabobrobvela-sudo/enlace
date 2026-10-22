@@ -277,13 +277,13 @@ async function microsoftCallback(request, env) {
   return redirect(pending.returnTo, [clearOauth, await sessionCookie(user, env)]);
 }
 
-/** Dominios que se aceptan por Microsoft (MICROSOFT_EMAIL_DOMAINS; por omisión los de la BUAP). */
+/** Dominios que se aceptan por Microsoft (MICROSOFT_EMAIL_DOMAINS; vacío = cualquiera del directorio fijo). */
 function microsoftDomainAllowed(env, address) {
-  const domains = String(env.MICROSOFT_EMAIL_DOMAINS ?? 'correo.buap.mx,alumno.buap.mx,buap.mx')
+  const domains = String(env.MICROSOFT_EMAIL_DOMAINS ?? '')
     .split(',')
     .map((d) => d.trim().toLowerCase())
     .filter(Boolean);
-  return domains.includes(address.split('@')[1]);
+  return !domains.length || domains.includes(address.split('@')[1]);
 }
 
 function decodeJwtPayload(token) {

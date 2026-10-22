@@ -10,51 +10,128 @@
     <link rel="stylesheet" href="/coleccion.css">
   </head>
   <body>
+    <!-- El servidor (worker.js, privacyPage) sustituye los marcadores AVISO_DOMICILIO y AVISO_CORREO (entre llaves dobles)
+         con AVISO_DOMICILIO y AULA_OWNER_EMAIL de wrangler.toml: el correo real nunca queda escrito en el repositorio.
+         Al cambiar el fondo del aviso, sube PRIVACY_VERSION en src/server/privacy.js para que todas las personas lo
+         acepten de nuevo, y cambia la fecha y la versión de abajo. -->
     <main class="privacy-page">
-      <p><a href="/">← Volver a Enlace</a></p>
-      <!-- BORRADOR: debe revisarlo el área jurídica o de transparencia antes de usarse como aviso definitivo.
-           Los datos entre corchetes se completan con la información del responsable. Al cambiar el texto de fondo,
-           sube PRIVACY_VERSION en src/server/privacy.js para que todas las personas lo acepten de nuevo. -->
-      <p class="privacy-draft">Borrador pendiente de revisión jurídica. Versión 2026-10.</p>
+      <p class="privacy-back"><a href="/">← Volver a Enlace</a></p>
       <h1>Aviso de privacidad</h1>
+      <p class="privacy-meta">Aviso integral · Última actualización: 22 de octubre de 2026 · Versión 2026-10c</p>
 
-      <h2>1. Quién es responsable de tus datos</h2>
-      <p>[Nombre del responsable o de la dependencia], con domicilio en [domicilio], es responsable del tratamiento de los datos personales que se recaban en Enlace, aula virtual independiente para grupos de la BUAP. Enlace no es una plataforma institucional oficial. Contacto para temas de privacidad: [correo de contacto].</p>
+      <section class="privacy-summary" aria-labelledby="enBreve">
+        <h2 id="enBreve">En breve</h2>
+        <ul>
+          <li>El responsable de tus datos es el <strong>Dr. Rodrigo Vela Vázquez</strong>. Escríbele a <a href="mailto:{{AVISO_CORREO}}">{{AVISO_CORREO}}</a>.</li>
+          <li>Tus datos se usan <strong>solo para tus cursos</strong>: entregas, calificaciones, evaluaciones y asistencia.</li>
+          <li><strong>No se venden, no se usan para publicidad</strong> y no hay analítica ni rastreo de terceros.</li>
+          <li>Tus compañeros solo ven tu nombre. Tu correo, matrícula, foto y calificaciones los ve tu docente.</li>
+        </ul>
+      </section>
 
-      <h2>2. Qué datos recabamos</h2>
+      <nav class="privacy-toc" aria-label="Contenido del aviso">
+        <ol>
+          <li><a href="#responsable">Responsable</a></li>
+          <li><a href="#datos">Datos que se recaban</a></li>
+          <li><a href="#finalidades">Para qué se usan</a></li>
+          <li><a href="#quien">Quién puede verlos</a></li>
+          <li><a href="#proveedores">Proveedores y transferencias</a></li>
+          <li><a href="#conservacion">Cuánto tiempo se conservan</a></li>
+          <li><a href="#seguridad">Seguridad</a></li>
+          <li><a href="#derechos">Tus derechos</a></li>
+          <li><a href="#cookies">Cookies y almacenamiento</a></li>
+          <li><a href="#cambios">Cambios a este aviso</a></li>
+        </ol>
+      </nav>
+
+      <h2 id="responsable">1. Responsable</h2>
+      <p>El <strong>Dr. Rodrigo Vela Vázquez</strong>, como persona física, es el responsable del tratamiento de los datos personales que se recaban en Enlace, una plataforma educativa independiente para cursos, actividades, evaluaciones y asistencia.</p>
+      <dl class="privacy-contact">
+        <dt>Domicilio para oír y recibir notificaciones</dt>
+        <dd>{{AVISO_DOMICILIO}}</dd>
+        <dt>Correo para temas de privacidad</dt>
+        <dd><a href="mailto:{{AVISO_CORREO}}">{{AVISO_CORREO}}</a></dd>
+      </dl>
+      <p>Este aviso se emite conforme a la Ley Federal de Protección de Datos Personales en Posesión de los Particulares.</p>
+
+      <h2 id="datos">2. Datos que se recaban</h2>
+      <p>Solo los que se necesitan para que funcione tu curso:</p>
       <ul>
-        <li><strong>Identificación:</strong> nombre, correo electrónico y, si tu docente la registra, matrícula.</li>
-        <li><strong>Académicos:</strong> cursos en los que participas, entregas y archivos que subes, calificaciones y comentarios, resultados de evaluaciones, asistencia y participación en foros.</li>
-        <li><strong>Docentes:</strong> además, academia, unidad académica y materias que imparten.</li>
-        <li><strong>Técnicos:</strong> fecha de tu último acceso y un identificador aleatorio del dispositivo que usas para registrar asistencia.</li>
-        <li><strong>Ubicación al registrar asistencia con código:</strong> si tu docente lo activa y das permiso en el navegador, tu teléfono envía su ubicación en ese momento. Enlace solo la usa para calcular a qué distancia estás del salón y guarda únicamente esa distancia (por ejemplo, "a 40 m"), nunca tus coordenadas. También se compara, sin guardarla, la red de internet desde la que te registras. La ubicación del teléfono del docente se usa como referencia del salón y se borra al cerrar el registro. Si no das permiso, tu registro puede quedar "por revisar" para que tu docente lo confirme.</li>
+        <li><strong>Identificación:</strong> nombre, correo electrónico y, si tu docente la registra, matrícula y sección o grupo.</li>
+        <li><strong>Fotografía de perfil:</strong> la tomas o subes tú, para que tu docente te reconozca en el salón y en los exámenes. No se usa para reconocimiento facial ni para ningún análisis biométrico.</li>
+        <li><strong>Trabajo académico:</strong> entregas y los archivos que subes, calificaciones, comentarios y correcciones de tu docente, avance en los materiales, publicaciones en foros, mensajes con tu docente y constancias.</li>
+        <li><strong>Evaluaciones:</strong> tus respuestas, la hora de inicio y de envío y, en modo examen, los eventos de integridad: salir de la pantalla o de pantalla completa, intentos de captura de pantalla, cambio de dispositivo, bloqueos y desbloqueos.</li>
+        <li><strong>Asistencia:</strong> la hora de tu registro y un identificador aleatorio de tu dispositivo, para que un mismo teléfono no registre a varias personas.</li>
+        <li><strong>Ubicación, solo si tu docente lo activa y das permiso:</strong> al registrar asistencia con código o al empezar un examen en el salón, tu teléfono envía su ubicación en ese momento. Enlace calcula a qué distancia estás del salón y guarda únicamente esa distancia y su precisión (por ejemplo, «a 40 m»), nunca tus coordenadas. También compara, sin guardarla, la red de internet desde la que te registras, y guarda solo si coincide o no con la del salón. La ubicación del teléfono del docente se usa como referencia y se borra al cerrar el registro.</li>
+        <li><strong>Uso de la plataforma:</strong> fecha y hora de cada inicio de sesión, las sesiones abiertas en tus dispositivos, cuándo entras a cada curso y, si activas las notificaciones, la dirección que tu navegador asigna para recibirlas.</li>
+        <li><strong>Errores técnicos:</strong> si una pantalla falla, se registra el mensaje de error, la pantalla y la hora, para corregirlo. Nunca incluye contraseñas ni el contenido de tus entregas.</li>
+        <li><strong>Si eres docente,</strong> además: academia, unidad académica, materias que impartes y tu solicitud para ser docente.</li>
       </ul>
-      <p>No recabamos datos personales sensibles. No se guardan contraseñas: entras con tu cuenta de Microsoft o de Google.</p>
+      <p>Enlace <strong>no recaba datos personales sensibles</strong> (salud, creencias, origen étnico, datos biométricos ni similares) y <strong>no guarda contraseñas</strong>: entras con tu cuenta de Google o de Microsoft, o con un enlace de un solo uso enviado a tu correo.</p>
 
-      <h2>3. Para qué los usamos</h2>
+      <h2 id="finalidades">3. Para qué se usan</h2>
+      <p>Todas las finalidades son necesarias para el servicio que solicitas:</p>
       <ul>
-        <li>Darte acceso a tus cursos y a sus materiales.</li>
-        <li>Recibir tus entregas y permitir que tu docente las califique y comente.</li>
-        <li>Registrar la asistencia (y confirmar que quien se registra está en el salón) y calcular calificaciones y el avance del curso.</li>
+        <li>Darte acceso a tus cursos, sus materiales y sus avisos.</li>
+        <li>Recibir tus entregas y permitir que tu docente las califique, las corrija y te dé retroalimentación.</li>
+        <li>Aplicar evaluaciones y exámenes, y cuidar su integridad.</li>
+        <li>Registrar la asistencia y confirmar que quien se registra está en el salón.</li>
+        <li>Calcular calificaciones, el avance del curso y quién necesita apoyo.</li>
+        <li>Revisar la similitud entre entregas de una misma actividad, cuando tu docente lo activa: el texto de tu entrega se compara con las de tus compañeros y el resultado solo lo ve tu docente.</li>
+        <li>Enviarte avisos por correo y notificaciones, si no los desactivas en «Mi perfil».</li>
+        <li>Emitir constancias y permitir que cualquiera verifique su autenticidad.</li>
         <li>Verificar la identidad de los docentes y organizar la plataforma por academias y unidades.</li>
+        <li>Dar soporte, corregir errores y mantener la seguridad de la plataforma.</li>
       </ul>
-      <p>No usamos tus datos con fines comerciales, publicitarios ni de mercadotecnia.</p>
+      <p>No hay finalidades secundarias: tus datos <strong>no se usan con fines comerciales, publicitarios ni de mercadotecnia</strong>, ni para crear perfiles ajenos a tus cursos.</p>
 
-      <h2>4. Con quién se comparten</h2>
-      <p>Tus datos los ven solo las personas que lo necesitan: tu docente ve la información de su curso; tus compañeros ven únicamente tu nombre (por ejemplo, en foros y equipos) y nunca tu correo, tu matrícula ni tus calificaciones. La administración de Enlace puede consultar la información para darle soporte.</p>
-      <p>Para funcionar, Enlace usa proveedores que tratan datos por cuenta del responsable: Cloudflare (hospedaje de la plataforma, la base de datos y los archivos, con servidores que pueden estar fuera de México), y Microsoft o Google para verificar tu identidad al entrar. No se venden ni se ceden datos a terceros.</p>
+      <h2 id="quien">4. Quién puede verlos</h2>
+      <ul>
+        <li><strong>Tu docente</strong> (y los co-docentes de tu curso) ve la información de ese curso: tus datos de identificación, foto, entregas, calificaciones, evaluaciones, asistencia y mensajes.</li>
+        <li><strong>Tus compañeros</strong> ven únicamente tu nombre, por ejemplo en foros y equipos. En los foros anónimos, ni eso. Nunca ven tu correo, tu matrícula, tu foto ni tus calificaciones.</li>
+        <li><strong>La administración de Enlace</strong> puede consultar la información para dar soporte y resolver aclaraciones. Cuando un docente o la administración abre la vista de un alumno, la consulta queda registrada.</li>
+        <li><strong>Constancias:</strong> el código QR y el folio de una constancia llevan a una página pública de verificación que muestra tu nombre, el curso, las horas y, si la tiene, la calificación. Solo puede verla quien tenga el folio.</li>
+      </ul>
 
-      <h2>5. Cuánto tiempo se conservan</h2>
-      <p>Mientras dure el curso y hasta [plazo, por ejemplo: dos años] después de que termine, para aclaraciones de calificaciones. Después se eliminan o se conservan solo en respaldos protegidos, conforme a la normativa aplicable.</p>
+      <h2 id="proveedores">5. Proveedores y transferencias</h2>
+      <p>Para funcionar, Enlace usa proveedores que tratan datos por cuenta del responsable y solo para prestar su servicio:</p>
+      <ul>
+        <li><strong>Cloudflare, Inc.:</strong> hospeda la plataforma, la base de datos, los archivos y las copias de seguridad. Sus servidores pueden estar fuera de México, por ejemplo en Estados Unidos.</li>
+        <li><strong>Google LLC y Microsoft Corporation:</strong> verifican tu identidad cuando entras con su cuenta. Si así se configura, Google (Gmail) también envía los correos de aviso.</li>
+        <li><strong>Resend:</strong> envía los correos de aviso y de acceso, solo si se configura en lugar de Gmail.</li>
+        <li><strong>El servicio de notificaciones de tu navegador</strong> (Google, Apple, Mozilla o Microsoft, según el que uses), solo si activas las notificaciones. El aviso viaja cifrado y nunca incluye calificaciones ni el texto de los mensajes.</li>
+        <li><strong>YouTube, Vimeo o Google Drive:</strong> si tu docente incluye un video de esos sitios, al reproducirlo tu navegador se conecta con ellos. Los videos de YouTube usan su modo de privacidad mejorada.</li>
+      </ul>
+      <p><strong>No se venden ni se transfieren datos a terceros</strong> para sus propios fines. Solo se entregarían a una autoridad competente que los requiera conforme a la ley.</p>
 
-      <h2>6. Tus derechos</h2>
-      <p>Puedes solicitar el acceso, la rectificación, la cancelación u oposición al tratamiento de tus datos (derechos ARCO), así como revocar tu consentimiento, escribiendo a [correo de contacto] con tu nombre, correo con el que entras a Enlace y la solicitud. Responderemos en un plazo máximo de [plazo] días hábiles.</p>
+      <h2 id="conservacion">6. Cuánto tiempo se conservan</h2>
+      <ul>
+        <li><strong>Cursos y trabajo académico:</strong> mientras el curso esté activo. Al terminar el periodo, el curso se archiva y se conserva hasta <strong>dos años</strong> después para aclaraciones de calificaciones y constancias; después se elimina.</li>
+        <li><strong>Constancias:</strong> el registro para verificarlas se conserva mientras la constancia pueda presentarse como válida, salvo que se revoque.</li>
+        <li><strong>Sesiones:</strong> cada sesión vence a los 14 días, o antes si cierras sesión.</li>
+        <li><strong>Errores técnicos:</strong> 30 días.</li>
+        <li><strong>Ubicación del docente para la asistencia:</strong> se borra al cerrar el registro.</li>
+        <li><strong>Copias de seguridad:</strong> se hacen cada semana, en almacenamiento privado, y se eliminan a los 12 meses.</li>
+      </ul>
 
-      <h2>7. Cookies</h2>
-      <p>Enlace usa una sola cookie necesaria para mantener tu sesión iniciada. No usa cookies de publicidad ni de rastreo, ni herramientas de analítica de terceros.</p>
+      <h2 id="seguridad">7. Seguridad</h2>
+      <p>Las conexiones van cifradas (HTTPS). La sesión se guarda en una cookie firmada que se puede revocar por dispositivo, y los archivos solo se entregan a quien tiene permiso de verlos. Las vistas previas de documentos se generan en tu propio navegador, sin enviar los archivos a servicios externos.</p>
 
-      <h2>8. Cambios a este aviso</h2>
-      <p>Si este aviso cambia, Enlace te lo mostrará al entrar para que lo revises y lo aceptes de nuevo.</p>
+      <h2 id="derechos">8. Tus derechos</h2>
+      <p>Puedes pedir el <strong>acceso</strong> a tus datos, su <strong>rectificación</strong> si son incorrectos, su <strong>cancelación</strong> o tu <strong>oposición</strong> a su tratamiento (derechos ARCO), así como <strong>revocar tu consentimiento</strong> o limitar el uso de tus datos.</p>
+      <ol>
+        <li>Escribe a <a href="mailto:{{AVISO_CORREO}}">{{AVISO_CORREO}}</a> desde el correo con el que entras a Enlace.</li>
+        <li>Incluye tu nombre, el curso, qué derecho quieres ejercer y sobre qué datos. Si lo haces por medio de otra persona, adjunta el documento que acredite la representación.</li>
+        <li>Recibirás respuesta en un máximo de <strong>20 días hábiles</strong>. Si procede, se hará efectiva en los <strong>15 días hábiles</strong> siguientes.</li>
+      </ol>
+      <p>Ten en cuenta que, mientras estés inscrito en un curso, algunos datos (como tus entregas y calificaciones) son necesarios para llevarlo, y que tu docente o tu escuela pueden estar obligados a conservar tus calificaciones. Para dejar de recibir correos o notificaciones no necesitas escribir: desactívalos en «Mi perfil».</p>
+      <p>Si consideras que tu derecho no fue atendido, puedes acudir a la autoridad en materia de protección de datos personales.</p>
+
+      <h2 id="cookies">9. Cookies y almacenamiento</h2>
+      <p>Enlace usa <strong>una sola cookie, necesaria para mantener tu sesión iniciada</strong>. Además, tu navegador guarda preferencias como filtros y vistas, y la interfaz para que cargue más rápido; nada de eso sale de tu dispositivo. No hay cookies de publicidad ni de rastreo, ni herramientas de analítica de terceros.</p>
+
+      <h2 id="cambios">10. Cambios a este aviso</h2>
+      <p>Si este aviso cambia, Enlace te lo mostrará al entrar para que lo revises y lo aceptes de nuevo. La versión vigente siempre está en esta página.</p>
     </main>
   </body>
 </html>
