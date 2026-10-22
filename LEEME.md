@@ -1,9 +1,35 @@
-# Enlace · versión 12.71
+# Enlace · versión 12.90
 
-Plataforma académica independiente para docentes y alumnos de cualquier academia (nació en la Academia de Física de la BUAP), con interfaz inspirada en Brightspace.
-No es el código de D2L Brightspace ni una plataforma oficial de la BUAP.
+Plataforma académica independiente para docentes y alumnos de cualquier academia (nació en una academia de Física), con interfaz inspirada en Brightspace.
+No es el código de D2L Brightspace ni una plataforma oficial de ninguna institución.
 
 Esta versión se despliega en **tu propia cuenta de Cloudflare** (Workers + D1 + R2, plan gratuito) y ya no depende de ChatGPT Sites.
+
+## Novedades de la versión 12.90 (sin BUAP, aviso de privacidad completo y pulido de la interfaz)
+
+- **Sin referencias a la BUAP.** La pestaña del navegador dice «Enlace», la marca ya no lleva «Aula virtual · BUAP», y el pie de página dice «Enlace · Espacio docente independiente» con el enlace al aviso de privacidad. También se quitaron de la pantalla de acceso («Entra con tu correo institucional», «Continuar con Microsoft (correo institucional)»), del registro de docentes («¿Eres docente?»), de los ejemplos de correo y de la documentación.
+- **Quién puede pedir ser docente.** Antes solo los correos `@correo.buap.mx`. Ahora **cualquier correo puede enviar la solicitud** y tú sigues aprobando o rechazando cada una en *Docentes*. Si algún día quieres volver a limitarlo, descomenta `TEACHER_EMAIL_DOMAINS` en `wrangler.toml` con los dominios que quieras. Lo mismo para el acceso con Microsoft (`MICROSOFT_EMAIL_DOMAINS`), que de todos modos solo acepta cuentas del directorio que configures.
+- **Aviso de privacidad completo** (`/privacidad`, versión 2026-10c):
+  - Responsable: **Dr. Rodrigo Vela Vázquez**. Domicilio: el de `AVISO_DOMICILIO` en `wrangler.toml` (Calle 4 Sur 104, Centro Histórico, C.P. 72000, Puebla, Puebla). Correo de contacto: el de `AULA_OWNER_EMAIL`, que se pone al publicar; así tu correo nunca queda escrito en el repositorio público.
+  - Dice con precisión qué datos se guardan (incluidas la fotografía, los eventos de integridad del examen y la distancia al salón), para qué, quién los ve, qué proveedores participan (Cloudflare, Google, Microsoft, Resend, servicios de notificaciones, YouTube/Vimeo/Drive), cuánto tiempo se conservan, cómo ejercer los derechos ARCO (respuesta en 20 días hábiles) y qué cookies hay.
+  - Como el aviso cambió de fondo, **todas las personas lo aceptarán de nuevo** la próxima vez que entren (una sola vez).
+  - **Dos compromisos que el aviso hace y que te tocan a ti:**
+    1. **Copias de seguridad: se eliminan a los 12 meses.** Configúralo una vez en Cloudflare: *R2 → enlace-respaldos → Settings → Object lifecycle rules → Add rule*, «Delete objects» a los 365 días. O desde tu computadora: `npx wrangler r2 bucket lifecycle add enlace-respaldos respaldos-12-meses --expire-days 365`.
+    2. **Cursos terminados: se conservan hasta dos años después de archivarlos.** Enlace no los borra solo; revisa una vez al año los cursos archivados de hace más de dos años y elimínalos (menú «⋯» del curso → *Eliminar curso / grupo*).
+  - Si cambias algo de fondo del aviso, sube `PRIVACY_VERSION` en `src/server/privacy.js` y cambia la fecha y la versión al inicio de `src/public/privacidad.html`.
+- **Interfaz más pulida (revisión de diseño en todas las pantallas, docente y alumno, computadora y teléfono):**
+  - **Mis cursos:** la administración reúne *Docentes*, *Usuarios*, *Reportes* y *Curso de ejemplo* en un menú «Administración»; la fila de acciones queda en tres botones.
+  - **Portada del curso:** el grupo (y el periodo, si lo tiene) y el título abajo a la izquierda, como en el estante; el botón «Editar curso y portada» ya no tapa títulos largos. «Información del curso» muestra grupo, periodo y número de alumnos, y si no hay presentación invita a escribirla. A los alumnos ya no les aparece vacía.
+  - **Títulos:** el filete de color subraya siempre el título, igual en todas las pantallas.
+  - **Avisos y recuadros** (instrucciones del libro, material del docente, prórrogas, equipos…): borde completo y fondo del color del curso, sin la franja gruesa a la izquierda.
+  - **Calendario:** la hora ya no se pega al título de la actividad; los días de otros meses son legibles.
+  - **Libro de calificaciones:** los títulos de las actividades en su escritura normal (antes en mayúsculas).
+  - **Participación:** columnas más legibles en la computadora; en el teléfono, «0 de 3» ya no se parte en tres renglones.
+  - **Asistencia en el teléfono:** se ven tres o cuatro fechas a la vez (antes, una); la casilla sin registro es un cuadro punteado visible.
+  - **Mis calificaciones en el teléfono:** promedio y asistencia en dos franjas, sin columnas de dos palabras.
+  - **Accesibilidad:** contraste AA en fechas de noticias, «tardía» del libro y casillas de asistencia; objetivos de al menos 24 px en migas y archivos; textos de al menos 12 px en el índice de contenido; interlineado de botones de dos renglones.
+  - «Envíos en carpeta» ahora dice «Entregas».
+- No hay migraciones en esta versión.
 
 ## Novedades de la versión 12.89 (vista previa de Word, PowerPoint, Excel y texto)
 
@@ -491,7 +517,7 @@ Cambios de la revisión de diseño (`.impeccable/critique/`, calificación inici
 ## Novedades de la versión 12.35 (revisión de diseño y accesibilidad)
 
 Ajustes de apariencia tras revisar las pantallas principales en computadora y en teléfono; no cambia nada de cómo funciona:
-- **Textos grises más legibles**: los textos secundarios (fechas, conteos, el pie de página, «Aula virtual · BUAP») ahora tienen el contraste mínimo de accesibilidad (WCAG AA). También las etiquetas pequeñas sobre fondos grises.
+- **Textos grises más legibles**: los textos secundarios (fechas, conteos, el pie de página y el subtítulo de la marca) ahora tienen el contraste mínimo de accesibilidad (WCAG AA). También las etiquetas pequeñas sobre fondos grises.
 - **Calificaciones**: la pantalla tiene su título y la explicación de cómo se calcula queda en un apartado que se puede plegar (en el teléfono empieza plegado, para ver la tabla de inmediato). Las pestañas ya no se apilan en el teléfono.
 - **Contenido en el teléfono**: las unidades son una fila que se desliza, así los materiales se ven desde el inicio.
 - **Detalles**: el nombre largo del curso termina en «…» en el teléfono; «1 material» en singular; ya no aparece «0 archivos» en materiales sin archivos; en Actividades, «17 calificadas» ya no se separa; enlaces y botones de texto más fáciles de tocar; el pie de página queda siempre al fondo.
@@ -1124,8 +1150,8 @@ Requiere la migración **0015** (solo agrega columnas). Al actualizar, cada pers
 
 Requiere las migraciones **0009 a 0014** (`npm run configurar` las aplica después de descargar un respaldo). Todas son no destructivas: solo agregan tablas y columnas.
 
-- **Acceso con Microsoft (correo institucional).** Botón *Continuar con Microsoft (correo BUAP)*, restringido al directorio de la BUAP y a sus dominios de correo. Quien ya entraba con Google con el mismo correo conserva su cuenta. Se activa al configurarlo (ver *Opcional: acceso con Microsoft*); mientras tanto el botón no aparece.
-- **Aviso de privacidad** en `/privacidad` y enlace al pie de cada página. Cada persona lo acepta una vez al entrar (y otra vez si cambia la versión del aviso). **Es un borrador: pide que lo revise el área jurídica o de transparencia de la BUAP** antes de usarlo como definitivo (`src/public/privacidad.html`; al cambiarlo, sube `PRIVACY_VERSION` en `src/server/privacy.js`).
+- **Acceso con Microsoft (correo institucional).** Botón *Continuar con Microsoft (correo institucional)*, restringido al directorio (tenant) de la institución y, si se configuran, a sus dominios de correo. Quien ya entraba con Google con el mismo correo conserva su cuenta. Se activa al configurarlo (ver *Opcional: acceso con Microsoft*); mientras tanto el botón no aparece.
+- **Aviso de privacidad** en `/privacidad` y enlace al pie de cada página. Cada persona lo acepta una vez al entrar (y otra vez si cambia la versión del aviso). Desde la 12.90 está completo (ver esa versión) (`src/public/privacidad.html`; al cambiarlo, sube `PRIVACY_VERSION` en `src/server/privacy.js`).
 - **Respaldo automático semanal y vigilancia** con GitHub Actions (ver *Respaldos*). Nueva dirección `/salud` que confirma que el Worker y la base responden.
 - **Periodos y archivo de cursos.** Cada curso puede tener un periodo (por ejemplo, *Otoño 2026*). *Copiar a un nuevo periodo* crea un curso nuevo con unidades, materiales, noticias, foros, evaluaciones, actividades, categorías y reglas (sin alumnos, entregas ni calificaciones; los archivos se comparten sin ocupar espacio extra; las fechas se vacían salvo que pidas conservarlas). *Archivar* deja el curso en solo lectura para todos; se puede desarchivar.
 - **Co-docentes.** El propietario agrega a otro docente registrado de Enlace; puede editar y calificar, pero no borrar el curso ni agregar más co-docentes. Si deja de ser docente de Enlace, pierde también ese acceso.
@@ -1145,13 +1171,13 @@ Dentro de cualquier curso que impartes, el botón **Ver como alumno** (a la dere
 
 ## Novedades de la versión 12.4 (registro de docentes)
 
-**Enlace abierto a docentes de cualquier academia, con aprobación.** Quien entra con su correo institucional (`@correo.buap.mx`) ve en *Mis cursos* el botón *Solicitar acceso de docente*: llena su nombre, **academia**, **unidad académica**, materias que imparte y un comentario. En *Docentes* aparece la solicitud (con un contador en el botón) y la administración la **aprueba** —la persona puede crear cursos de inmediato, sin volver a entrar— o la **rechaza** con un motivo que la persona ve y puede corregir. Cada docente da de alta sus propios cursos, y cada curso queda clasificado con la academia y unidad de quien lo crea.
+**Enlace abierto a docentes de cualquier academia, con aprobación.** Quien entra con su correo (de los dominios de `TEACHER_EMAIL_DOMAINS`, si se configuran) ve en *Mis cursos* el botón *Solicitar acceso de docente*: llena su nombre, **academia**, **unidad académica**, materias que imparte y un comentario. En *Docentes* aparece la solicitud (con un contador en el botón) y la administración la **aprueba** —la persona puede crear cursos de inmediato, sin volver a entrar— o la **rechaza** con un motivo que la persona ve y puede corregir. Cada docente da de alta sus propios cursos, y cada curso queda clasificado con la academia y unidad de quien lo crea.
 
 **Catálogo de academias y unidades.** En *Docentes → Academias y unidades académicas* agregas las opciones (una por renglón, pegadas desde Excel), cambias nombres o desactivas las que ya no se usan. Los duplicados se detectan sin importar mayúsculas ni acentos. **Mientras el catálogo esté vacío, nadie puede enviar solicitudes**: primero carga las academias y unidades del Complejo Regional Centro.
 
 **Docentes actuales.** La primera vez que entren después de la actualización (incluida la administración), Enlace les pide su academia y unidad.
 
-Los correos que pueden solicitar acceso se configuran con `TEACHER_EMAIL_DOMAINS` en `wrangler.toml` (por omisión `correo.buap.mx`). Dar de alta docentes a mano desde *Docentes → Agregar docente* sigue funcionando con cualquier correo. Migración nueva: **0008** (solo agrega tablas y columnas).
+Los correos que pueden solicitar acceso se configuran con `TEACHER_EMAIL_DOMAINS` en `wrangler.toml` (desde la 12.90, si no se indica, cualquier correo puede solicitarlo; la administración aprueba cada solicitud). Dar de alta docentes a mano desde *Docentes → Agregar docente* sigue funcionando con cualquier correo. Migración nueva: **0008** (solo agrega tablas y columnas).
 
 ## Novedades de la versión 12.3 (diseño)
 
@@ -1348,7 +1374,7 @@ Si Cloudflare indica que R2 no está activo, actívalo primero desde el panel (s
 
 **8. Crear el acceso con Google** en [console.cloud.google.com](https://console.cloud.google.com):
 
-1. Crea un proyecto (por ejemplo, "Enlace BUAP").
+1. Crea un proyecto (por ejemplo, "Enlace").
 2. Entra a *Google Auth Platform*. En *Branding* pon el nombre "Enlace" y tu correo de soporte.
 3. En *Audience* elige *External*.
 4. En *Clients* → *Create client* → tipo *Web application*. En *Authorized redirect URIs* agrega:
@@ -1372,13 +1398,13 @@ Para cambios posteriores basta con `npm run deploy`. Si una versión futura trae
 
 ### Opcional: solo correos institucionales
 
-En `wrangler.toml` descomenta `ALLOWED_EMAIL_DOMAINS` (por ejemplo `alumno.buap.mx,correo.buap.mx`). Quien intente entrar con otro correo verá "Entra con tu correo institucional de la BUAP". Úsalo solo si todas las personas tienen su correo institucional como cuenta de Google.
+En `wrangler.toml` descomenta `ALLOWED_EMAIL_DOMAINS` (por ejemplo `alumnos.escuela.edu.mx,escuela.edu.mx`). Quien intente entrar con otro correo verá "Entra con tu correo institucional". Úsalo solo si todas las personas tienen su correo institucional como cuenta de Google.
 
 ### Opcional: acceso con Microsoft (correo institucional)
 
-Si el correo de la BUAP está en Microsoft 365, el botón **Continuar con Microsoft (correo BUAP)** aparece arriba de Google. Solo acepta cuentas del directorio de la BUAP (no de otras organizaciones) y correos `@correo.buap.mx`, `@alumno.buap.mx` o `@buap.mx` (se cambia con `MICROSOFT_EMAIL_DOMAINS`). Quien antes entraba con Google con el mismo correo conserva su cuenta y sus cursos.
+Si el correo de tu institución está en Microsoft 365, el botón **Continuar con Microsoft (correo institucional)** aparece arriba de Google. Solo acepta cuentas del directorio de la institución (no de otras organizaciones) y, si configuras `MICROSOFT_EMAIL_DOMAINS`, solo esos dominios de correo. Quien antes entraba con Google con el mismo correo conserva su cuenta y sus cursos.
 
-Hay que registrar Enlace en el directorio de la BUAP. Puede requerir que el área de TI de la BUAP lo apruebe o lo haga por ti:
+Hay que registrar Enlace en el directorio de la institución. Puede requerir que su área de TI lo apruebe o lo haga por ti:
 
 1. En [portal.azure.com](https://portal.azure.com) → *Microsoft Entra ID* → *App registrations* → *New registration*.
 2. Nombre: `Enlace`. *Supported account types*: **Accounts in this organizational directory only**.
@@ -1394,7 +1420,7 @@ npx wrangler secret put MICROSOFT_CLIENT_SECRET
 
 y en `[vars]` de `wrangler.toml` agrega `MICROSOFT_TENANT_ID = "el Directory (tenant) ID"`. Publica con `npm run deploy`. Por seguridad, Enlace no activa Microsoft si el tenant es `common` u `organizations`.
 
-**Pantalla de acceso con Microsoft activo:** solo aparece «Continuar con Microsoft (correo BUAP)». El acceso con Google sigue funcionando, pero ya no se ofrece en la pantalla: quien lo necesite (por ejemplo, la cuenta de administración si es de Gmail) entra por `https://enlace.enlace-academia.workers.dev/?acceso=google`. Una cuenta de Microsoft y una de Google con correos distintos son cuentas distintas en Enlace: si quieres administrar con tu correo BUAP, ponlo en `AULA_OWNER_EMAIL` o agrégalo como Administración en *Docentes*.
+**Pantalla de acceso con Microsoft activo:** solo aparece «Continuar con Microsoft (correo institucional)». El acceso con Google sigue funcionando, pero ya no se ofrece en la pantalla: quien lo necesite (por ejemplo, la cuenta de administración si es de Gmail) entra por `https://enlace.enlace-academia.workers.dev/?acceso=google`. Una cuenta de Microsoft y una de Google con correos distintos son cuentas distintas en Enlace: si quieres administrar con tu correo institucional, ponlo en `AULA_OWNER_EMAIL` o agrégalo como Administración en *Docentes*.
 
 ### Opcional: acceso con enlace por correo
 
@@ -1481,5 +1507,5 @@ Workers: 100 000 solicitudes al día y 3 MB por Worker comprimido (Enlace ocupa 
 - En producción está publicada la versión 11 (septiembre de 2026). La versión 12.1 pasó las pruebas automáticas y se recorrió en `wrangler dev` con D1 local y Chromium (papelera, moderación de foros, perfil de alumno, cierre de sesión). Las versiones 10, 11 y 12 pasaron todas las pruebas automáticas y se recorrieron en Chromium real (incluido el QR leído desde la pantalla y el registro desde un navegador de tamaño teléfono), pero no se han probado contra tu Cloudflare, tu Google ni en un iPad o iPhone reales: conviene probarlas primero en el entorno de pruebas o con un curso de prueba.
 - Bibliotecas incluidas, sin modificar: pdf.js 5.6.205 (Apache 2.0), KaTeX 0.16.45 (MIT) y la fuente Inter 5.3.0 (SIL OFL 1.1), en `src/public/vendor/` junto con sus licencias.
 - No hay integración con Turnitin.
-- La versión 12.6 pasó las 23 suites y se recorrió en `wrangler dev` con D1 local y Chromium (también en tamaño teléfono). El acceso con Microsoft se probó con respuestas simuladas: la primera prueba real requiere el registro en el directorio de la BUAP.
+- La versión 12.6 pasó las 23 suites y se recorrió en `wrangler dev` con D1 local y Chromium (también en tamaño teléfono). El acceso con Microsoft se probó con respuestas simuladas: la primera prueba real requiere el registro en el directorio de la institución.
 - Siguientes pasos posibles: vista previa de Word, Excel y PowerPoint; dividir `app.js` y las capas de estilos antiguas en archivos por sección; pruebas en iPad y iPhone reales.

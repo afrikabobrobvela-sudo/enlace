@@ -290,7 +290,7 @@ step('Publicación');
 const problems = configProblems(readToml());
 if (problems.length) stop(`wrangler.toml todavía tiene valores de ejemplo:\n   · ${problems.join('\n   · ')}`);
 if (!runNode('scripts/build.mjs')) stop('Falló la compilación de la interfaz.');
-console.log('   Si es tu primera publicación, Cloudflare te pedirá elegir un subdominio (por ejemplo, fisica-buap).');
+console.log('   Si es tu primera publicación, Cloudflare te pedirá elegir un subdominio (por ejemplo, enlace-academia).');
 if (wrangler(['deploy']).status !== 0) stop('No se pudo publicar.');
 let siteUrl = existsSync(URL_FILE) ? readFileSync(URL_FILE, 'utf8').trim() : memory.url || '';
 if (!siteUrl) {
@@ -320,7 +320,7 @@ if (secrets.has('GOOGLE_CLIENT_ID') && secrets.has('GOOGLE_CLIENT_SECRET')) {
   console.log(`
    Esta parte se hace en tu navegador (unos 5 minutos):
 
-   1. Abre https://console.cloud.google.com y crea un proyecto llamado "Enlace BUAP".
+   1. Abre https://console.cloud.google.com y crea un proyecto llamado "Enlace".
    2. En el buscador de arriba escribe "Google Auth Platform" y ábrelo.
       · Branding: nombre "Enlace" y tu correo de soporte.
       · Audience: elige "External". Luego pulsa "Publish app" (o agrega tu correo en "Test users").

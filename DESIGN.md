@@ -1,6 +1,6 @@
 ---
 name: Enlace
-description: Aula virtual de la BUAP como una colección de divulgación científica; cada curso es un tomo con su tinta.
+description: Aula virtual independiente como una colección de divulgación científica; cada curso es un tomo con su tinta.
 colors:
   tinta: "#111a2e"
   tinta-2: "#1d2942"

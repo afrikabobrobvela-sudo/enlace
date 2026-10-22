@@ -8,21 +8,21 @@ const { context } = browser;
 
 // ---- parseRoster: Excel (tabuladores), CSV y encabezados ----
 const excel = context.parseRoster(
-  'Nombre\tMatrícula\tCorreo\nAna Pérez López\t202612345\tAna.Perez@alumno.buap.mx\n\nLuis Gómez\t\tluis@alumno.buap.mx\n',
+  'Nombre\tMatrícula\tCorreo\nAna Pérez López\t202612345\tAna.Perez@alumnos.escuela.edu.mx\n\nLuis Gómez\t\tluis@alumnos.escuela.edu.mx\n',
 );
 assert.deepEqual(JSON.parse(JSON.stringify(excel.students)), [
-  { name: 'Ana Pérez López', email: 'ana.perez@alumno.buap.mx', matricula: '202612345' },
-  { name: 'Luis Gómez', email: 'luis@alumno.buap.mx', matricula: '' },
+  { name: 'Ana Pérez López', email: 'ana.perez@alumnos.escuela.edu.mx', matricula: '202612345' },
+  { name: 'Luis Gómez', email: 'luis@alumnos.escuela.edu.mx', matricula: '' },
 ]);
 assert.equal(excel.errors.length, 0);
 
 // Encabezado con columna «Sección»: cada alumno con la suya (y la columna no se mezcla con el nombre).
-const conSeccion = context.parseRoster('Nombre\tSección\tCorreo\nAna Pérez\t5AV\tana@alumno.buap.mx\nBeto Ruiz\t\tbeto@alumno.buap.mx\n');
+const conSeccion = context.parseRoster('Nombre\tSección\tCorreo\nAna Pérez\t5AV\tana@alumnos.escuela.edu.mx\nBeto Ruiz\t\tbeto@alumnos.escuela.edu.mx\n');
 assert.deepEqual(JSON.parse(JSON.stringify(conSeccion.students)), [
-  { name: 'Ana Pérez', email: 'ana@alumno.buap.mx', matricula: '', section: '5AV' },
-  { name: 'Beto Ruiz', email: 'beto@alumno.buap.mx', matricula: '' },
+  { name: 'Ana Pérez', email: 'ana@alumnos.escuela.edu.mx', matricula: '', section: '5AV' },
+  { name: 'Beto Ruiz', email: 'beto@alumnos.escuela.edu.mx', matricula: '' },
 ]);
-const csv = context.parseRoster('"rosa@alumno.buap.mx","Rosa Díaz",202600001\nmario@alumno.buap.mx;Mario Ruiz\nSin correo, 202600003\n');
+const csv = context.parseRoster('"rosa@alumnos.escuela.edu.mx","Rosa Díaz",202600001\nmario@alumnos.escuela.edu.mx;Mario Ruiz\nSin correo, 202600003\n');
 assert.equal(csv.students.length, 2);
 assert.equal(csv.students[0].name, 'Rosa Díaz');
 assert.equal(csv.students[0].matricula, '202600001');

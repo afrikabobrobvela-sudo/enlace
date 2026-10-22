@@ -46,6 +46,16 @@ let html = element('#main').innerHTML;
 assert(html.includes('data-action="delete-course"'));
 assert(html.includes('Química &lt;script&gt;'));
 assert(!html.includes('Química <script>'));
+assert(html.includes('data-action="demo-course"') && !html.includes('admin-tools-menu'), 'El docente ve «Curso de ejemplo» sin menú de administración');
+assert(!/BUAP/i.test(html));
+// 12.90: la administración reúne Docentes, Usuarios, Reportes y el curso de ejemplo en un solo menú.
+vm.runInContext(`me={id:'admin',name:'Admin',email:'a@example.test',role:'admin',pendingTeacherRequests:2}`, context);
+vm.runInContext('renderHome()', context);
+html = element('#main').innerHTML;
+const adminMenu = html.slice(html.indexOf('admin-tools-menu'), html.indexOf('</details>', html.indexOf('admin-tools-menu')));
+for (const action of ['teachers', 'users', 'reports', 'demo-course']) assert(adminMenu.includes(`data-action="${action}"`), action);
+assert(adminMenu.includes('2 solicitudes pendientes'));
+vm.runInContext(`me={id:'teacher',name:'Docente',email:'t@example.test',role:'teacher'}`, context);
 vm.runInContext('renderContent()', context);
 html = element('#main').innerHTML;
 assert(html.includes('Crear guía editable'));

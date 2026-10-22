@@ -83,7 +83,7 @@ function bulkTeamsModal() {
          <label>Reparto<select name="teamsOrder"><option value="random">Aleatorio</option><option value="alpha">Por orden alfabético</option></select></label>
          ${field('Nombre de cada equipo', 'teamsPrefix', 'Equipo', 'text', 'maxlength="60"')}
        </div>
-       <label class="teams-list" hidden>Lista<textarea name="teamsList" spellcheck="false" placeholder="Equipo 1	ana.perez@alumno.buap.mx"></textarea></label>
+       <label class="teams-list" hidden>Lista<textarea name="teamsList" spellcheck="false" placeholder="Equipo 1	ana.perez@correo.mx"></textarea></label>
        <div class="teams-preview" id="teamsPreview" aria-live="polite"></div>
        <button type="button" class="secondary" id="teamsShuffle">Revolver</button>`,
     async (f) => {

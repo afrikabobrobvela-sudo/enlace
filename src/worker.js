@@ -14,6 +14,7 @@ import { serveH5p } from './server/h5p.js';
 import { PUSH_CRON, runPush } from './server/push.js';
 import { fillAbsences } from './server/attendance.js';
 import { checkErrorAlert, errorPulse, recordError } from './server/errores.js';
+import { privacyPage } from './server/privacy.js';
 
 const TYPES = {
   html: 'text/html; charset=utf-8',
@@ -117,6 +118,11 @@ export default {
       // El reproductor H5P corre con origen opaco (12.71): sus fuentes y hojas necesitan permiso de otro origen.
       ...(name.startsWith('vendor/h5p-standalone-') ? { 'Access-Control-Allow-Origin': '*' } : {}),
     };
+    // El aviso de privacidad lleva el domicilio y el correo del responsable, que vienen de la configuración.
+    if (name === 'privacidad.html') {
+      delete headers.ETag;
+      return new Response(request.method === 'HEAD' ? null : privacyPage(body(name), env), { headers });
+    }
     const known = request.headers.get('If-None-Match');
     if (known && assets[name].etag && known.split(',').some((tag) => tag.trim().replace(/^W\//, '') === assets[name].etag)) {
       return new Response(null, { status: 304, headers });

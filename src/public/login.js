@@ -7,7 +7,7 @@ const LOGIN_ERRORS = {
   expired: 'El intento de inicio de sesión expiró. Vuelve a intentarlo.',
   google: 'Google no confirmó tu identidad. Vuelve a intentarlo.',
   unverified: 'Tu cuenta de Google no tiene el correo verificado. Verifícalo en Google y vuelve a intentarlo.',
-  domain: 'Entra con tu correo institucional de la BUAP.',
+  domain: 'Entra con tu correo institucional.',
   link: 'Ese enlace ya se usó o venció. Pide uno nuevo.',
   google_disabled: 'El acceso con Google todavía no está configurado en este servidor. Avisa a la coordinación.',
   microsoft: 'Microsoft no confirmó tu identidad. Entra con tu cuenta institucional y vuelve a intentarlo.',
@@ -39,9 +39,9 @@ function renderLogin(methods = { google: true, email: false }) {
   document.body.classList.add('signed-out');
   const error = currentLoginError();
   const returnTo = encodeURIComponent(currentReturnPath());
-  // Microsoft primero: es la cuenta institucional (correo BUAP en Microsoft 365).
+  // Microsoft primero: es la cuenta institucional (correo de la escuela en Microsoft 365).
   const microsoft = methods.microsoft
-    ? `<a class="primary login-microsoft" href="/auth/microsoft/start?return_to=${returnTo}"><svg viewBox="0 0 21 21" aria-hidden="true" width="18" height="18"><rect width="10" height="10" fill="#f25022"/><rect x="11" width="10" height="10" fill="#7fba00"/><rect y="11" width="10" height="10" fill="#00a4ef"/><rect x="11" y="11" width="10" height="10" fill="#ffb900"/></svg>Continuar con Microsoft (correo BUAP)</a>`
+    ? `<a class="primary login-microsoft" href="/auth/microsoft/start?return_to=${returnTo}"><svg viewBox="0 0 21 21" aria-hidden="true" width="18" height="18"><rect width="10" height="10" fill="#f25022"/><rect x="11" width="10" height="10" fill="#7fba00"/><rect y="11" width="10" height="10" fill="#00a4ef"/><rect x="11" y="11" width="10" height="10" fill="#ffb900"/></svg>Continuar con Microsoft (correo institucional)</a>`
     : '';
   // Con Microsoft activo, la pantalla solo ofrece el correo institucional. Google sigue funcionando para quien
   // lo necesite (por ejemplo, la cuenta de administración con Gmail) entrando por /?acceso=google.
@@ -53,7 +53,7 @@ function renderLogin(methods = { google: true, email: false }) {
     ? `<form class="login-email" id="loginEmail" novalidate>
          <label for="loginEmailInput">${google || microsoft ? 'O recibe un enlace de acceso en tu correo' : 'Recibe un enlace de acceso en tu correo'}</label>
          <div class="login-email-row">
-           <input id="loginEmailInput" name="email" type="email" autocomplete="email" required placeholder="nombre@alumno.buap.mx">
+           <input id="loginEmailInput" name="email" type="email" autocomplete="email" required placeholder="nombre@correo.mx">
            <button type="submit" class="secondary">Enviar enlace</button>
          </div>
          <p class="login-note" id="loginEmailStatus" role="status"></p>

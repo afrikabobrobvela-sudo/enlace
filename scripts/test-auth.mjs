@@ -90,9 +90,9 @@ assert.equal((await googleLogin({ sub: 'g-2', email: 'a@example.test' }, { retur
 assert.equal((await googleLogin({ sub: 'g-2', email: 'a@example.test' }, { returnTo: '/\t/evil.test/robar' })).headers.get('location'), '/', 'Sin tabulador');
 assert.equal((await googleLogin({ sub: 'g-2', email: 'a@example.test' }, { returnTo: '/?curso=c1#c=1&s=quiz' })).headers.get('location'), '/?curso=c1#c=1&s=quiz');
 
-const restricted = { ...baseEnv, ALLOWED_EMAIL_DOMAINS: 'alumno.buap.mx, correo.buap.mx' };
+const restricted = { ...baseEnv, ALLOWED_EMAIL_DOMAINS: 'alumnos.escuela.edu.mx, escuela.edu.mx' };
 assert.equal((await googleLogin({ sub: 'g-3', email: 'x@gmail.com' }, { env: restricted })).headers.get('location'), '/?login_error=domain');
-assert.equal((await googleLogin({ sub: 'g-4', email: 'ana@alumno.buap.mx' }, { env: restricted })).headers.get('location'), '/');
+assert.equal((await googleLogin({ sub: 'g-4', email: 'ana@alumnos.escuela.edu.mx' }, { env: restricted })).headers.get('location'), '/');
 
 // Alumno nuevo inscrito por correo antes de su primer acceso: queda vinculado a su inscripción.
 store.raw().prepare("INSERT INTO aula_members (id,course,email,name,role) VALUES ('m1','c1','luis@example.test','Luis','student')").run();
@@ -202,9 +202,19 @@ assert.match(katex.headers.get('cache-control'), /immutable/);
 checks += 7;
 
 // ---- Aviso de privacidad ----
-const page = await fetchWorker('/privacidad');
+const page = await fetchWorker('/privacidad', {}, { ...baseEnv, AVISO_DOMICILIO: 'Calle 4 Sur 104 <Centro>' });
 assert.equal(page.status, 200);
-assert.match(await page.text(), /Aviso de privacidad/);
+const aviso = await page.text();
+assert.match(aviso, /Aviso de privacidad/);
+// 12.90: el responsable con su domicilio y el correo de la cuenta principal (nunca escrito en el repositorio).
+assert.match(aviso, /Dr\. Rodrigo Vela Vázquez/);
+assert.match(aviso, /<dd>Calle 4 Sur 104 &lt;Centro&gt;<\/dd>/, 'El domicilio viene de la configuración, escapado');
+assert.ok(aviso.includes(`href="mailto:${baseEnv.AULA_OWNER_EMAIL}"`), 'El correo de contacto es el de la cuenta principal');
+assert.ok(!/\{\{AVISO_|\[(Nombre|domicilio|correo|plazo)/.test(aviso), 'Sin marcadores ni datos por llenar');
+assert.ok(!/BUAP/i.test(aviso));
+const sinCorreo = await (await fetchWorker('/privacidad', {}, { ...baseEnv, AULA_OWNER_EMAIL: 'tu-correo@gmail.com' })).text();
+assert.ok(!sinCorreo.includes('mailto:') && sinCorreo.includes('Se proporciona por correo a quien lo solicite.'), 'Sin configuración no queda un correo de ejemplo');
+checks += 6;
 const nuevo = cookiesFrom(await googleLogin({ sub: 'g-priv', email: 'priv@example.test' }));
 assert.equal((await (await me(nuevo)).json()).privacyAccepted, false);
 const accept = await fetchWorker('/api/privacy/accept', { method: 'POST', headers: { Origin: ORIGIN, 'X-Aula-Request': '1', cookie: cookieHeader(nuevo) }, body: '{}' });
@@ -215,7 +225,7 @@ checks += 4;
 
 // ---- Microsoft (correo institucional) ----
 const TENANT = '11111111-2222-3333-4444-555555555555';
-const msEnv = { ...baseEnv, MICROSOFT_CLIENT_ID: 'ms-app', MICROSOFT_CLIENT_SECRET: 'ms-secreto', MICROSOFT_TENANT_ID: TENANT };
+const msEnv = { ...baseEnv, MICROSOFT_CLIENT_ID: 'ms-app', MICROSOFT_CLIENT_SECRET: 'ms-secreto', MICROSOFT_TENANT_ID: TENANT, MICROSOFT_EMAIL_DOMAINS: 'escuela.edu.mx,alumnos.escuela.edu.mx' };
 async function microsoftLogin(claims, { env = msEnv, tamperState = false } = {}) {
   const start = await fetchWorker('/auth/microsoft/start?return_to=/curso', {}, env);
   assert.equal(start.status, 302);
@@ -245,19 +255,19 @@ for (const tenant of ['', 'common', 'organizations']) {
 }
 const msOnly = await fetchWorker('/api/me', {}, msEnv);
 assert.deepEqual((await msOnly.json()).login, { google: true, microsoft: true, email: false });
-const upn = 'luis@correo.buap.mx';
+const upn = 'luis@escuela.edu.mx';
 assert.equal((await microsoftLogin({ preferred_username: upn }, { tamperState: true })).headers.get('location'), '/?login_error=expired');
 assert.equal((await microsoftLogin({ preferred_username: upn, nonce: 'otro' })).headers.get('location'), '/?login_error=microsoft');
 assert.equal((await microsoftLogin({ preferred_username: upn, aud: 'otra-app' })).headers.get('location'), '/?login_error=microsoft');
 assert.equal((await microsoftLogin({ preferred_username: upn, tid: '99999999-2222-3333-4444-555555555555', iss: 'https://login.microsoftonline.com/99999999-2222-3333-4444-555555555555/v2.0' })).headers.get('location'), '/?login_error=microsoft', 'Otro inquilino');
 assert.equal((await microsoftLogin({ preferred_username: 'alguien@gmail.com' })).headers.get('location'), '/?login_error=domain');
-const msOk = await microsoftLogin({ preferred_username: 'Luis@Correo.Buap.mx', name: 'Luis Gómez' });
+const msOk = await microsoftLogin({ preferred_username: 'Luis@Escuela.Edu.mx', name: 'Luis Gómez' });
 assert.equal(msOk.headers.get('location'), '/curso');
 const luisMs = await (await me(cookiesFrom(msOk))).json();
 assert.equal(luisMs.email, upn);
 // La misma persona que ya entraba con Google (mismo correo) conserva su cuenta.
-store.raw().prepare("INSERT INTO aula_users (id,email,name,role) VALUES ('u-previo','ana@correo.buap.mx','Ana','student')").run();
-const anaMs = await microsoftLogin({ preferred_username: 'ana@correo.buap.mx', oid: 'oid-ana' });
+store.raw().prepare("INSERT INTO aula_users (id,email,name,role) VALUES ('u-previo','ana@escuela.edu.mx','Ana','student')").run();
+const anaMs = await microsoftLogin({ preferred_username: 'ana@escuela.edu.mx', oid: 'oid-ana' });
 assert.equal((await (await me(cookiesFrom(anaMs))).json()).id, 'u-previo');
 checks += 3;
 

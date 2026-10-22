@@ -161,9 +161,9 @@ for (const file of ['reactivos.js', 'zip.js', 'oficina.js', 'd2l.js', 'importar.
 }
 const g = (name) => vm.runInContext(name, ctx);
 const estudiantes = [
-  { id: 'm1', name: 'Fabián Aguado Beltrán', matricula: '202612345', email: 'fabian.aguado@alumno.buap.mx', role: 'student' },
-  { id: 'm2', name: 'Julio César Agundis Cano', matricula: '202600001', email: 'julio.agundis@alumno.buap.mx', role: 'student' },
-  { id: 'm3', name: 'Raúl Álvarez de la Torre Fuentes', matricula: '', email: 'raul@alumno.buap.mx', role: 'student' },
+  { id: 'm1', name: 'Fabián Aguado Beltrán', matricula: '202612345', email: 'fabian.aguado@alumnos.escuela.edu.mx', role: 'student' },
+  { id: 'm2', name: 'Julio César Agundis Cano', matricula: '202600001', email: 'julio.agundis@alumnos.escuela.edu.mx', role: 'student' },
+  { id: 'm3', name: 'Raúl Álvarez de la Torre Fuentes', matricula: '', email: 'raul@alumnos.escuela.edu.mx', role: 'student' },
 ];
 const plano = (x) => JSON.parse(JSON.stringify(x));
 // Pase de lista: la exportación de Enlace y fechas en formato mexicano.

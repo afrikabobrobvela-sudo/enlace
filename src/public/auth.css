@@ -1,5 +1,5 @@
 /* Acceso, panel de docentes e importación de listas.
-   Usa la misma paleta del resto de Enlace: azul BUAP #003b5c, turquesa #00a6b2, enlaces #006fbf. */
+   Usa la misma paleta del resto de Enlace: azul marino #003b5c, turquesa #00a6b2, enlaces #006fbf. */
 
 /* Sin sesión no hay perfil, selector de cursos ni navegación del curso. */
 body.signed-out .header-tools,

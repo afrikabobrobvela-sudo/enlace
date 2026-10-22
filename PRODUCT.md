@@ -10,7 +10,7 @@ web
 
 Docentes y alumnos importan por igual (confirmado por el responsable).
 
-- **Docentes** de una academia (nació en la Academia de Física de la BUAP; sirve a cualquier academia). Trabajan sobre todo en computadora: preparan unidades y materiales, crean actividades y evaluaciones, califican en el libro, pasan lista, vigilan exámenes en el salón y revisan el avance de cada grupo y sección. Pueden ser propietarios de un curso o co-docentes.
+- **Docentes** de una academia (nació en una academia de Física; sirve a cualquier academia). Trabajan sobre todo en computadora: preparan unidades y materiales, crean actividades y evaluaciones, califican en el libro, pasan lista, vigilan exámenes en el salón y revisan el avance de cada grupo y sección. Pueden ser propietarios de un curso o co-docentes.
 - **Alumnos** que entran sobre todo desde el celular: ven qué tienen pendiente, abren materiales, entregan tareas, presentan evaluaciones (a veces en modo examen, en el salón), registran su asistencia con QR o código y consultan sus calificaciones y avisos.
 - **Administración** (una cuenta principal y quien ella designe): aprueba docentes, gestiona usuarios, catálogo de academias, reportes y respaldos.
 
@@ -46,8 +46,8 @@ Tres cosas que Enlace no debe perder (confirmadas por el responsable):
 
 ## Brand Commitments
 
-- **El nombre «Enlace» se mantiene.** El logotipo actual (átomo) **sí se puede cambiar**.
-- Hoy la interfaz dice «Aula virtual · BUAP» y el pie de página aclara «Espacio docente independiente para grupos BUAP · No es una plataforma institucional oficial». El responsable no lo marcó como compromiso de marca; antes de cambiar esas leyendas, preguntar.
+- **El nombre «Enlace» se mantiene.** La marca son los tres lomos (DESIGN.md).
+- **Sin institución en la marca (12.90, pedido por el responsable):** nada en la interfaz, los correos, el aviso ni la documentación menciona a la BUAP ni a otra universidad. La marca dice solo «Enlace» y el pie, «Enlace · Espacio docente independiente». El único dato institucional que queda es el domicilio del aviso de privacidad (`AVISO_DOMICILIO`, elegido por el responsable).
 
 ## Evidence on Hand
 

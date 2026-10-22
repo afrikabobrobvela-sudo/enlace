@@ -3,10 +3,11 @@
 import assert from 'node:assert/strict';
 import { api } from '../src/server/api.js';
 import { completeLogin, sessionCookieForTests } from '../src/server/auth.js';
+import { canRequestTeacher } from '../src/server/directory.js';
 import { memoryBucket, openD1 } from './lib/d1-sqlite.mjs';
 
 const store = openD1(':memory:');
-const env = { DB: store.DB, BUCKET: memoryBucket(), AULA_OWNER_EMAIL: 'admin@correo.buap.mx', SESSION_SECRET: 'r'.repeat(40) };
+const env = { DB: store.DB, BUCKET: memoryBucket(), AULA_OWNER_EMAIL: 'admin@escuela.edu.mx', SESSION_SECRET: 'r'.repeat(40), TEACHER_EMAIL_DOMAINS: 'escuela.edu.mx' };
 let checks = 0;
 const cookies = {};
 async function call(email, path, data, status = 200, method = data === undefined ? 'GET' : 'POST') {
@@ -27,9 +28,9 @@ async function call(email, path, data, status = 200, method = data === undefined
   checks++;
   return JSON.parse(text);
 }
-const ADMIN = 'admin@correo.buap.mx';
-const DOCENTE = 'maria.lopez@correo.buap.mx';
-const ALUMNO = 'ana@alumno.buap.mx';
+const ADMIN = 'admin@escuela.edu.mx';
+const DOCENTE = 'maria.lopez@escuela.edu.mx';
+const ALUMNO = 'ana@alumnos.escuela.edu.mx';
 const GMAIL = 'pedro@gmail.com';
 
 // ---- Sin catálogo nadie puede pedir ser docente ni se exige clasificación ----
@@ -62,7 +63,7 @@ assert((await call(ADMIN, '/api/catalog')).academies.some((a) => a.id === quimic
 me = await call(DOCENTE, '/api/me');
 assert.equal(me.canRequestTeacher, true, 'Correo institucional con catálogo listo');
 assert.equal((await call(GMAIL, '/api/me')).canRequestTeacher, false);
-assert.equal((await call(ALUMNO, '/api/me')).canRequestTeacher, false, 'Correo de alumno BUAP no es de docente');
+assert.equal((await call(ALUMNO, '/api/me')).canRequestTeacher, false, 'Correo de alumno no es de docente');
 const solicitud = { name: 'María López', academy: fisica, unit: prepaA, subjects: 'Física I, Física II', message: 'Imparto en 5.º semestre.' };
 await call(GMAIL, '/api/teacher-request', solicitud, 403);
 await call(DOCENTE, '/api/teacher-request', { ...solicitud, academy: quimica }, 400); // academia desactivada
@@ -106,18 +107,23 @@ assert.deepEqual([maria.academy, maria.unit, maria.courses], ['Física', 'Prepar
 await call(DOCENTE, '/api/teacher-request', solicitud, 409); // ya es docente
 
 // ---- Docentes dados de alta antes del registro: completan su academia y unidad ----
-await call(ADMIN, '/api/teachers', { email: 'colega@correo.buap.mx', name: 'Colega', role: 'teacher' });
-me = await call('colega@correo.buap.mx', '/api/me');
+await call(ADMIN, '/api/teachers', { email: 'colega@escuela.edu.mx', name: 'Colega', role: 'teacher' });
+me = await call('colega@escuela.edu.mx', '/api/me');
 assert.deepEqual([me.role, me.needsClassification], ['teacher', true]);
 assert.equal((await call(ADMIN, '/api/me')).needsClassification, true, 'La administración también se clasifica');
 await call(ALUMNO, '/api/profile/classification', { academy: fisica, unit: prepaA }, 403);
-await call('colega@correo.buap.mx', '/api/profile/classification', { academy: quimica, unit: prepaA }, 400);
-await call('colega@correo.buap.mx', '/api/profile/classification', { academy: fisica, unit: prepaA });
-assert.equal((await call('colega@correo.buap.mx', '/api/me')).needsClassification, false);
+await call('colega@escuela.edu.mx', '/api/profile/classification', { academy: quimica, unit: prepaA }, 400);
+await call('colega@escuela.edu.mx', '/api/profile/classification', { academy: fisica, unit: prepaA });
+assert.equal((await call('colega@escuela.edu.mx', '/api/me')).needsClassification, false);
 
 // Un alumno no ve solicitudes ni datos de la administración.
 me = await call(ALUMNO, '/api/me');
 assert(!('pendingTeacherRequests' in me));
+
+// Sin TEACHER_EMAIL_DOMAINS, cualquier correo puede pedirlo (la administración aprueba cada solicitud).
+assert.equal(canRequestTeacher({}, { role: 'student', email: 'maestra@gmail.com' }), true);
+assert.equal(canRequestTeacher({}, { role: 'teacher', email: 'maestra@gmail.com' }), false);
+checks += 2;
 
 assert.deepEqual(store.raw().prepare('PRAGMA foreign_key_check').all(), [], 'Sin llaves foráneas rotas');
 console.log(`PASS: ${checks} verificaciones del registro de docentes — catálogo de academias y unidades, solicitud con correo institucional, aprobación o rechazo, y clasificación de docentes y cursos.`);
