@@ -1117,3 +1117,13 @@ button, .primary, .secondary { line-height: 1.3; }
 .att-sync + .toolbar { margin-top: 8px; }
 /* La flecha de los menús no se encoge cuando el botón ocupa todo el ancho (teléfono). */
 #topnav .more-menu > summary::after, .more-actions > summary::after, .section-filter > summary::after { flex: none; }
+
+/* Examen 12.91: estado en vivo en el monitor y preparación del teléfono antes de empezar. */
+.exam-live { display: inline-block; margin: 0 6px 0 2px; padding: 1px 8px; border-radius: var(--radius-pill, 4px); font-size: 13px; font-weight: 700; }
+.exam-live.is-away { background: #fff1d6; color: #6b3d00; }
+.exam-live.is-silent { background: #fce4e1; color: #8f1c12; }
+.monitor-stats .has-alert b { color: #b42318; }
+.exam-prepare { margin: 0 0 14px; padding: 14px 16px; border: 1px solid color-mix(in srgb, var(--tomo) 22%, var(--line)); border-radius: var(--radius-sm); background: var(--tomo-papel); }
+.exam-prepare legend { padding: 0 4px; font-weight: 800; color: var(--tinta); }
+.exam-prepare ol { margin: 4px 0 10px; padding-left: 1.3em; }
+.exam-prepare li { margin: 0 0 6px; line-height: 1.45; max-width: 72ch; }

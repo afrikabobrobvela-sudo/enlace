@@ -196,6 +196,58 @@ check(examFocusResult.hiddenResult.calls.some((url) => url.endsWith('/away')) &&
 check(examFocusResult.hiddenResult.events.some((event) => event.kind === 'left') && examFocusResult.hiddenResult.toasts.some((message) => message.includes('Saliste del examen')), 'Una salida real conserva el evento y el aviso');
 check(examFocusResult.internalFullscreenEvents.length === 0 && examFocusResult.realFullscreenEvents.some((event) => event.kind === 'fullscreen'), 'Solo una salida real de pantalla completa queda registrada');
 
+// 12.91: modo avión. Sin conexión, /away y /back fallan: la salida queda en el teléfono sin «judged» (el servidor la
+// decide al volver la conexión), sobrevive a recargar la página, y revisar el foco seguido no reinicia la espera.
+const examOfflineResult = await run(`(async () => {
+  var saved = {};
+  localStorage.getItem = (k) => (k in saved ? saved[k] : null);
+  localStorage.setItem = (k, v) => { saved[k] = String(v); };
+  localStorage.removeItem = (k) => { delete saved[k]; };
+  var calls = [];
+  var original = globalThis.fetch;
+  globalThis.fetch = async (url) => { calls.push(url); throw new TypeError('Failed to fetch'); };
+  var sent = [];
+  saveExamProgress = async () => { sent.push(...examState.events); };
+  var focused = false;
+  document.hasFocus = () => focused;
+  document.activeElement = null;
+  var wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  examState = { quizId: 'q9', attempt: 1, exam: { lockOnLeave: true }, collect: () => ({}), position: 0, events: [], awaySince: null, blurTimer: null, blurSince: null, lastCopy: 0, saveTimer: null, locked: false };
+  // Sale a otra aplicación (modo avión): el aviso no llega, pero la salida queda guardada.
+  document.visibilityState = 'hidden';
+  examAwayCheck();
+  var storedAway = JSON.parse(saved['enlace-examen:q9:1']).awaySince;
+  await wait(30);
+  document.visibilityState = 'visible';
+  focused = true;
+  examAwayCheck();
+  await wait(0); await wait(0); await wait(0);
+  var left = examState.events.find((e) => e.kind === 'left');
+  var storedEvents = JSON.parse(saved['enlace-examen:q9:1']).events;
+  // Recarga estando fuera: la salida abierta se recupera al retomar.
+  saved['enlace-examen:q9:1'] = JSON.stringify({ events: [], awaySince: Date.now() - 40000, offlineSince: null });
+  var resumed = { quizId: 'q9', attempt: 1, exam: { lockOnLeave: true }, events: [] };
+  examRecoverStored(resumed);
+  var recovered = resumed.events.find((e) => e.kind === 'left');
+  // Revisar el foco cada 400 ms no reinicia la espera: la salida cuenta desde la primera vez.
+  examState = { quizId: 'q8', attempt: 1, exam: { lockOnLeave: false }, collect: () => ({}), position: 0, events: [], awaySince: null, blurTimer: null, blurSince: null, lastCopy: 0, saveTimer: null, locked: false };
+  focused = false;
+  var t0 = Date.now();
+  examAwayCheck();
+  await wait(300); examAwayCheck();
+  await wait(250); examAwayCheck();
+  await wait(BLUR_CONFIRM_MS);
+  var pollAwaySince = examState.awaySince;
+  focused = true; examAwayCheck();
+  examState = null;
+  globalThis.fetch = original;
+  return { storedAway: Boolean(storedAway), callsAway: calls.some((u) => u.endsWith('/away')), callsBack: calls.some((u) => u.endsWith('/back')), left, storedLeft: storedEvents.some((e) => e.kind === 'left' && !e.judged), recovered, pollDelay: pollAwaySince ? pollAwaySince - t0 : null };
+})()`);
+check(examOfflineResult.storedAway && examOfflineResult.callsAway && examOfflineResult.callsBack, 'Sin conexión se intentan /away y /back, y la salida abierta queda guardada en el teléfono');
+check(examOfflineResult.left && !examOfflineResult.left.judged && examOfflineResult.storedLeft, 'Si /back no contesta, la salida queda sin juzgar (la decide el servidor al volver la conexión) y guardada');
+check(examOfflineResult.recovered && examOfflineResult.recovered.seconds >= 39 && !examOfflineResult.recovered.judged, 'Al retomar tras recargar estando fuera, la salida abierta se recupera con su duración');
+check(examOfflineResult.pollDelay !== null && examOfflineResult.pollDelay < 50, 'Revisar el foco seguido no reinicia la espera: la salida cuenta desde que perdió el foco');
+
 const examNavigationResult = await run(`(async () => {
   var navOriginalQuerySelector = document.querySelector;
   var navOriginalQuerySelectorAll = document.querySelectorAll;

@@ -515,7 +515,8 @@ function examSettingsHtml(exam) {
       <label class="check-label"><input type="checkbox" name="oneByOne" ${exam?.oneByOne ? 'checked' : ''}> Una pregunta a la vez</label>
       <label class="check-label"><input type="checkbox" name="noBack" ${exam?.noBack ? 'checked' : ''}> Sin regresar a preguntas anteriores (requiere "una pregunta a la vez")</label>
       <label class="check-label"><input type="checkbox" name="lockPlatform" ${exam?.lockPlatform || !exam ? 'checked' : ''}> Bloquear el resto de Enlace mientras contesta: no puede abrir otros cursos, materiales, foros ni avisos, aunque abra otra pestaña o vuelva a iniciar sesión</label>
-      <label class="check-label"><input type="checkbox" name="lockOnLeave" ${exam?.lockOnLeave ? 'checked' : ''}> Bloquear si sale de la página: para continuar necesita un código que tú le das (aparece en tu monitor del examen)</label>
+      <label class="check-label"><input type="checkbox" name="lockOnLeave" ${exam?.lockOnLeave ? 'checked' : ''}> Bloquear si sale de la página: para continuar necesita un código que tú le das (aparece en tu monitor del examen). Las salidas sin conexión (modo avión) también cuentan, en cuanto vuelve la conexión</label>
+      <label class="check-label"><input type="checkbox" name="prepareDevice" ${exam?.prepareDevice !== false ? 'checked' : ''}> Pedir que preparen el teléfono antes de empezar: «No molestar» y fijar la pantalla (Android) o «Acceso guiado» (iPhone), con los pasos de su dispositivo. Así no les llegan notificaciones de WhatsApp ni pueden cambiar de app</label>
       <label>Tolerancia antes de bloquear<select name="lockGrace">${[0, 5, 15, 30]
         .map((g) => `<option value="${g}" ${(exam?.lockOnLeave ? exam.lockGrace : 5) === g ? 'selected' : ''}>${g ? `${g} segundos (por ejemplo, una notificación)` : 'Ninguna: se bloquea al salir'}</option>`)
         .join('')}</select></label>
@@ -532,7 +533,7 @@ function examSettingsHtml(exam) {
 
 /** Activa en el editor las defensas compatibles entre sí; el docente todavía decide si guarda. */
 function hardenExamSettings() {
-  for (const name of ['exam', 'oneByOne', 'noBack', 'lockPlatform', 'lockOnLeave', 'shuffle', 'shuffleOptions', 'seb']) {
+  for (const name of ['exam', 'oneByOne', 'noBack', 'lockPlatform', 'lockOnLeave', 'prepareDevice', 'shuffle', 'shuffleOptions', 'seb']) {
     const input = document.querySelector(`input[name="${name}"]`);
     if (input) input.checked = true;
   }
@@ -571,6 +572,7 @@ function readExamSettings(f) {
     lockOnLeave,
     lockGrace: Number(f.get('lockGrace') || 5),
     lockPlatform: f.get('lockPlatform') === 'on',
+    prepareDevice: f.get('prepareDevice') === 'on',
   };
 }
 
@@ -894,6 +896,7 @@ async function attemptClosed(message) {
   clearTimeout(attemptSave?.timer);
   attemptSave = null;
   releaseActiveExam();
+  if (examState) examStoreClear(examState);
   stopExam();
   dirty = false;
   toast(message);
@@ -984,6 +987,7 @@ async function startQuizAttempt(quizId, extra = {}) {
     clearInterval(quizTimer);
     clearTimeout(attemptSave?.timer);
     attemptSave = null;
+    if (examState) examStoreClear(examState); // enviada: ya no hay nada pendiente en el teléfono
     stopExam();
     // Los enunciados tal como los vio (con sus datos), para mostrar sus ✓ y ✗ al volver a dibujar la pantalla.
     quizLastResult = { quiz: quizId, result, fresh: true, texts: Object.fromEntries(data.questions.map((x) => [x.index, x.text])) };
@@ -1194,12 +1198,15 @@ document.addEventListener('click', (e) => {
 // ---- Modo examen (docente) -----------------------------------------------------------------------
 
 const secondsText = (n) => (n >= 60 ? `${Math.floor(n / 60)} min ${n % 60} s` : `${n} s`);
+// Igual que SILENCE_SECONDS del servidor: más que esto sin guardado ni latido (cada 20 s) es estar sin conexión.
+const EXAM_SILENCE_S = 45;
 
 /** Resumen de una fila de resultados: salidas, pantalla completa, copiar/pegar y ubicación. */
 function integrityText(i) {
   const parts = [];
   if (i.exits) parts.push(`salió ${i.exits} ${i.exits === 1 ? 'vez' : 'veces'} (${secondsText(i.awaySeconds)})`);
   if (i.fullscreenExits) parts.push(`dejó pantalla completa ${i.fullscreenExits} ${i.fullscreenExits === 1 ? 'vez' : 'veces'}`);
+  if (i.offline) parts.push(`sin conexión ${i.offline} ${i.offline === 1 ? 'vez' : 'veces'} (${secondsText(i.offlineSeconds)})`);
   if (i.locks) parts.push(`se bloqueó ${i.locks} ${i.locks === 1 ? 'vez' : 'veces'}`);
   if (i.copyAttempts) parts.push(`intentó copiar o pegar ${i.copyAttempts} ${i.copyAttempts === 1 ? 'vez' : 'veces'}`);
   if (i.captures) parts.push(`intentó una captura de pantalla ${i.captures} ${i.captures === 1 ? 'vez' : 'veces'}`);
@@ -1218,17 +1225,18 @@ function integrityModal(author) {
   const attempts = records('attempt')
     .filter((a) => a.data.quiz === q.id && a.author === author && a.data.integrity)
     .sort((a, b) => (a.data.attempt || 1) - (b.data.attempt || 1));
-  const labels = { left: 'Salió de la página', fullscreen: 'Dejó pantalla completa', copy: 'Intentó copiar o pegar', capture: 'Intentó una captura de pantalla', locked: 'Examen bloqueado', unlocked: 'Desbloqueado' };
+  const labels = { left: 'Salió de la página', fullscreen: 'Dejó pantalla completa', copy: 'Intentó copiar o pegar', capture: 'Intentó una captura de pantalla', locked: 'Examen bloqueado', unlocked: 'Desbloqueado', offline: 'Sin conexión (por ejemplo, modo avión)', silence: 'El servidor no supo del examen' };
+  const timed = new Set(['left', 'offline', 'silence']);
   modal(
     `Integridad: ${attempts[0]?.data.name || ''}`, // modal() usa textContent para el título
     attempts
       .map(
         (a) => `<h3>Intento ${a.data.attempt || 1} · ${a.data.score.toFixed(2)} / 10</h3>
           <p>${esc(integrityText(a.data.integrity) || 'Sin salidas ni avisos.')}${a.data.integrity.distance !== null && !a.data.integrity.flag ? ` · a ${a.data.integrity.distance} m del salón` : ''}</p>
-          ${a.data.integrity.events.length ? `<ol class="history-list">${a.data.integrity.events.map((e) => `<li><span>${labels[e.kind] || esc(e.kind)}${e.kind === 'left' ? ` durante ${secondsText(e.seconds)}` : ''}</span><span class="muted">${esc(new Date(e.at).toLocaleTimeString('es-MX'))}</span></li>`).join('')}</ol>` : ''}`,
+          ${a.data.integrity.events.length ? `<ol class="history-list">${a.data.integrity.events.map((e) => `<li><span>${labels[e.kind] || esc(e.kind)}${timed.has(e.kind) ? ` durante ${secondsText(e.seconds)}` : e.kind === 'locked' && e.reason ? ` (${esc(e.reason)})` : ''}</span><span class="muted">${esc(new Date(e.at).toLocaleTimeString('es-MX'))}</span></li>`).join('')}</ol>` : ''}`,
       )
       .join('') +
-      '<p class="muted">Las salidas se registran al volver a la página. Un registro no prueba por sí solo que hubo trampa (una llamada o una notificación también cuentan): úsalo para platicar con el alumno.</p>',
+      '<p class="muted">Las salidas se registran al volver a la página; las que se hicieron sin conexión (modo avión), al volver la conexión. Un registro no prueba por sí solo que hubo trampa (una llamada, una notificación o una red inestable también cuentan): úsalo para platicar con el alumno.</p>',
     null,
   );
 }
@@ -1255,12 +1263,18 @@ async function loadExamMonitor(quizId) {
       r.unlockFailures ? ` · ${r.unlockFailures} ${r.unlockFailures === 1 ? 'código equivocado' : 'códigos equivocados'}` : ''
     }</span></div><span class="exam-unlock-code" aria-label="Código para continuar">${esc(r.unlockCode || '')}</span><button type="button" class="table-link" data-exam-resume="${esc(r.user)}">Permitir continuar</button></li>`)
     .join('');
+  // 12.91: en vivo, quién está fuera de la página y quién lleva rato sin señal (sin conexión, modo avión).
+  const liveStatus = (r) =>
+    r.away ? '<span class="exam-live is-away">Fuera de la página ahora</span>'
+    : r.silentFor !== null && r.silentFor > EXAM_SILENCE_S ? `<span class="exam-live is-silent">Sin conexión desde hace ${esc(secondsText(r.silentFor))}</span>`
+    : '';
   const running = data.running
     .filter((r) => !r.locked)
-    .map((r) => `<li><strong>${esc(r.name)}</strong>${r.section && !selectedSection() ? ` <span class="quiz-pool-tag">${esc(sectionName(r.section))}</span>` : ''} <span class="muted">intento ${r.attempt} · ${r.answered} de ${data.total} contestadas · desde ${esc(new Date(r.started).toLocaleTimeString('es-MX', { timeStyle: 'short' }))}</span>${
+    .map((r) => `<li><strong>${esc(r.name)}</strong>${r.section && !selectedSection() ? ` <span class="quiz-pool-tag">${esc(sectionName(r.section))}</span>` : ''} ${liveStatus(r)}<span class="muted">intento ${r.attempt} · ${r.answered} de ${data.total} contestadas · desde ${esc(new Date(r.started).toLocaleTimeString('es-MX', { timeStyle: 'short' }))}</span>${
       integrityText(r) ? ` <span class="integrity-warn">${esc(integrityText(r))}</span>` : ''
     }</li>`)
     .join('');
+  const outOfReach = data.running.filter((r) => !r.locked && liveStatus(r)).length;
   const blocked = data.blocked
     .map((b) => `<li><strong>${esc(b.name)}</strong> <span class="muted">se equivocó 10 veces de contraseña</span> <button type="button" class="table-link" data-exam-unlock="${esc(b.user)}">Desbloquear</button></li>`)
     .join('');
@@ -1285,6 +1299,7 @@ async function loadExamMonitor(quizId) {
       <div><b>${finished.length}</b><span>terminaron</span></div>
       <div><b>${data.running.filter((r) => !r.locked).length}</b><span>contestando</span></div>
       <div><b>${data.running.filter((r) => r.locked).length + data.blocked.length}</b><span>bloqueados</span></div>
+      <div class="${outOfReach ? 'has-alert' : ''}"><b>${outOfReach}</b><span>fuera o sin conexión</span></div>
       <div><b>${notStarted.length}</b><span>no han empezado</span></div>
       <div><b>${average === null ? '—' : average.toFixed(2)}</b><span>promedio</span></div>
       <div><b>${scores.length ? `${passed} de ${scores.length}` : '—'}</b><span>aprobados (≥ ${passing})</span></div>
@@ -1377,15 +1392,44 @@ function examIntroHtml(exam, used) {
     <li>No se puede copiar, pegar ni usar el menú del botón derecho.</li>
     <li>No se permiten capturas de pantalla: cada pregunta lleva tu nombre como marca de agua, en computadora la tecla de captura tapa el examen y queda registrada, y el examen no se puede imprimir.</li>
     ${exam.oneByOne ? `<li>Verás una pregunta a la vez${exam.noBack ? ' y <strong>no podrás regresar</strong> a las anteriores' : ''}.</li>` : ''}
-    ${exam.lockOnLeave ? `<li><strong>Si sales de la página${exam.lockGrace ? ` más de ${exam.lockGrace} segundos` : ''} (otra aplicación, WhatsApp, bloquear el teléfono), el examen se bloquea</strong> y necesitarás un código de tu docente para continuar. <strong>A la 3.ª salida se bloquea aunque sean salidas cortas.</strong> El tiempo sigue corriendo. Silencia las notificaciones antes de empezar.</li>` : ''}
+    ${exam.lockOnLeave ? `<li><strong>Si sales de la página${exam.lockGrace ? ` más de ${exam.lockGrace} segundos` : ''} (otra aplicación, WhatsApp, responder una notificación, bloquear el teléfono), el examen se bloquea</strong> y necesitarás un código de tu docente para continuar. <strong>A la 3.ª salida se bloquea aunque sean salidas cortas.</strong> El tiempo sigue corriendo.</li>` : ''}
+    <li><strong>El modo avión no oculta nada:</strong> si te quedas sin conexión, queda registrado y tu docente lo ve en vivo; las salidas que hagas sin conexión se registran${exam.lockOnLeave ? ' y bloquean el examen' : ''} en cuanto vuelve la conexión.</li>
     ${exam.checksLocation ? '<li>Se pedirá tu ubicación para confirmar que estás en el salón (solo se guarda la distancia).</li>' : ''}
     <li>Tus respuestas se guardan mientras contestas: si se cierra la página, vuelve a entrar y continúa donde ibas.</li></ul>
     <form id="examStart" class="real-form">
       ${resuming ? '<p class="real-status">Tienes este examen en curso: continúa donde ibas.</p>' : ''}
+      ${exam.prepareDevice !== false && !resuming ? examPrepareHtml() : ''}
       ${exam.needsPassword && !resuming ? '<label>Código que dio tu docente<input name="password" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="30"></label>' : ''}
       <p class="form-error error" hidden></p>
       <button class="primary">${resuming ? 'Continuar examen' : used ? 'Comenzar otro intento' : 'Comenzar examen'}</button>
     </form></section>`;
+}
+
+/**
+ * Antes de empezar (12.91): ninguna página web puede impedir las notificaciones ni el cambio de aplicación; el sistema
+ * del teléfono sí. Se le pide al alumno, con los pasos de su dispositivo, «No molestar» y fijar la pantalla (Android) o
+ * «Acceso guiado» (iPhone), y confirma con una casilla. El docente lo ve en el salón.
+ */
+function examPrepareHtml() {
+  const ua = navigator.userAgent || '';
+  const android = /Android/i.test(ua);
+  const ios = /iPhone|iPad|iPod/i.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const steps = android
+    ? [
+        '<strong>Activa «No molestar»</strong>: desliza desde arriba de la pantalla y tócalo. Así no te llegan notificaciones de WhatsApp ni de otras apps.',
+        '<strong>Fija esta pantalla</strong>: abre las apps recientes (botón cuadrado, o desliza desde abajo y mantén), toca el ícono de tu navegador sobre esta ventana y elige «Fijar» (si no aparece, actívalo en Ajustes → Seguridad → Fijar aplicación). Con la pantalla fijada no puedes cambiar de app ni abrir la cortina de notificaciones. Si no aparece «Fijar», actívalo en Ajustes → Seguridad → Fijar aplicaciones (el nombre cambia según la marca).',
+        'Al terminar el examen, suelta la pantalla: mantén presionados Atrás y Recientes, o desliza hacia arriba y mantén.',
+      ]
+    : ios
+      ? [
+          '<strong>Activa «No molestar»</strong>: abre el Centro de control y toca Concentración → No molestar. Así no te llegan notificaciones de WhatsApp ni de otras apps.',
+          '<strong>Activa «Acceso guiado»</strong>: en Ajustes → Accesibilidad → Acceso guiado, enciéndelo. Vuelve aquí, presiona tres veces el botón lateral (o el de inicio) y toca «Iniciar». Así no puedes salir del navegador.',
+          'Al terminar el examen, presiona tres veces el botón lateral y toca «Finalizar».',
+        ]
+      : ['Cierra WhatsApp Web, el correo y las demás pestañas y programas.', '<strong>Activa «No molestar»</strong> en tu computadora (Windows: Asistente de concentración o No molestar; Mac: Concentración).'];
+  return `<fieldset class="exam-prepare"><legend>Antes de empezar, prepara tu ${android || ios ? 'teléfono' : 'computadora'}</legend>
+    <ol>${steps.map((x) => `<li>${x}</li>`).join('')}</ol>
+    <label class="check-label"><input type="checkbox" name="prepared" required> Ya lo hice</label></fieldset>`;
 }
 
 function enterFullscreen() {
@@ -1405,7 +1449,7 @@ const isFullscreen = () => Boolean(document.fullscreenElement || document.webkit
 function startExam(quizId, data, collect) {
   stopExam();
   const exam = data.exam;
-  examState = { quizId, attempt: data.attempt, exam, collect, position: exam.position || 0, events: [], awaySince: null, blurTimer: null, lastCopy: 0, saveTimer: null };
+  examState = { quizId, attempt: data.attempt, exam, collect, position: exam.position || 0, events: [], awaySince: null, blurTimer: null, blurSince: null, lastCopy: 0, saveTimer: null, offlineSince: null };
   document.body.classList.add('exam-running');
   // Respuestas guardadas (al retomar tras recargar).
   restoreAttemptAnswers(document.getElementById('quizAttempt'), data.questions, data.saved);
@@ -1425,6 +1469,87 @@ function startExam(quizId, data, collect) {
   document.addEventListener('keydown', examCaptureKey, true);
   document.addEventListener('keyup', examCaptureKey, true);
   window.addEventListener('beforeprint', examPrint);
+  // 12.91: sin conexión (modo avión) y foco. Lo que pasó con la página cerrada o sin conexión se recupera del teléfono.
+  window.addEventListener('online', examNetworkCheck);
+  window.addEventListener('offline', examNetworkCheck);
+  examRecoverStored(examState);
+  examNetworkCheck();
+  examState.focusPoll = setInterval(examAwayCheck, EXAM_FOCUS_POLL_MS);
+  examState.beat = setInterval(examBeat, EXAM_BEAT_MS);
+}
+
+// ---- Sin conexión y latido (12.91) ----------------------------------------------------------------------------
+// Con el teléfono en modo avión, los avisos de salida no llegan. Por eso cada salida, desconexión y aviso se guarda
+// también en el teléfono (localStorage) hasta que el servidor lo recibe: al volver la conexión se manda y el servidor
+// decide el bloqueo con las mismas reglas. Mientras el examen está a la vista, un latido cada 20 s le dice al
+// servidor que sigue ahí (el docente ve en su monitor a quien lleva rato sin señal).
+const EXAM_BEAT_MS = 20_000;
+// Algunos teléfonos no avisan con «blur» cuando se responde una notificación desde la cortina: se revisa el foco.
+const EXAM_FOCUS_POLL_MS = 400;
+const examStoreKey = (state) => `enlace-examen:${state.quizId}:${state.attempt}`;
+
+function examStoreWrite(state) {
+  try {
+    localStorage.setItem(examStoreKey(state), JSON.stringify({ events: state.events, awaySince: state.awaySince, offlineSince: state.offlineSince }));
+  } catch {}
+}
+
+function examStoreClear(state) {
+  try {
+    localStorage.removeItem(examStoreKey(state));
+  } catch {}
+}
+
+/** Al empezar o retomar: lo que quedó guardado en el teléfono (eventos sin mandar, una salida o desconexión abiertas). */
+function examRecoverStored(state) {
+  let stored = {};
+  try {
+    stored = JSON.parse(localStorage.getItem(examStoreKey(state)) || '{}') || {};
+  } catch {}
+  const pending = Array.isArray(stored.events) ? stored.events.filter((e) => e && typeof e.kind === 'string').slice(-50) : [];
+  // Se cerró (o se recargó) la página estando fuera del examen: esa salida dura hasta ahora.
+  if (Number.isFinite(stored.awaySince)) pending.push({ kind: 'left', seconds: Math.round((Date.now() - stored.awaySince) / 1000), at: new Date(stored.awaySince).toISOString() });
+  if (Number.isFinite(stored.offlineSince)) pending.push({ kind: 'offline', seconds: Math.round((Date.now() - stored.offlineSince) / 1000), at: new Date(stored.offlineSince).toISOString() });
+  state.events.push(...pending);
+  examStoreWrite(state);
+  if (pending.length) saveExamProgress(true).catch(() => {});
+}
+
+/** Agrega un evento del examen (con su hora) y lo guarda en el teléfono hasta que llegue al servidor. */
+function examEvent(event) {
+  if (!examState) return;
+  examState.events.push({ ...event, at: event.at || new Date().toISOString() });
+  examStoreWrite(examState);
+}
+
+/** Sin conexión: se anota desde cuándo; al volver, la desconexión queda registrada y se manda todo lo pendiente. */
+function examNetworkCheck() {
+  const state = examState;
+  if (!state) return;
+  if (navigator.onLine === false) {
+    if (!state.offlineSince) {
+      state.offlineSince = Date.now();
+      examStoreWrite(state);
+    }
+    return;
+  }
+  if (state.offlineSince) examOnlineAgain(state);
+  saveExamProgress(true).catch(() => {});
+}
+
+function examOnlineAgain(state) {
+  const seconds = Math.round((Date.now() - state.offlineSince) / 1000);
+  const at = new Date(state.offlineSince).toISOString();
+  state.offlineSince = null;
+  if (seconds >= 3) examEvent({ kind: 'offline', seconds, at });
+  else examStoreWrite(state);
+}
+
+/** Latido: guarda (respuestas y eventos) y le dice al servidor que el examen sigue a la vista. */
+function examBeat() {
+  const state = examState;
+  if (!state || state.locked || state.backPending || document.visibilityState === 'hidden') return;
+  saveExamProgress(true).catch(() => {});
 }
 
 function stopExam() {
@@ -1439,6 +1564,10 @@ function stopExam() {
   document.removeEventListener('keydown', examCaptureKey, true);
   document.removeEventListener('keyup', examCaptureKey, true);
   window.removeEventListener('beforeprint', examPrint);
+  window.removeEventListener('online', examNetworkCheck);
+  window.removeEventListener('offline', examNetworkCheck);
+  clearInterval(examState.focusPoll);
+  clearInterval(examState.beat);
   document.body.classList.remove('exam-running', 'exam-shield');
   document.getElementById('examFullscreenBar')?.remove();
   document.getElementById('examConfirm')?.remove();
@@ -1457,7 +1586,7 @@ function examBlockCopy(e) {
   e.preventDefault();
   if (!examState || Date.now() - examState.lastCopy < 5000) return;
   examState.lastCopy = Date.now();
-  examState.events.push({ kind: 'copy' });
+  examEvent({ kind: 'copy' });
   toast('En el examen no se puede copiar ni pegar. Quedó registrado.');
   saveExamProgress(true).catch(() => {});
 }
@@ -1492,7 +1621,7 @@ function examCaptureKey(e) {
   examShield();
   if (e.type === 'keyup' || Date.now() - (examState.lastCapture || 0) < 3000) return;
   examState.lastCapture = Date.now();
-  examState.events.push({ kind: 'capture' });
+  examEvent({ kind: 'capture' });
   // La tecla Impr Pant copia al portapapeles: se intenta vaciarlo (el navegador puede no permitirlo).
   navigator.clipboard?.writeText?.('').catch?.(() => {});
   toast('En el examen no se permiten capturas de pantalla. Quedó registrado.');
@@ -1509,7 +1638,7 @@ function examShield() {
 function examPrint() {
   if (!examState || Date.now() - (examState.lastCapture || 0) < 3000) return;
   examState.lastCapture = Date.now();
-  examState.events.push({ kind: 'capture' });
+  examEvent({ kind: 'capture' });
   saveExamProgress(true).catch(() => {});
 }
 
@@ -1519,20 +1648,29 @@ function examAwayCheck() {
   // y eso se confundía con una salida que bloqueaba el examen (12.31).
   if (isSafeExamBrowser()) return;
   if (!examState) return;
+  const state = examState;
   const hidden = document.visibilityState === 'hidden';
   // Un selector nativo abierto (relacionar, ordenar) le quita el foco a la ventana sin salir de la página (12.30).
   const away = hidden || (!document.hasFocus() && !examSelectOpen());
-  clearTimeout(examState.blurTimer);
-  if (away && !examState.awaySince) {
+  // 12.91: se llama también cada EXAM_FOCUS_POLL_MS (por si el teléfono no avisa), así que no reinicia lo que ya corre.
+  if (!away) {
+    clearTimeout(state.blurTimer);
+    state.blurTimer = null;
+    state.blurSince = null;
+  } else if (!state.awaySince) {
     // Ocultar la página (otra aplicación, otra pestaña, bloquear el teléfono) cuenta en ese instante. Perder solo el
-    // foco con la página a la vista (pantalla dividida, ventana flotante, la cortina de notificaciones) cuenta si dura
-    // más de BLUR_CONFIRM_MS, y entonces desde que empezó: así un parpadeo del foco al tocar la pantalla no es salida (12.32).
-    if (hidden) markExamAway(Date.now());
-    else {
-      const since = Date.now();
-      const state = examState;
+    // foco con la página a la vista (pantalla dividida, ventana flotante, la cortina de notificaciones, responder una
+    // notificación) cuenta si dura más de BLUR_CONFIRM_MS, y entonces desde que empezó: así un parpadeo del foco al
+    // tocar la pantalla no es salida (12.32).
+    if (hidden) {
+      clearTimeout(state.blurTimer);
+      state.blurTimer = null;
+      markExamAway(state.blurSince || Date.now());
+    } else if (!state.blurTimer) {
+      state.blurSince = Date.now();
       state.blurTimer = setTimeout(() => {
-        if (examState === state && !state.awaySince && (document.visibilityState === 'hidden' || (!document.hasFocus() && !examSelectOpen()))) markExamAway(since);
+        state.blurTimer = null;
+        if (examState === state && !state.awaySince && (document.visibilityState === 'hidden' || (!document.hasFocus() && !examSelectOpen()))) markExamAway(state.blurSince || Date.now());
       }, BLUR_CONFIRM_MS);
     }
   }
@@ -1547,28 +1685,43 @@ const examSelectOpen = () => Boolean(document.activeElement?.matches?.('#quizAtt
 function markExamAway(since) {
   if (!examState || examState.awaySince) return;
   examState.awaySince = since;
+  examStoreWrite(examState); // si se cierra la página o no hay conexión, la salida no se pierde
   // Bloqueo al salir: el servidor anota la salida en ese momento (keepalive: llega aunque se cierre la página).
-  if (examState.exam.lockOnLeave && !examState.locked) examState.awayRequest = examLockCall('away', {}, true);
+  if (examState.exam.lockOnLeave && !examState.locked) {
+    examState.awayRequest = examLockCall('away', {}, true);
+    // Sin conexión falla: no es un error de la página (la salida ya quedó guardada en el teléfono).
+    examState.awayRequest.catch(() => {});
+  }
 }
 
 /** Al volver a la página: registra la salida con su duración (y, con bloqueo al salir, pregunta al servidor). */
 function examReturnCheck(away) {
   if (!away && examState.awaySince) {
     const seconds = Math.round((Date.now() - examState.awaySince) / 1000);
+    // La salida queda en el teléfono hasta que el servidor la recibe. Si /back no contesta (sin conexión, modo avión),
+    // va sin `judged` y el servidor decide el bloqueo cuando le llegue con el siguiente guardado (12.91).
+    const event = { kind: 'left', seconds, at: new Date(examState.awaySince).toISOString(), ...(examState.locked ? { judged: true } : {}) };
     examState.awaySince = null;
-    examState.events.push({ kind: 'left', seconds });
+    examEvent(event);
     if (examState.exam.lockOnLeave && !examState.locked) {
       const state = examState;
+      state.backPending = true;
       // Primero se espera el aviso de salida (para que el servidor no lo reciba después del regreso).
       Promise.resolve(state.awayRequest)
         .catch(() => {})
         .then(() => examLockCall('back', { seconds }))
         .then((r) => {
+          event.judged = true;
+          state.backPending = false;
+          examStoreWrite(state);
           if (r?.locked && examState === state) showExamLock();
           else if (examState === state) toast(`Saliste del examen ${seconds} s. Quedó registrado.`);
           saveExamProgress(true).catch(() => {});
         })
-        .catch(() => saveExamProgress(true).catch(() => {}));
+        .catch(() => {
+          state.backPending = false;
+          saveExamProgress(true).catch(() => {});
+        });
       return;
     }
     toast(`Saliste del examen ${seconds} s. Quedó registrado.`);
@@ -1683,7 +1836,7 @@ function examFullscreenCheck() {
   const bar = document.getElementById('examFullscreenBar');
   if (isFullscreen()) return bar?.remove();
   if (document.visibilityState !== 'hidden' && examSelectOpen()) return;
-  examState.events.push({ kind: 'fullscreen' });
+  examEvent({ kind: 'fullscreen' });
   saveExamProgress(true).catch(() => {});
   if (!bar) {
     document.body.insertAdjacentHTML(
@@ -1703,12 +1856,22 @@ async function saveExamProgress() {
   const state = examState;
   if (!state) return;
   clearTimeout(state.saveTimer);
-  const events = state.events.splice(0, 20);
+  // Una salida a medio juzgar (esperando /back) se manda después, para no contarla dos veces.
+  const sendable = state.backPending ? state.events.filter((e) => e.kind !== 'left' || e.judged) : state.events;
+  const events = sendable.slice(0, 20);
+  state.events = state.events.filter((e) => !events.includes(e));
   try {
     await request('/api/attempt/progress', { course: current.course.id, quiz: state.quizId, attempt: state.attempt, answers: state.collect(), position: state.position, events });
+    // Sin «offline» del navegador (por ejemplo, wifi sin internet), la desconexión se mide por los guardados fallidos.
+    if (state.offlineSince) examOnlineAgain(state);
+    examStoreWrite(state);
     attemptSaveStatus(`Guardado ${new Date().toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}`, 'is-saved');
   } catch (error) {
-    state.events.unshift(...events); // se reintenta en el siguiente guardado
+    // Con 423 (bloqueado) el servidor ya guardó los eventos; con cualquier otro error se reintentan en el siguiente
+    // guardado y siguen en el teléfono mientras tanto.
+    if (error.status !== 423) state.events.unshift(...events);
+    if (!error.status && !state.offlineSince) state.offlineSince = Date.now();
+    examStoreWrite(state);
     if (error.status === 423) showExamLock();
     if (error.data?.otherDevice) showOtherDevice();
     if (error.data?.closed) attemptClosed(error.message);
