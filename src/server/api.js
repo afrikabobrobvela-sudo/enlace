@@ -3,6 +3,7 @@
 
 import { access, ownsCourse, requireAdmin, requireTeacher, viewAs, viewAudit } from './access.js';
 import { attendanceRoutes } from './attendance.js';
+import { isTestUser, TEACHER_COOKIE, testCourseOf, testStudentRoutes } from './alumno-prueba.js';
 import { directoryRoutes, registrationStatus } from './directory.js';
 import { PRIVACY_VERSION, privacyAccepted, privacyRoutes } from './privacy.js';
 import { assertWritable, periodRoutes } from './periods.js';
@@ -84,6 +85,7 @@ import {
   one,
   optionalText,
   parseJson,
+  readCookie,
   readJson,
   requireSameOrigin,
   run,
@@ -126,7 +128,8 @@ const ACTIVE_EXAM_MESSAGE = 'Estás contestando un examen: hasta que lo envíes 
 const PHOTO_FREE_ROUTES = new Set(['GET /api/me', 'POST /api/privacy/accept', 'POST /api/profile/photo', 'POST /api/logout-all', 'POST /api/client-error']);
 export const PHOTO_REQUIRED_MESSAGE = 'Antes de continuar, tómate tu foto de perfil.';
 
-export const photoRequired = (env, user) => env.FOTO_OBLIGATORIA === '1' && user.role === 'student' && !user.photo;
+// El alumno de prueba (12.92) no lleva foto: lo usa quien enseña para revisar su curso.
+export const photoRequired = (env, user) => env.FOTO_OBLIGATORIA === '1' && user.role === 'student' && !user.photo && !isTestUser(user);
 
 function assertHasPhoto(route, user, env) {
   if (!photoRequired(env, user)) return;
@@ -157,7 +160,7 @@ export async function api(request, env, exec) {
     // waitUntil: trabajo después de responder (envío de notificaciones, 12.72); en las pruebas no existe.
     const ctx = { db: env.DB, env, user, url, request, waitUntil: exec?.waitUntil ? (promise) => exec.waitUntil(promise) : null };
     const handler =
-      routes[route] || attendanceRoutes[route] || gradingRoutes[route] || directoryRoutes[route] || privacyRoutes[route] || periodRoutes[route] || dashboardRoutes[route] || reportRoutes[route] || demoRoutes[route] || backupRoutes[route] || userRoutes[route] || bankRoutes[route] || sectionRoutes[route] || photoRoutes[route] || digestRoutes[route] || accessRoutes[route] || specialAccessRoutes[route] || forumRoutes[route] || importRoutes[route] || coverRoutes[route] || certificateRoutes[route] || joinRoutes[route] || annotationRoutes[route] || messageRoutes[route] || h5pRoutes[route] || pushRoutes[route] || similarityRoutes[route] || errorRoutes[route];
+      routes[route] || attendanceRoutes[route] || gradingRoutes[route] || directoryRoutes[route] || privacyRoutes[route] || periodRoutes[route] || dashboardRoutes[route] || reportRoutes[route] || demoRoutes[route] || backupRoutes[route] || userRoutes[route] || bankRoutes[route] || sectionRoutes[route] || photoRoutes[route] || digestRoutes[route] || accessRoutes[route] || specialAccessRoutes[route] || forumRoutes[route] || importRoutes[route] || coverRoutes[route] || certificateRoutes[route] || joinRoutes[route] || annotationRoutes[route] || messageRoutes[route] || h5pRoutes[route] || pushRoutes[route] || similarityRoutes[route] || errorRoutes[route] || testStudentRoutes[route];
     if (handler) return await handler(ctx);
     if (request.method === 'GET' && url.pathname.startsWith('/api/file/')) return await downloadFile(ctx, url.pathname.slice(10));
     if (request.method === 'GET' && url.pathname.startsWith('/api/photo/')) return await servePhoto(ctx, url.pathname.slice(11));
@@ -601,7 +604,7 @@ async function checkTeams(db, course, category, sectionInput, groups, exceptId =
 }
 
 const routes = {
-  'GET /api/me': async ({ db, env, user }) =>
+  'GET /api/me': async ({ db, env, user, request }) =>
     json({
       ...publicUser(user),
       ...(await registrationStatus(db, env, user)),
@@ -614,6 +617,8 @@ const routes = {
       // Correos de avisos: si están configurados y si esta persona recibe el resumen diario.
       mailEnabled: mailConfigured(env),
       emailDigest: user.email_digest !== 0,
+      // Sesión del alumno de prueba (12.92): su curso y si en este navegador quedó guardada la sesión de docente.
+      testStudent: isTestUser(user) ? { course: testCourseOf(user), canReturn: Boolean(readCookie(request, TEACHER_COOKIE)) } : null,
     }),
 
   // Cierra la sesión en todos los dispositivos de la persona (por ejemplo, si perdió su teléfono).
@@ -648,11 +653,13 @@ const routes = {
              -- Primero, por índice, solo los cursos propios o con inscripción (12.30: antes se recorrían todos los cursos).
              WHERE (c.owner=?1 OR c.id IN (SELECT i.course FROM aula_members i WHERE i.user_id=?1))
                AND ((?2 AND (c.owner=?1 OR EXISTS (SELECT 1 FROM aula_members t WHERE t.course=c.id AND t.user_id=?1 AND t.role='teacher')))
-                    OR (c.student_visible=1 AND EXISTS (SELECT 1 FROM aula_members m WHERE m.course=c.id AND m.user_id=?1 AND m.role='student')))
+                    OR ((c.student_visible=1 OR ?3) AND EXISTS (SELECT 1 FROM aula_members m WHERE m.course=c.id AND m.user_id=?1 AND m.role='student')))
                AND ${notDeleted}
              ORDER BY c.created DESC`,
             user.id,
             user.role === 'teacher' ? 1 : 0,
+            // El alumno de prueba ve su curso aunque siga oculto para los alumnos (12.92).
+            isTestUser(user) ? 1 : 0,
           );
     return json(
       rows.map(({ can_teach: canTeach, cover: _cover, join_code: _joinCode, ...c }) => ({

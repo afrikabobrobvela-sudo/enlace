@@ -802,7 +802,7 @@ function renderQuiz() {
       : attempts.length
         ? '<p class="muted">Ya usaste todos tus intentos.</p>'
         : ''
-  }<div id="quizAttemptBox"></div>`;
+  }${typeof testStudentHintHtml === 'function' ? testStudentHintHtml() : ''}<div id="quizAttemptBox"></div>`;
 }
 
 /** Campos de una pregunta del intento (también los usa la vista previa del docente). */

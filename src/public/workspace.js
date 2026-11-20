@@ -30,7 +30,7 @@ function workspaceNav() {
       : hiddenCourse
         ? `<span><strong>Curso oculto para los alumnos.</strong> No aparece en sus cursos y no pueden abrirlo; todos los datos se conservan.</span><button type="button" class="secondary" data-action="toggle-course-visible" data-id="${esc(c.id)}">Mostrar a los alumnos</button>`
       : current?.viewing ? `<span><strong>Vista de ${esc(current.viewing.name)}.</strong> Ves exactamente lo que ve este alumno: sus entregas, calificaciones publicadas, intentos y asistencia. Nada se guarda en esta vista y la consulta queda registrada.</span><button type="button" class="secondary" data-action="toggle-preview">Volver a vista de docente</button>`
-      : current?.preview ? '<span><strong>Vista de alumno.</strong> Así ven este curso tus alumnos: solo lo visible, sin respuestas correctas ni datos de otros alumnos. Nada se guarda en esta vista.</span><button type="button" class="secondary" data-action="toggle-preview">Volver a vista de docente</button>' : '';
+      : current?.preview ? `<span><strong>Vista de alumno.</strong> Así ven este curso tus alumnos: solo lo visible, sin respuestas correctas ni datos de otros alumnos. Nada se guarda en esta vista.</span><span class="preview-bar-actions">${typeof testStudentModal === 'function' ? '<button type="button" class="secondary" data-action="test-student">Probar como alumno</button>' : ''}<button type="button" class="secondary" data-action="toggle-preview">Volver a vista de docente</button></span>` : '';
   }
   const picker = $('#coursePickerList');
   if (picker)
