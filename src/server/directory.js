@@ -1,6 +1,6 @@
 // Registro de docentes: catálogo de academias y unidades académicas, solicitudes para ser docente
 // (con aprobación de la administración) y la academia/unidad de cada docente.
-import { requireAdmin } from './access.js';
+import { isTestUser, requireAdmin } from './access.js';
 import { all, fail, json, nowIso, one, optionalText, readJson, run, text } from './http.js';
 
 const KINDS = { academy: 'aula_academies', unit: 'aula_units' };
@@ -17,7 +17,8 @@ export function teacherDomains(env) {
 
 export const canRequestTeacher = (env, user) => {
   const domains = teacherDomains(env);
-  return user.role === 'student' && (!domains.length || domains.includes(user.email.split('@')[1]));
+  // El alumno de prueba (12.92) es una cuenta de quien enseña: no puede pedir ser docente.
+  return user.role === 'student' && !isTestUser(user) && (!domains.length || domains.includes(user.email.split('@')[1]));
 };
 
 /** Clave para detectar duplicados: sin mayúsculas, acentos ni espacios repetidos ("Física" = "FISICA"). */

@@ -27,6 +27,8 @@ import {
   signToken,
   verifyToken,
 } from './http.js';
+import { access, requireTeacher } from './access.js';
+import { ensureTestStudent, isTestUser, TEACHER_COOKIE, TEST_DOMAIN, TEST_LINK_MINUTES, testCourseOf } from './alumno-prueba.js';
 
 const SESSION_COOKIE = '__Host-enlace_session';
 const OAUTH_COOKIE = '__Host-enlace_oauth';
@@ -129,7 +131,16 @@ export async function auth(request, env) {
       case 'POST /auth/logout':
         requireSameOrigin(request);
         await revokeCurrent(request, env);
-        return json({ ok: true }, 200, { 'Set-Cookie': clearSessionCookie() });
+        // También se olvida la sesión de docente guardada por el alumno de prueba (12.92).
+        return withCookies({ ok: true }, [clearSessionCookie(), cookie(TEACHER_COOKIE, '', 0)]);
+      case 'POST /auth/prueba/entrar':
+        return await testStudentEnter(request, env);
+      case 'GET /auth/prueba':
+        return testStudentConfirmPage(url);
+      case 'POST /auth/prueba':
+        return await testStudentLink(request, env);
+      case 'POST /auth/prueba/volver':
+        return await testStudentReturn(request, env);
       default:
         return json({ error: 'Ruta no encontrada.' }, 404);
     }
@@ -360,7 +371,8 @@ async function emailVerify(request, env) {
   const token = String((await request.formData()).get('token') || '');
   const hash = await sha256(token);
   const row = await one(env.DB, 'SELECT * FROM aula_login_tokens WHERE token_hash=?', hash);
-  if (!row || row.used_at || row.expires < nowIso()) return loginError('link');
+  // Los enlaces del alumno de prueba se usan solo en /auth/prueba (no crean una identidad de correo).
+  if (!row || row.used_at || row.expires < nowIso() || row.email.endsWith('.invalid')) return loginError('link');
   const claimed = await env.DB.prepare('UPDATE aula_login_tokens SET used_at=? WHERE token_hash=? AND used_at IS NULL')
     .bind(nowIso(), hash)
     .run();
@@ -394,6 +406,8 @@ export async function roleFor(db, env, address) {
  * se reutiliza para que conserve sus cursos, entregas y calificaciones.
  */
 export async function completeLogin(env, { provider, subject, email, name }) {
+  // Defensa: el dominio reservado `.invalid` es el de las cuentas del alumno de prueba (12.92).
+  if (String(email || '').toLowerCase().endsWith('.invalid')) fail('Ese correo no puede usarse para entrar.', 403);
   const db = env.DB;
   const now = nowIso();
   const linked = await one(
@@ -475,7 +489,103 @@ export async function sessionCookieForTests(user, env) {
   return (await sessionCookie(user, env)).split(';')[0];
 }
 
+// ---- Alumno de prueba (12.92) ------------------------------------------------------------------
+
+const secondsLeft = (session) => Math.max(0, Math.floor(session.exp - Date.now() / 1000));
+
+/**
+ * Quien enseña entra como el alumno de prueba de su curso. `device: 'here'` cambia la sesión de este navegador y
+ * guarda la de docente en otra cookie (HttpOnly, igual de protegida) para volver con un botón; `device: 'other'`
+ * devuelve un enlace de un solo uso (10 minutos) para abrirlo en otro dispositivo, que nunca puede volver a la cuenta
+ * de docente.
+ */
+async function testStudentEnter(request, env) {
+  requireSameOrigin(request);
+  const teacher = await identity(request, env);
+  if (isTestUser(teacher)) fail('Ya estás como alumno de prueba.', 409);
+  const body = await readJson(request);
+  const a = await access(env.DB, teacher, body.course);
+  requireTeacher(a);
+  if (a.course.archived_at) fail('Este curso está archivado: en él ya no se entregan actividades ni se contestan evaluaciones.', 409);
+  const student = await ensureTestStudent(env.DB, a.course, body.section, teacher);
+  if (body.device === 'other') {
+    const since = new Date(Date.now() - 15 * 60_000).toISOString();
+    const recent = await one(env.DB, 'SELECT count(*) AS n FROM aula_login_tokens WHERE email=? AND created>?', student.email, since);
+    if (recent.n >= 10) fail('Ya pediste varios enlaces. Espera unos minutos o usa el último que generaste.', 429);
+    const token = randomToken(18);
+    const now = new Date();
+    await env.DB.prepare('INSERT INTO aula_login_tokens (token_hash,email,return_to,created,expires) VALUES (?,?,?,?,?)')
+      .bind(await sha256(token), student.email, '/#c=' + encodeURIComponent(a.course.id), now.toISOString(), new Date(now.getTime() + TEST_LINK_MINUTES * 60_000).toISOString())
+      .run();
+    return json({ url: `${new URL(request.url).origin}/auth/prueba?t=${token}`, minutes: TEST_LINK_MINUTES });
+  }
+  const current = readCookie(request, SESSION_COOKIE);
+  const session = await verifyToken(current, env.SESSION_SECRET);
+  return withCookies({ ok: true, course: a.course.id }, [await sessionCookie(student, env), cookie(TEACHER_COOKIE, current, secondsLeft(session))]);
+}
+
+/** Como en el enlace por correo, el GET solo muestra un botón (las vistas previas de WhatsApp abren los enlaces). */
+function testStudentConfirmPage(url) {
+  const token = (url.searchParams.get('t') || '').replace(/[^A-Za-z0-9_-]/g, '');
+  return htmlPage(
+    'Alumno de prueba',
+    `<h1>Entrar como alumno de prueba</h1><p>Vas a abrir el curso en este navegador como su <strong>alumno de prueba</strong>: verás y harás todo como un alumno. Si aquí había otra sesión abierta, se cerrará.</p>
+     <form method="post" action="/auth/prueba"><input type="hidden" name="token" value="${token}">
+     <button type="submit">Entrar como alumno de prueba</button></form>`,
+  );
+}
+
+async function testStudentLink(request, env) {
+  requireSameOrigin(request, { customHeader: false }); // formulario HTML
+  const token = String((await request.formData()).get('token') || '');
+  const hash = await sha256(token);
+  const row = await one(env.DB, 'SELECT * FROM aula_login_tokens WHERE token_hash=?', hash);
+  if (!row || row.used_at || row.expires < nowIso() || !row.email.endsWith('@' + TEST_DOMAIN)) return loginError('link');
+  const claimed = await env.DB.prepare('UPDATE aula_login_tokens SET used_at=? WHERE token_hash=? AND used_at IS NULL').bind(nowIso(), hash).run();
+  if (!claimed.meta.changes) return loginError('link');
+  // Solo mientras siga inscrito (quien enseña pudo quitarlo después de generar el enlace).
+  const user = await one(env.DB, "SELECT u.* FROM aula_users u JOIN aula_members m ON m.user_id=u.id AND m.role='student' WHERE u.email=?", row.email);
+  if (!user || user.suspended_at || !isTestUser(user)) return loginError('link');
+  return redirect(safeReturnPath(row.return_to), [await sessionCookie(user, env), cookie(TEACHER_COOKIE, '', 0)]);
+}
+
+/** Cierra la sesión del alumno de prueba y, si en este navegador quedó guardada, devuelve la de docente. */
+async function testStudentReturn(request, env) {
+  requireSameOrigin(request);
+  let current = null;
+  try {
+    current = await identity(request, env);
+  } catch (error) {
+    if (error.status !== 401) throw error; // la sesión de prueba pudo haber vencido: igual se intenta volver
+  }
+  if (current && !isTestUser(current)) fail('No estás como alumno de prueba.', 409);
+  if (current) await env.DB.prepare('UPDATE aula_logins SET revoked_at=? WHERE id=? AND revoked_at IS NULL').bind(nowIso(), current.sid).run();
+  const stash = readCookie(request, TEACHER_COOKIE);
+  let teacher = null;
+  if (stash) {
+    try {
+      teacher = await identity(new Request(request.url, { headers: { cookie: `${SESSION_COOKIE}=${stash}` } }), env);
+    } catch (error) {
+      if (![401, 403].includes(error.status)) throw error;
+    }
+  }
+  const course = current ? testCourseOf(current) : null;
+  if (teacher && !isTestUser(teacher)) {
+    const session = await verifyToken(stash, env.SESSION_SECRET);
+    return withCookies({ ok: true, course }, [cookie(SESSION_COOKIE, stash, secondsLeft(session)), cookie(TEACHER_COOKIE, '', 0)]);
+  }
+  // Sin sesión de docente guardada (o ya vencida): queda sin sesión y la interfaz muestra el acceso.
+  return withCookies({ ok: true, course, relogin: true }, [clearSessionCookie(), cookie(TEACHER_COOKIE, '', 0)]);
+}
+
 // ---- Respuestas ------------------------------------------------------------------------------
+
+/** JSON con varias cookies (un objeto de cabeceras solo admite un Set-Cookie). */
+function withCookies(data, cookies) {
+  const headers = new Headers({ 'Content-Type': 'application/json; charset=utf-8', ...SECURITY_HEADERS });
+  for (const c of cookies) headers.append('Set-Cookie', c);
+  return new Response(JSON.stringify(data), { status: 200, headers });
+}
 
 function redirect(location, cookies = []) {
   const headers = new Headers({ Location: location, ...SECURITY_HEADERS });

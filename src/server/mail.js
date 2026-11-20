@@ -173,6 +173,13 @@ async function sendResend(env, messages) {
  * romper lo que lo pidió.
  */
 export async function sendMails(db, env, messages) {
+  // Nunca a direcciones del dominio reservado `.invalid` (alumnos ficticios del curso de ejemplo y alumno de prueba):
+  // no existen y gastarían la cuota diaria.
+  const fake = messages.filter((m) => /\.invalid$/i.test(String(m.to || '').trim()));
+  if (fake.length) {
+    const result = await sendMails(db, env, messages.filter((m) => !fake.includes(m)));
+    return { ...result, skipped: [...result.skipped, ...fake.map((m) => m.to)] };
+  }
   if (!messages.length) return { sent: [], skipped: [], error: null };
   if (!mailConfigured(env)) return { sent: [], skipped: messages.map((m) => m.to), error: 'El correo de avisos no está configurado.' };
   const quota = await mailQuota(db, env);

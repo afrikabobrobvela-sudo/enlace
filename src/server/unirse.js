@@ -3,7 +3,7 @@
 // alumno; nadie lo puede ver salvo quien enseña (publicCourse() y /api/courses lo quitan de las respuestas).
 // 12.74: cada sección puede tener su propio código (aula_sections.join_code, desde «Listado de alumnos → Código QR
 // para unirse»): quien se une con él queda en esa sección. Las respuestas del curso nunca leen esa columna.
-import { access, requireTeacher } from './access.js';
+import { access, isTestUser, requireTeacher } from './access.js';
 import { fail, json, one, readJson, run } from './http.js';
 import { sectionOf } from './sections.js';
 
@@ -61,6 +61,7 @@ export const joinRoutes = {
   async 'POST /api/join'({ db, user, request }) {
     const body = await readJson(request);
     const code = normalizeCode(body.code);
+    if (isTestUser(user)) fail('El alumno de prueba solo puede estar en su propio curso.', 403);
     if (code.length < 6) fail('Escribe el código completo que te dio tu docente.');
     // El código es del curso (sin sección) o de una de sus secciones.
     const course = await one(

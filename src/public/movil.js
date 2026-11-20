@@ -125,6 +125,7 @@ function openMoreSheet() {
     .join('')}</div>
     <div class="sheet-links">
       ${current.canPreview ? `<button type="button" class="sheet-link" data-sheet-action="toggle-preview">${navIcon('preview')}<span>${current.preview ? 'Volver a vista de docente' : 'Ver como alumno'}</span></button>` : ''}
+      ${current.canPreview && !current.course.archived_at && typeof testStudentModal === 'function' ? `<button type="button" class="sheet-link" data-sheet-action="test-student">${navIcon('preview')}<span>Probar como alumno (se guarda)</span></button>` : ''}
       <button type="button" class="sheet-link" data-sheet-refresh>${navIcon('refresh')}<span>Actualizar el curso</span></button>
       <button type="button" class="sheet-link" data-sheet-action="home">${navIcon('courses')}<span>Todos mis cursos</span></button>
     </div>`;

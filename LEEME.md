@@ -1,9 +1,22 @@
-# Enlace · versión 12.91
+# Enlace · versión 12.92
 
 Plataforma académica independiente para docentes y alumnos de cualquier academia (nació en una academia de Física), con interfaz inspirada en Brightspace.
 No es el código de D2L Brightspace ni una plataforma oficial de ninguna institución.
 
 Esta versión se despliega en **tu propia cuenta de Cloudflare** (Workers + D1 + R2, plan gratuito) y ya no depende de ChatGPT Sites.
+
+## Novedades de la versión 12.92 (alumno de prueba)
+
+- **Probar como alumno, de verdad.** La «Vista de alumno» solo deja mirar: nada se guarda («Estás en la vista de alumno: aquí no se guardan cambios»). Ahora cada curso tiene un **alumno de prueba**: una cuenta de alumno del curso, inscrita como cualquier otro, que solo usan quienes lo imparten. Con ella contestas evaluaciones y exámenes y entregas actividades **exactamente como tus alumnos**: se guarda, el examen se bloquea si sales, pide el código de tu monitor y aparece en él.
+- **Cómo entrar:** en el curso, «Ver como alumno» → **«Probar como alumno»** en la barra amarilla (en el teléfono: «Más» → «Probar como alumno (se guarda)»). En una evaluación vista como alumno también aparece el botón junto a «Comenzar examen». En la ventana eliges su **sección** (para probar fechas y códigos por sección) y:
+  - **«Entrar aquí como alumno»:** este navegador cambia a la cuenta de prueba. Arriba sale la barra «Alumno de prueba» con **«Volver a mi cuenta»**, que te regresa a tu cuenta de docente sin volver a iniciar sesión. Durante el examen la barra se oculta (lo ves igual que tus alumnos).
+  - **«Abrir en otro dispositivo»:** un enlace y un código QR que sirven **una sola vez** y vencen en 10 minutos. Así contestas en el teléfono mientras ves el monitor en la computadora. En ese dispositivo no se puede volver a la cuenta de docente (solo «Salir»). No lo compartas con tus alumnos.
+- **Lo que ve:** solo lo publicado para su sección, aunque el curso siga oculto para los alumnos (sirve para revisarlo antes de mostrarlo). Para probar una evaluación oculta, dale **acceso especial** al «Alumno de prueba» o publícala.
+- **Al terminar:** en la misma ventana, **«Borrar lo que hizo»** (intentos, entregas y su historial, asistencia, seguimiento, mensajes, constancia y publicaciones de foro) para volver a probar desde cero, o **«Quitarlo del curso»** (además lo da de baja y cierra su sesión en cualquier dispositivo). Mientras esté inscrito, sale en tu lista, en el libro y en el monitor como «Alumno de prueba».
+- **Lo que no puede hacer:** unirse a otros cursos, pedir ser docente ni recibir correos; tampoco se le pide foto de perfil. Su correo es del dominio reservado `.invalid`, que ningún acceso con Google o Microsoft entrega. De paso, Enlace ya no intenta enviar correos a direcciones `.invalid` (los alumnos ficticios del curso de ejemplo): no gastan la cuota diaria.
+- Cada entrada queda en el registro de la administración («alumno_prueba»).
+- No hay migraciones en esta versión.
+- Si un teléfono o una computadora tenía Enlace abierto desde antes de publicar, **recarga la página** para ver la versión nueva.
 
 ## Novedades de la versión 12.91 (examen: modo avión, notificaciones y monitor en vivo)
 

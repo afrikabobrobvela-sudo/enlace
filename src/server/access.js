@@ -1,6 +1,13 @@
 // Permisos por curso, compartidos por todos los módulos de la API.
 import { fail, one } from './http.js';
 
+/**
+ * Alumno de prueba (12.92): una cuenta de alumno por curso, sin correo real (dominio reservado `.invalid`, que ningún
+ * proveedor de acceso entrega), con la que quien enseña contesta y entrega como sus alumnos. Solo está en su curso.
+ */
+export const TEST_DOMAIN = 'alumno-prueba.invalid';
+export const isTestUser = (user) => typeof user?.email === 'string' && user.email.endsWith('@' + TEST_DOMAIN);
+
 /** Una sola consulta: curso, si está retirado y el rol de la persona en él. */
 export async function access(db, user, courseId) {
   const row = await one(
@@ -23,7 +30,8 @@ export async function access(db, user, courseId) {
   if (!isAdmin && !isOwner && !coTeacher && (!memberRole || memberRole === 'removed' || memberRole === 'teacher')) {
     fail('No tienes acceso a este curso.', 403);
   }
-  if (!canTeach && memberRole === 'student' && course.student_visible === 0) {
+  // El alumno de prueba entra aunque el curso siga oculto: sirve justo para revisarlo antes de mostrarlo.
+  if (!canTeach && memberRole === 'student' && course.student_visible === 0 && !isTestUser(user)) {
     fail('Este curso está oculto para los alumnos.', 403);
   }
   // `visitor`: su ingreso cuenta en los accesos del curso (la administración que solo revisa no cuenta).
