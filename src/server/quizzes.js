@@ -311,7 +311,9 @@ export const EXAM_RADII = [100, 150, 300, 500];
 export const LOCK_GRACES = [0, 5, 15, 30];
 export const MAX_UNLOCK_FAILURES = 5;
 export const MAX_PASSWORD_FAILURES = 10;
-const EVENT_KINDS = ['left', 'fullscreen', 'copy', 'capture'];
+// 12.91: 'offline' = el navegador estuvo sin conexión (por ejemplo, modo avión). El servidor agrega por su cuenta
+// 'silence' (no supo nada del examen un buen rato), 'locked' y 'unlocked'.
+const EVENT_KINDS = ['left', 'fullscreen', 'copy', 'capture', 'offline'];
 const MAX_EVENTS = 200;
 
 /** Configuración del modo examen (null si está desactivado). La contraseña y el salón nunca llegan al alumno. */
@@ -333,7 +335,11 @@ function examFields(input) {
   const lockOnLeave = input.lockOnLeave === true;
   const lockGrace = LOCK_GRACES.includes(Number(input.lockGrace)) ? Number(input.lockGrace) : 5;
   // lockPlatform: mientras contesta, Enlace solo le responde el examen (ni otros cursos ni materiales).
-  return { enabled: true, password, oneByOne, noBack: oneByOne && input.noBack === true, place, lockOnLeave, lockGrace: lockOnLeave ? lockGrace : 0, lockPlatform: input.lockPlatform === true };
+  // prepareDevice (12.91): antes de empezar, el alumno confirma que activó «No molestar» y fijó la pantalla.
+  return {
+    enabled: true, password, oneByOne, noBack: oneByOne && input.noBack === true, place, lockOnLeave, lockGrace: lockOnLeave ? lockGrace : 0,
+    lockPlatform: input.lockPlatform === true, prepareDevice: input.prepareDevice !== false,
+  };
 }
 
 /** Lo que el alumno sabe del modo examen: si pide contraseña o ubicación, pero no cuáles son. */
@@ -351,13 +357,27 @@ export function publicSettings(settings) {
 /** Código que el alumno debe escribir para empezar: el de su sección o, si no hay, la contraseña del modo examen. */
 export const startCodeOf = (settings) => settings?.startCode || settings?.exam?.password || '';
 
-/** Eventos que envía el navegador durante el examen (salir de la pantalla, de pantalla completa, copiar o pegar, captura de pantalla). */
-export function validEvents(input) {
+/**
+ * Eventos que envía el navegador durante el examen (salir de la pantalla, de pantalla completa, copiar o pegar,
+ * captura de pantalla, sin conexión). 12.91: un evento puede llegar tarde (se guardó en el teléfono mientras no había
+ * conexión), así que conserva su hora si cae entre `notBefore` (el inicio del intento) y ahora; `judged` dice que el
+ * servidor ya decidió el bloqueo de esa salida (con /api/attempt/back) y no debe volver a decidirlo.
+ */
+export function validEvents(input, notBefore = null) {
   if (!Array.isArray(input)) return [];
+  const now = Date.now();
+  const floor = notBefore ? Date.parse(notBefore) : now;
   return input.slice(0, 20).map((e) => {
     if (!EVENT_KINDS.includes(e?.kind)) fail('Evento no válido.');
     const seconds = Math.round(Number(e.seconds ?? 0));
-    return { kind: e.kind, seconds: Number.isFinite(seconds) ? Math.min(Math.max(seconds, 0), 86_400) : 0, at: new Date().toISOString() };
+    const at = Date.parse(e.at);
+    const event = {
+      kind: e.kind,
+      seconds: Number.isFinite(seconds) ? Math.min(Math.max(seconds, 0), 86_400) : 0,
+      at: new Date(Number.isFinite(at) && at >= floor && at <= now + 60_000 ? Math.min(at, now) : now).toISOString(),
+    };
+    if (e.kind === 'left' && e.judged === true) event.judged = true;
+    return event;
   });
 }
 
@@ -392,9 +412,13 @@ export function integritySummary(start) {
     events = [];
   }
   const left = events.filter((e) => e.kind === 'left');
+  const offline = events.filter((e) => e.kind === 'offline' || e.kind === 'silence');
   return {
     exits: left.length,
     awaySeconds: left.reduce((n, e) => n + (e.seconds || 0), 0),
+    // 12.91: sin conexión (lo que midió el teléfono o, si no avisó, el silencio que notó el servidor).
+    offline: offline.length,
+    offlineSeconds: offline.reduce((n, e) => n + (e.seconds || 0), 0),
     fullscreenExits: events.filter((e) => e.kind === 'fullscreen').length,
     copyAttempts: events.filter((e) => e.kind === 'copy').length,
     captures: events.filter((e) => e.kind === 'capture').length,

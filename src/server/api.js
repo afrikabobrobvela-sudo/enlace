@@ -320,6 +320,42 @@ async function applyLock(db, quiz, start, seconds = null) {
   return false;
 }
 
+// ---- Sin conexión (12.91) ---------------------------------------------------------------------------------
+// Con el teléfono en modo avión, el aviso de salida no llega al servidor: el navegador guarda la salida y la manda
+// cuando vuelve la conexión (con /api/attempt/progress), y aquí se decide el bloqueo igual que en /api/attempt/back.
+// Además el navegador manda un latido cada 20 s mientras el examen está a la vista; `last_seen` guarda la última
+// señal y un silencio de más de SILENCE_SECONDS queda registrado (y se ve en el monitor).
+export const SILENCE_SECONDS = 45;
+
+/** Segundos sin saber nada del intento, si pasan de SILENCE_SECONDS (si no, 0). */
+function silenceOf(start) {
+  if (!start?.last_seen) return 0;
+  const seconds = Math.round((Date.now() - Date.parse(start.last_seen)) / 1000);
+  return seconds > SILENCE_SECONDS ? seconds : 0;
+}
+
+/**
+ * Salidas que llegaron sin que /api/attempt/back las juzgara (se hicieron sin conexión): ¿alguna bloquea? Las mismas
+ * reglas: más de la tolerancia, o la SHORT_EXITS_LOCK.ª salida desde el último desbloqueo.
+ */
+function lateExitVerdict(start, events, exam) {
+  const grace = exam.lockGrace ?? 5;
+  let exits = exitsSinceUnlock(start);
+  for (const e of events) {
+    if (e.kind !== 'left') continue;
+    exits++;
+    if (e.judged) continue;
+    if (e.seconds > grace) return { seconds: e.seconds, reason: 'salida sin conexión' };
+    if (exits >= SHORT_EXITS_LOCK) return { seconds: e.seconds, reason: 'salidas repetidas' };
+  }
+  return null;
+}
+
+/** Agrega eventos al intento (con el tope de MAX_EXAM_EVENTS) y anota la señal. */
+const APPEND_EVENTS_SQL = `events=CASE WHEN json_array_length(events) + json_array_length(?4) <= ?5
+                     THEN (SELECT json_group_array(json(value)) FROM (SELECT value FROM json_each(events) UNION ALL SELECT value FROM json_each(?4)))
+                     ELSE events END`;
+
 /** Quita el bloqueo (con el código o porque el docente lo permitió) y lo anota en los eventos. */
 async function unlockAttempt(db, start, by) {
   let events = [];
@@ -331,8 +367,9 @@ async function unlockAttempt(db, start, by) {
   events.push({ kind: 'unlocked', seconds: Math.round((Date.now() - Date.parse(start.locked_at)) / 1000), by, at: nowIso() });
   await run(
     db,
-    `UPDATE aula_attempt_starts SET locked_at=NULL, unlock_code=NULL, unlock_failures=0, away_since=NULL, events=?
+    `UPDATE aula_attempt_starts SET locked_at=NULL, unlock_code=NULL, unlock_failures=0, away_since=NULL, last_seen=?, events=?
      WHERE quiz=? AND user_id=? AND attempt=?`,
+    nowIso(),
     JSON.stringify(events.slice(-MAX_EXAM_EVENTS)),
     start.quiz,
     start.user_id,
@@ -1770,7 +1807,7 @@ const routes = {
         const place = exam ? examPlaceCheck(quiz, body.location, String(body.locationError || '')) : { flag: '', distance: null };
         await run(
           db,
-          'INSERT OR IGNORE INTO aula_attempt_starts (quiz,user_id,attempt,started,flag,distance,session_id) VALUES (?,?,?,?,?,?,?)',
+          'INSERT OR IGNORE INTO aula_attempt_starts (quiz,user_id,attempt,started,flag,distance,session_id,last_seen) VALUES (?1,?2,?3,?4,?5,?6,?7,?4)',
           quiz.id,
           user.id,
           attempt,
@@ -1793,8 +1830,27 @@ const routes = {
         await claimDevice(db, quiz, start, user);
         start = await one(db, 'SELECT * FROM aula_attempt_starts WHERE quiz=? AND user_id=? AND attempt=?', quiz.id, user.id, attempt);
       }
+      // 12.91: retomar después de un silencio largo (cerró el navegador sin conexión, modo avión): con bloqueo al
+      // salir cuenta como una salida; sin él, queda registrado. Dentro de Safe Exam Browser no hay salidas.
+      const silent = exam && !start.locked_at ? silenceOf(start) : 0;
+      if (silent && !(await sebVerified(quiz, request))) {
+        if (lockEnabled(quiz) && silent > (exam.lockGrace ?? 5)) await lockAttempt(db, start, silent, 'retomó tras perder la conexión');
+        else {
+          await run(
+            db,
+            `UPDATE aula_attempt_starts SET ${APPEND_EVENTS_SQL} WHERE quiz=?1 AND user_id=?2 AND attempt=?3`,
+            quiz.id,
+            user.id,
+            attempt,
+            JSON.stringify([{ kind: 'silence', seconds: silent, at: start.last_seen }]),
+            MAX_EXAM_EVENTS,
+          );
+        }
+        start = await one(db, 'SELECT * FROM aula_attempt_starts WHERE quiz=? AND user_id=? AND attempt=?', quiz.id, user.id, attempt);
+      }
       // Retomar después de salir (por ejemplo, cerró el navegador): si pasó la tolerancia, queda bloqueado.
       const locked = exam ? await applyLock(db, quiz, start) : false;
+      if (exam) await run(db, 'UPDATE aula_attempt_starts SET last_seen=? WHERE quiz=? AND user_id=? AND attempt=?', nowIso(), quiz.id, user.id, attempt);
       // Al navegador no van los valores internos ni las permutaciones (`perm`, `key`): solo lo que se ve, ya en su orden.
       const questions = quizInstance(quiz, user.id, attempt).map(({ values: _v, perm: _p, key: _k, ...q }) => q);
       // Al retomar un examen se devuelven las respuestas guardadas y la pregunta en la que iba.
@@ -1830,8 +1886,28 @@ const routes = {
     }
     assertInTime(quiz, start.started);
     if (exam) assertDevice(quiz, start, user);
-    if (exam && start.locked_at) fail(LOCKED_MESSAGE, 423, { locked: true });
-    const events = exam ? validEvents(body.events) : [];
+    const events = exam ? validEvents(body.events, start.started) : [];
+    // 12.91: si el teléfono no avisó de nada y el servidor no supo del examen un buen rato, queda registrado.
+    const silent = exam && !start.locked_at ? silenceOf(start) : 0;
+    if (silent && !start.away_since && !events.some((e) => e.kind === 'left' || e.kind === 'offline')) {
+      events.unshift({ kind: 'silence', seconds: silent, at: start.last_seen });
+    }
+    if (exam && start.locked_at) {
+      // Bloqueado: las respuestas no se guardan, pero lo que pasó sí (puede llegar tarde, sin conexión). Esas salidas
+      // ya no vuelven a decidir un bloqueo después del desbloqueo. La señal se anota aunque no traiga nada (así esperar
+      // el código del docente no cuenta como silencio).
+      await run(
+        db,
+        `UPDATE aula_attempt_starts SET ${APPEND_EVENTS_SQL}, last_seen=?1 WHERE quiz=?2 AND user_id=?3 AND attempt=?6`,
+        nowIso(),
+        quiz.id,
+        user.id,
+        JSON.stringify(events.filter((e) => e.kind !== 'silence').map((e) => (e.kind === 'left' ? { ...e, judged: true } : e))),
+        MAX_EXAM_EVENTS,
+        start.attempt,
+      );
+      fail(LOCKED_MESSAGE, 423, { locked: true });
+    }
     const noBack = Boolean(exam?.noBack);
     const position = Number.isInteger(body.position) ? Math.min(Math.max(body.position, 0), questionCount(quiz.data)) : start.position;
     let answers = null;
@@ -1851,14 +1927,16 @@ const routes = {
       }
       answers = JSON.stringify(next);
     }
+    // Una salida con su duración llega cuando ya volvió a la página: la salida terminó (away_since se limpia).
+    const returned = events.some((e) => e.kind === 'left');
     await run(
       db,
       `UPDATE aula_attempt_starts SET
          progress=CASE WHEN ?1 IS NULL THEN progress ELSE ?1 END,
          position=CASE WHEN ?2 THEN max(position, ?3) ELSE ?3 END,
-         events=CASE WHEN json_array_length(events) + json_array_length(?4) <= ?5
-                     THEN (SELECT json_group_array(json(value)) FROM (SELECT value FROM json_each(events) UNION ALL SELECT value FROM json_each(?4)))
-                     ELSE events END
+         ${APPEND_EVENTS_SQL},
+         last_seen=?9,
+         away_since=CASE WHEN ?10 THEN NULL ELSE away_since END
        WHERE quiz=?6 AND user_id=?7 AND attempt=?8`,
       answers,
       noBack ? 1 : 0,
@@ -1868,7 +1946,18 @@ const routes = {
       quiz.id,
       user.id,
       start.attempt,
+      exam ? nowIso() : start.last_seen ?? null,
+      returned ? 1 : 0,
     );
+    // 12.91: salidas que se hicieron sin conexión (modo avión): se deciden aquí, con las reglas del bloqueo al salir.
+    if (exam?.lockOnLeave && events.some((e) => e.kind === 'left' && !e.judged) && !(await sebVerified(quiz, request))) {
+      const verdict = lateExitVerdict(start, events, exam);
+      if (verdict) {
+        const fresh = await one(db, 'SELECT * FROM aula_attempt_starts WHERE quiz=? AND user_id=? AND attempt=?', quiz.id, user.id, start.attempt);
+        await lockAttempt(db, fresh, verdict.seconds, verdict.reason);
+        fail(LOCKED_MESSAGE, 423, { locked: true });
+      }
+    }
     return json({ ok: true });
   },
 
@@ -2040,7 +2129,7 @@ const routes = {
     assertDevice(quiz, start, user);
     await run(
       db,
-      'UPDATE aula_attempt_starts SET away_since=coalesce(away_since, ?) WHERE quiz=? AND user_id=? AND attempt=? AND locked_at IS NULL',
+      'UPDATE aula_attempt_starts SET away_since=coalesce(away_since, ?1), last_seen=?1 WHERE quiz=?2 AND user_id=?3 AND attempt=?4 AND locked_at IS NULL',
       nowIso(),
       quiz.id,
       user.id,
@@ -2060,6 +2149,7 @@ const routes = {
     const start = await openStart(db, quiz, user.id);
     if (!start || start.attempt !== Number(body.attempt)) fail('Este intento ya no está en curso.', 409);
     assertDevice(quiz, start, user);
+    await run(db, 'UPDATE aula_attempt_starts SET last_seen=? WHERE quiz=? AND user_id=? AND attempt=?', nowIso(), quiz.id, user.id, start.attempt);
     if (start.locked_at) return json({ locked: true });
     const reported = Math.min(Math.max(Number(body.seconds) || 0, 0), 86_400);
     const measured = start.away_since ? (Date.now() - Date.parse(start.away_since)) / 1000 : 0;
@@ -2198,6 +2288,8 @@ const routes = {
         unlockCode: s.locked_at ? s.unlock_code : null,
         unlockFailures: s.unlock_failures || 0,
         away: Boolean(s.away_since),
+        // 12.91: segundos desde la última señal del examen (guardado o latido cada 20 s). Mucho silencio = sin conexión.
+        silentFor: s.last_seen ? Math.max(0, Math.round((Date.now() - Date.parse(s.last_seen)) / 1000)) : null,
       })),
       blocked: blocked.map((b) => ({ user: b.user_id, name: b.name, section: b.section || '' })),
       total: questionCount(quiz.data),

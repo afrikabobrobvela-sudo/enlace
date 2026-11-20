@@ -1,9 +1,27 @@
-# Enlace · versión 12.90
+# Enlace · versión 12.91
 
 Plataforma académica independiente para docentes y alumnos de cualquier academia (nació en una academia de Física), con interfaz inspirada en Brightspace.
 No es el código de D2L Brightspace ni una plataforma oficial de ninguna institución.
 
 Esta versión se despliega en **tu propia cuenta de Cloudflare** (Workers + D1 + R2, plan gratuito) y ya no depende de ChatGPT Sites.
+
+## Novedades de la versión 12.91 (examen: modo avión, notificaciones y monitor en vivo)
+
+- **El modo avión ya no esconde la salida.** Antes, si el alumno ponía el teléfono en modo avión, salía del examen (por ejemplo, a WhatsApp) y volvía, el aviso de «salí de la página» no llegaba al servidor y el examen no se bloqueaba. Ahora:
+  - El navegador guarda en el teléfono cada salida y cada corte de conexión con su hora real, y los manda en cuanto vuelve la señal (aunque recargue la página).
+  - El servidor revisa esas salidas tardías con la misma regla que las normales: si la salida duró más que la tolerancia que elegiste, o si ya van 3 salidas, **el examen se bloquea** y el alumno necesita el código de tu monitor.
+  - Mientras contesta, el navegador avisa cada 20 segundos que sigue ahí. Si el servidor deja de saber del alumno más de 45 segundos y luego el alumno retoma el examen (otra pestaña, recargar, otro teléfono), se bloquea por «retomó tras perder la conexión» (con «Bloquear al salir» activado).
+  - Un corte de conexión **sin** salir de la página (el wifi del salón falla) no bloquea: solo queda en el registro de integridad como «sin conexión».
+- **Responder una notificación** (WhatsApp desde el aviso en pantalla): el examen revisa el foco de la página varias veces por segundo, así que abrir la respuesta rápida cuenta como salida aunque la página no se oculte.
+- **Monitor en vivo:** junto a cada alumno que está contestando aparece «Fuera de la página ahora» o «Sin conexión desde hace 2 min»; hay un contador nuevo «fuera o sin conexión». El registro de integridad muestra cuántas veces y cuánto tiempo estuvo sin conexión.
+- **Preparar el teléfono antes de empezar** (opción nueva del modo examen, activada por omisión: «Pedir que preparen el teléfono antes de empezar»): antes de «Comenzar», el alumno ve los pasos para su equipo y marca que los hizo:
+  - Android: activar «No molestar» y **fijar la pantalla** (apps recientes → ícono del navegador → «Fijar»; si no aparece, se activa en Ajustes → Seguridad → Fijar aplicación): con la pantalla fijada no puede abrir otra aplicación ni la cortina de notificaciones sin soltarla.
+  - iPhone: activar «No molestar» y **Acceso guiado** (Ajustes → Accesibilidad → Acceso guiado; tres clics al botón lateral).
+  - Computadora: cerrar otras aplicaciones y silenciar las notificaciones.
+- **Lo que una página web no puede hacer:** ningún sitio puede impedir que aparezcan las notificaciones del teléfono ni que el alumno cambie de aplicación; lo que sí puede es **detectarlo y bloquear**, que es lo que hace Enlace. Para un examen de alto valor, lo más fuerte es exigir Safe Exam Browser (en el iPhone usa el modo de evaluación de Apple, que apaga notificaciones y cambio de aplicación) o pedir la pantalla fijada / Acceso guiado y revisarla al pasar entre las bancas.
+- **Costo en el plan gratuito:** el aviso de cada 20 segundos es una solicitud con una escritura por alumno; un grupo de 40 durante una hora son unas 7,200 solicitudes (el límite diario es 100,000).
+- **Migración 0049** (no destructiva): agrega la columna `last_seen` a `aula_attempt_starts`. `npm run configurar` la aplica con su respaldo previo.
+- El aviso de privacidad ahora menciona, dentro de los eventos de integridad, copiar texto y quedarse sin conexión, y que el dispositivo avisa cada 20 segundos durante el examen (sin pedir que se acepte de nuevo: es la misma finalidad).
 
 ## Novedades de la versión 12.90 (sin BUAP, aviso de privacidad completo y pulido de la interfaz)
 

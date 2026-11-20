@@ -675,6 +675,9 @@ export const attemptStarts = sqliteTable(
     locks: integer('locks').notNull().default(0),
     // Migración 0021: sesión (dispositivo) donde se está contestando. Entrar desde otra sesión bloquea el intento.
     sessionId: text('session_id'),
+    // Migración 0049 (12.91): última vez que el servidor supo del intento (guardado o latido). Un silencio largo es
+    // pérdida de conexión (modo avión) y se ve en el monitor.
+    lastSeen: text('last_seen'),
   },
   // El índice por usuario permite saber en cada solicitud, sin recorrer la tabla, si la persona tiene un examen abierto.
   (t) => [primaryKey({ columns: [t.quiz, t.userId, t.attempt] }), index('aula_attempt_starts_user').on(t.userId, t.started)],
