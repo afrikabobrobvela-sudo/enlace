@@ -48,7 +48,14 @@ jobs:
           gzip -9 respaldo.sql
           ls -la respaldo.sql.gz
       - name: Guardar en R2 privado (enlace-respaldos)
-        run: npx wrangler r2 object put "enlace-respaldos/enlace-db-${STAMP}.sql.gz" --file respaldo.sql.gz --remote --content-type application/gzip
+        run: |
+          # R2 a veces responde 500 (error interno de Cloudflare): se reintenta hasta 4 veces antes de rendirse.
+          ok=0
+          for intento in 1 2 3 4; do
+            if npx wrangler r2 object put "enlace-respaldos/enlace-db-${STAMP}.sql.gz" --file respaldo.sql.gz --remote --content-type application/gzip; then ok=1; break; fi
+            echo "Falló la subida del respaldo (intento $intento de 4); se reintenta…"; sleep $((intento * 20))
+          done
+          [ "$ok" = 1 ] || { echo "::error::No se pudo guardar el respaldo en R2 después de 4 intentos"; exit 1; }
       - name: Borrar la copia local
         if: always()
         run: rm -f respaldo.sql respaldo.sql.gz
