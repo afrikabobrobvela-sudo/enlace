@@ -7,6 +7,7 @@ import { fail, isoDate, text } from './http.js';
 // 12.27: un banco de Brightspace completo (121 preguntas en 12 grupos) cabe en una sola evaluación.
 export const MAX_QUESTIONS = 300;
 const MAX_POOL_NAME = 80;
+export const MAX_DRAW_GROUPS = 100;
 const TIME_GRACE_MS = 60_000; // margen para la conexión al enviar
 const VARIABLE = /^[A-Za-z_][A-Za-z0-9_]{0,15}$/;
 
@@ -214,7 +215,9 @@ function numericFields(q, label) {
  */
 function drawFields(input, questions) {
   if (input === undefined || input === null) return [];
-  if (!Array.isArray(input) || input.length > 20) fail('Revisa las preguntas al azar.');
+  if (!Array.isArray(input)) fail('Revisa las preguntas al azar.');
+  // 12.93: hasta 100 grupos (antes 20): un examen de 30 reactivos con una variante al azar por reactivo usa 30.
+  if (input.length > MAX_DRAW_GROUPS) fail(`Una evaluación admite hasta ${MAX_DRAW_GROUPS} grupos de preguntas al azar.`);
   const sizes = new Map();
   for (const q of questions) if (q.pool) sizes.set(q.pool, (sizes.get(q.pool) || 0) + 1);
   const seen = new Set();

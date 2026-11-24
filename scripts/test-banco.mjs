@@ -153,6 +153,15 @@ assert.equal((await crear({ draw: [{ pool: 'A', count: 4 }] })).data.settings.dr
 const sorteo = await crear({ draw: [{ pool: 'A', count: 2 }] });
 assert.deepEqual(sorteo.data.settings.draw, [{ pool: 'A', count: 2 }]);
 checks += 2;
+// 12.93: un examen de 30 reactivos con una de 3 variantes por reactivo (30 grupos); el tope es de 100 grupos.
+const reactivos = Array.from({ length: 30 }, (_, g) => [0, 1, 2].map((v) => q(`R${g}V${v}`, v, `R${String(g).padStart(2, '0')}`))).flat();
+const treinta = await call('ana', '/api/record', { course: anaNuevo, kind: 'quiz', data: { title: 'Parcial', visible: false, questions: reactivos, settings: { attempts: 1, draw: Array.from({ length: 30 }, (_, g) => ({ pool: `R${String(g).padStart(2, '0')}`, count: 1 })) } } }, 201);
+const una = quizInstance(treinta, 'u1', 1);
+assert.equal(una.length, 30, 'Cada alumno recibe una variante de cada reactivo');
+assert.equal(new Set(una.map((x) => treinta.data.questions[x.index].pool)).size, 30);
+const muchos = Array.from({ length: 101 }, (_, g) => ({ pool: `G${g}`, count: 1 }));
+assert.match((await call('ana', '/api/record', { course: anaNuevo, kind: 'quiz', data: { title: 'Demasiados', visible: false, questions: banco, settings: { draw: muchos } } }, 400)).error, /hasta 100 grupos/);
+checks += 3;
 // Cada alumno recibe las dos fijas y 2 de las 4 del grupo; no todos las mismas.
 const subsets = new Set();
 for (let n = 0; n < 40; n++) {

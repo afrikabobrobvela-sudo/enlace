@@ -1,9 +1,15 @@
-# Enlace · versión 12.92
+# Enlace · versión 12.93
 
 Plataforma académica independiente para docentes y alumnos de cualquier academia (nació en una academia de Física), con interfaz inspirada en Brightspace.
 No es el código de D2L Brightspace ni una plataforma oficial de ninguna institución.
 
 Esta versión se despliega en **tu propia cuenta de Cloudflare** (Workers + D1 + R2, plan gratuito) y ya no depende de ChatGPT Sites.
+
+## Novedades de la versión 12.93 (más grupos de preguntas al azar)
+
+- Una evaluación ahora admite **hasta 100 grupos** de preguntas al azar (antes 20). Así se puede armar un examen de 30 reactivos donde cada reactivo tiene varias variantes de la misma dificultad y cada alumno recibe una de cada grupo: todos contestan un examen con la misma estructura, pero distinto al de sus compañeros.
+- Si se pasan los 100 grupos, el mensaje lo dice con claridad (antes solo decía «Revisa las preguntas al azar»).
+- No hay migraciones en esta versión.
 
 ## Novedades de la versión 12.92 (alumno de prueba)
 
