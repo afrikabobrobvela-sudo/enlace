@@ -2271,6 +2271,20 @@ const routes = {
     return json({ ok: true });
   },
 
+  // 12.99: quien enseña cierra el intento en curso de un alumno (se le acabó el tiempo y no volvió a entrar, se le
+  // descompuso el teléfono…): se califica con lo que tenía guardado, igual que al acabarse el tiempo.
+  'POST /api/exam/close': async ({ db, user, request }) => {
+    const body = await readJson(request);
+    requireTeacher(await access(db, user, body.course));
+    const quiz = await contentRecord(db, body.quiz, body.course, 'quiz');
+    const student = await one(db, 'SELECT id, name FROM aula_users WHERE id=?', String(body.user || ''));
+    const start = student && (await openStart(db, quiz, student.id));
+    if (!start) fail('Ese alumno no tiene un intento en curso: ya se envió o no lo ha empezado.', 409);
+    await closeExpiredAttempt(db, quiz, student, start);
+    const row = await one(db, 'SELECT score, correct, total FROM aula_attempts WHERE quiz=? AND user_id=? AND attempt=?', quiz.id, student.id, start.attempt);
+    return json({ ok: true, score: row?.score ?? 0, correct: row?.correct ?? 0, total: row?.total ?? 0 });
+  },
+
   // Examen en curso (docente): quién está contestando, sus salidas y quién quedó bloqueado por la contraseña.
   'GET /api/exam/monitor': async ({ db, user, url }) => {
     const course = url.searchParams.get('course');

@@ -101,6 +101,16 @@ function dtShow(input) {
   pop.setAttribute('role', 'dialog');
   pop.setAttribute('aria-label', input.type === 'time' ? 'Elegir hora' : 'Elegir fecha');
   (input.closest('dialog') || document.body).append(pop);
+  // 12.99: en la capa superior del navegador (popover), ningún contenedor lo recorta: en Safari (iPad) el calendario
+  // salía cortado dentro de las ventanas y de las tarjetas del editor. Sigue dentro de la ventana para no quedar inerte.
+  if (typeof pop.showPopover === 'function') {
+    pop.setAttribute('popover', 'manual');
+    try {
+      pop.showPopover();
+    } catch {
+      pop.removeAttribute('popover');
+    }
+  }
   dtOpen = { input, view: new Date(base.getFullYear(), base.getMonth(), 1), pop, date, time };
   dtRender();
   dtPlace();
@@ -122,20 +132,27 @@ function dtPlace() {
     return;
   }
   // Abajo del campo; si no cabe, arriba; si tampoco, a un lado (sin tapar nunca el campo).
-  const r = input.closest('.dt-field').getBoundingClientRect();
+  const field = input.closest('.dt-field');
+  // Si el campo quedó fuera de la vista (lo abrió la validación o el teclado), primero se trae a la vista.
+  const seen = field.getBoundingClientRect();
+  if (seen.bottom < 0 || seen.top > innerHeight) field.scrollIntoView({ block: 'nearest' });
+  const r = field.getBoundingClientRect();
+  // La altura visible real (en el iPad la barra del navegador o el teclado la reducen).
+  const vh = Math.min(innerHeight, globalThis.visualViewport?.height || innerHeight);
+  pop.style.maxHeight = `${vh - 16}px`;
   const w = pop.offsetWidth;
   const h = pop.offsetHeight;
-  const clampTop = (top) => Math.min(Math.max(8, top), innerHeight - h - 8);
+  const clampTop = (top) => Math.min(Math.max(8, top), vh - h - 8);
   let left = Math.min(Math.max(8, r.left), innerWidth - w - 8);
   let top;
-  if (r.bottom + 6 + h <= innerHeight - 8) top = r.bottom + 6;
+  if (r.bottom + 6 + h <= vh - 8) top = r.bottom + 6;
   else if (r.top - 6 - h >= 8) top = r.top - h - 6;
   else {
     top = clampTop(r.top + r.height / 2 - h / 2);
     left = r.right + 8 + w <= innerWidth - 8 ? r.right + 8 : Math.max(8, r.left - w - 8);
   }
   pop.style.left = `${left}px`;
-  pop.style.top = `${top}px`;
+  pop.style.top = `${clampTop(top)}px`; // nunca se sale de la pantalla
 }
 
 function dtRender() {
