@@ -365,5 +365,27 @@ assert.deepEqual([deNuevo.attempt, deNuevo.attemptsLeft], [1, 2]);
 ok(Date.parse(deNuevo.deadline) - Date.parse(deNuevo.started) === 30 * 60_000, 'Tiene sus 30 minutos completos');
 checks += 3;
 
+// ---- 12.98: intento cerrado por tiempo que no se pudo calificar (respuesta «9.8 m/s» en una numérica ya dejada atrás) ---
+const numerico = await saveQuiz({
+  title: 'examen con numéricas',
+  questions: [
+    { type: 'numeric', text: '¿2 + 2?', answer: '4', tolerance: 0 },
+    { type: 'numeric', text: '¿1 + 2?', answer: '3', tolerance: 0 },
+  ],
+  settings: { attempts: 1, timeLimit: 30, exam: { enabled: true, oneByOne: true, noBack: true } },
+});
+// Lo que dejó la versión anterior: el intento cerrado en 0, sin detalle, y las respuestas en aula_attempt_starts.
+insertAttempt.run('atorado', c, numerico.id, evaId, 'eva', '[]', 0, 2, 0, hours(0), 1, null);
+store.raw().prepare('INSERT INTO aula_attempt_starts (quiz,user_id,attempt,started,progress,position) VALUES (?,?,?,?,?,?)').run(numerico.id, evaId, 1, hours(-1), JSON.stringify({ 0: '4 m/s', 1: '3' }), 1);
+assert.equal((await call('docente', '/api/quiz/void-empty', { course: c, quiz: numerico.id })).voided, 0, 'Con respuestas guardadas no se borra');
+await call('raul', '/api/quiz/recover-closed', { course: c, quiz: numerico.id }, 403);
+const recuperado = await call('docente', '/api/quiz/recover-closed', { course: c, quiz: numerico.id });
+assert.equal(recuperado.recovered, 1);
+const fila = store.raw().prepare("SELECT score, correct, details, answers FROM aula_attempts WHERE id='atorado'").get();
+assert.deepEqual([fila.correct, fila.score], [1, 5], 'La respuesta con unidades cuenta como incorrecta; la otra, correcta');
+assert.deepEqual(JSON.parse(fila.answers), ['4 m/s', 3]);
+assert.equal((await call('docente', '/api/quiz/recover-closed', { course: c, quiz: numerico.id })).recovered, 0, 'No vuelve a tocar un intento ya calificado');
+checks += 6;
+
 assert.deepEqual(store.raw().prepare('PRAGMA foreign_key_check').all(), []);
 console.log(`PASS: ${checks} verificaciones de la 12.27 — CSV de Brightspace (8 tipos, HTML, errores por renglón, grupos), 60 puntos en 12 grupos, sorteos distintos, intento congelado, código con límite, tiempo agotado, 10 con todo correcto, sin clave en la red, recalificar, Safe Exam Browser y vista previa.`);

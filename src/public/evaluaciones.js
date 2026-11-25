@@ -720,7 +720,7 @@ function renderQuiz() {
       essays ? `<button class="${toReview ? 'primary' : 'secondary'}" type="button" data-essay-review="${esc(q.id)}">Revisar respuestas escritas${toReview ? ` (${toReview} por calificar)` : ''}</button>` : ''
     }${attempts.length ? `<button class="secondary" type="button" data-quiz-stats="${esc(q.id)}">Estadísticas</button>` : ''}<details class="more-actions"><summary class="secondary">Más acciones</summary><div class="more-actions-panel"><button type="button" data-quiz-duplicate="${esc(q.id)}">Duplicar</button>${attempts.length ? `<button type="button" data-quiz-export="${esc(q.id)}">Exportar a Excel</button>` : ''}<button type="button" data-bank-save="${esc(q.id)}">Guardar en el banco</button></div></details>${sectionFilterHtml()}</div>${sectionDatesSummary(q.id)}${
       emptyAttempts.length
-        ? `<div class="warning-note void-note"><p><b>${emptyAttempts.length} ${emptyAttempts.length === 1 ? 'intento se cerró' : 'intentos se cerraron'} sin ninguna respuesta</b> (de ${new Set(emptyAttempts.map((a) => a.author)).size} ${new Set(emptyAttempts.map((a) => a.author)).size === 1 ? 'alumno' : 'alumnos'}): se acabó el tiempo antes de que contestaran. Si fue por la configuración, devuélvelos para que puedan volver a presentar.</p><button type="button" class="secondary" data-void-empty="${esc(q.id)}">Devolver intentos sin respuestas</button></div>`
+        ? `<div class="warning-note void-note"><p><b>${emptyAttempts.length} ${emptyAttempts.length === 1 ? 'intento se cerró' : 'intentos se cerraron'} sin ninguna respuesta</b> (de ${new Set(emptyAttempts.map((a) => a.author)).size} ${new Set(emptyAttempts.map((a) => a.author)).size === 1 ? 'alumno' : 'alumnos'}): se acabó el tiempo antes de que contestaran. Si alguno sí había contestado (se cerró por un error al calificar), primero recupera sus respuestas guardadas; si fue por la configuración, devuélvelos para que puedan volver a presentar.</p><div class="action-row"><button type="button" class="primary" data-recover-closed="${esc(q.id)}">Recuperar respuestas guardadas</button><button type="button" class="secondary" data-void-empty="${esc(q.id)}">Devolver intentos sin respuestas</button></div></div>`
         : ''
     }
       ${typeof conditionsStatusHtml === 'function' ? conditionsStatusHtml(q) : ''}<section class="exam-monitor" id="examMonitor"><p class="muted">Cargando quién está contestando y quién ya terminó…</p></section>${drawNote}${questions}
@@ -1098,6 +1098,21 @@ document.addEventListener('click', async (e) => {
     await reload();
     toast(r.voided ? `Se ${r.voided === 1 ? 'devolvió 1 intento' : `devolvieron ${r.voided} intentos`} a ${r.students} ${r.students === 1 ? 'alumno' : 'alumnos'}. Revisa que el horario y el tiempo de la evaluación sean los correctos.` : 'No había intentos por devolver (o el alumno tiene uno en curso).');
   } catch (error) {
+    toast(error.message);
+  }
+});
+
+// 12.98: recalifica con lo guardado los intentos que se cerraron por tiempo sin poder calificarse.
+document.addEventListener('click', async (e) => {
+  const b = e.target.closest('[data-recover-closed]');
+  if (!b || busy) return;
+  b.disabled = true;
+  try {
+    const r = await request('/api/quiz/recover-closed', { course: current.course.id, quiz: b.dataset.recoverClosed });
+    await reload();
+    toast(r.recovered ? `Se ${r.recovered === 1 ? 'recalificó 1 intento' : `recalificaron ${r.recovered} intentos`} con las respuestas que tenían guardadas.` : 'No había respuestas guardadas que recuperar: esos intentos sí se cerraron vacíos.');
+  } catch (error) {
+    b.disabled = false;
     toast(error.message);
   }
 });

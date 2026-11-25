@@ -247,7 +247,7 @@ export function gradeNew(q, item, raw, { evaluateAnswer, parseNumber, position }
     }
     case 'sigfig': {
       const value = parseNumber(raw);
-      if (!Number.isFinite(value)) fail(`Escribe un número en la pregunta ${position} (por ejemplo 9.81 o 1.20e3).`);
+      if (!Number.isFinite(value)) return { answer: String(raw).trim().slice(0, 60), credit: 0 }; // 12.98: no impide enviar
       const expected = evaluateAnswer(q, item.values);
       const allowed = Math.max(Math.abs(expected) * (q.tolerance / 100), 1e-12);
       const close = Math.abs(value - expected) <= allowed;
