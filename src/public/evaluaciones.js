@@ -948,6 +948,16 @@ async function startQuizAttempt(quizId, extra = {}) {
   };
   form.addEventListener('change', showAnswered);
   form.addEventListener('input', showAnswered);
+  // 12.96: Enter (o «Ir/Enviar» del teclado del celular) en una respuesta no envía la evaluación: con una pregunta a
+  // la vez pasa a la siguiente; en las demás no hace nada. Para enviar hay que pulsar «Enviar evaluación».
+  form.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' || e.isComposing || !e.target.matches('input:not([type=submit]):not([type=button]), select')) return;
+    e.preventDefault();
+    if (exam?.oneByOne && examState) {
+      const boxes = form.querySelectorAll('fieldset[data-position]');
+      if (examState.position < boxes.length - 1) examNavigate('next');
+    }
+  });
   // Antes de enviar a mano: confirmación con las que faltan (no aplica al envío automático por tiempo).
   form.addEventListener(
     'submit',
@@ -958,6 +968,13 @@ async function startQuizAttempt(quizId, extra = {}) {
       }
       e.preventDefault();
       e.stopImmediatePropagation();
+      // 12.96: con una pregunta a la vez, enviar solo es posible desde la última. Antes de llegar ahí (Enter o «Ir»
+      // del teclado del celular en una respuesta numérica o de texto), el envío implícito del formulario abría
+      // «¿Enviar la evaluación?» y quien lo aceptaba mandaba el examen sin ver las demás preguntas.
+      if (exam?.oneByOne && examState) {
+        const boxes = form.querySelectorAll('fieldset[data-position]');
+        if (examState.position < boxes.length - 1) return examNavigate('next');
+      }
       // 12.95: con «obligar a contestar», la última pregunta también debe tener respuesta antes de enviar.
       if (exam?.requireAnswer && exam.oneByOne && examState) {
         const shown = form.querySelectorAll('fieldset[data-position]')[examState.position];
