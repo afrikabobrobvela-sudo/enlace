@@ -1,9 +1,15 @@
-# Enlace · versión 12.95
+# Enlace · versión 12.96
 
 Plataforma académica independiente para docentes y alumnos de cualquier academia (nació en una academia de Física), con interfaz inspirada en Brightspace.
 No es el código de D2L Brightspace ni una plataforma oficial de ninguna institución.
 
 Esta versión se despliega en **tu propia cuenta de Cloudflare** (Workers + D1 + R2, plan gratuito) y ya no depende de ChatGPT Sites.
+
+## Novedades de la versión 12.96 (el examen ya no se envía antes de tiempo)
+
+- Corrige un error en las evaluaciones de «Una pregunta a la vez»: al escribir una respuesta numérica o de texto y tocar **Enter** (o «Ir»/«Enviar» del teclado del celular) en las primeras preguntas, aparecía «¿Enviar la evaluación?» y algunos alumnos la enviaban sin haber visto las demás preguntas.
+- Ahora Enter y la tecla «Ir» del teclado hacen lo mismo que «Guardar y siguiente» (con la misma confirmación si no se puede regresar). Solo en la última pregunta se puede enviar. En las demás evaluaciones, Enter dentro de una respuesta ya no envía nada.
+- El envío automático al acabarse el tiempo no cambia. No hay migraciones en esta versión.
 
 ## Novedades de la versión 12.95 (obligar a contestar en el examen)
 
