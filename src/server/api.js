@@ -1872,7 +1872,7 @@ const routes = {
         // 12.27: las respuestas guardadas vuelven en cualquier evaluación (recargar la página no pierde nada).
         saved, perPage: quiz.data.settings?.perPage || 0,
         exam: exam
-          ? { oneByOne: exam.oneByOne, noBack: exam.noBack, randomOrder: Boolean(quiz.data.settings?.shuffle), position: start.position, flagged: Boolean(start.flag), lockOnLeave: Boolean(exam.lockOnLeave), lockGrace: exam.lockGrace ?? 0, locked, lockPlatform: Boolean(exam.lockPlatform) }
+          ? { oneByOne: exam.oneByOne, noBack: exam.noBack, requireAnswer: Boolean(exam.requireAnswer), randomOrder: Boolean(quiz.data.settings?.shuffle), position: start.position, flagged: Boolean(start.flag), lockOnLeave: Boolean(exam.lockOnLeave), lockGrace: exam.lockGrace ?? 0, locked, lockPlatform: Boolean(exam.lockPlatform) }
           : null,
       });
     }
