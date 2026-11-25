@@ -1,6 +1,6 @@
 // Condiciones de liberación (12.23), como en Brightspace: una unidad, material, foro, evaluación o actividad aparece
 // para el alumno solo cuando cumple sus condiciones (todas o cualquiera): completar o abrir un material, entregar una
-// actividad o sacar al menos cierta calificación, contestar una evaluación o sacar al menos cierto puntaje.
+// actividad (o tener una calificación publicada capturada por quien enseña, 12.94) o sacar al menos cierta calificación, contestar una evaluación o sacar al menos cierto puntaje.
 // Se guardan en data.conditions (aula_records) o en aula_tasks.conditions: { mode: 'all'|'any', items: [{ type, target, value }] }.
 // Quien enseña siempre ve todo; la vista general «como alumno» también (como con el acceso especial).
 import { all, fail, one } from './http.js';
@@ -64,7 +64,8 @@ function metSql(a, member) {
   return `CASE json_extract(${a}.value,'$.type')
     WHEN 'material_done' THEN EXISTS (SELECT 1 FROM aula_progress ${a}p WHERE ${a}p.member=${member} AND ${a}p.record=${target} AND ${a}p.completed_at IS NOT NULL)
     WHEN 'material_opened' THEN EXISTS (SELECT 1 FROM aula_progress ${a}p WHERE ${a}p.member=${member} AND ${a}p.record=${target} AND ${a}p.opened_at IS NOT NULL)
-    WHEN 'task_submitted' THEN EXISTS (SELECT 1 FROM aula_submissions ${a}s WHERE ${a}s.member=${member} AND ${a}s.task=${target} AND ${a}s.submitted<>'')
+    WHEN 'task_submitted' THEN EXISTS (SELECT 1 FROM aula_submissions ${a}s WHERE ${a}s.member=${member} AND ${a}s.task=${target}
+      AND (${a}s.submitted<>'' OR (${a}s.manual=1 AND ${a}s.grade IS NOT NULL AND ${a}s.published=1)))
     WHEN 'task_grade' THEN EXISTS (SELECT 1 FROM aula_submissions ${a}s WHERE ${a}s.member=${member} AND ${a}s.task=${target} AND ${a}s.published=1 AND ${a}s.grade>=${value})
     WHEN 'quiz_done' THEN EXISTS (SELECT 1 FROM aula_attempts ${a}t WHERE ${a}t.quiz=${target} AND ${a}t.user_id=${who})
     WHEN 'quiz_score' THEN EXISTS (SELECT 1 FROM aula_attempts ${a}t WHERE ${a}t.quiz=${target} AND ${a}t.user_id=${who} AND ${a}t.score>=${value})
@@ -98,7 +99,9 @@ export function studentFacts(progress, records, memberId) {
   }
   for (const r of records) {
     if (r.kind === 'submission' && r.data.member === memberId) {
-      if (r.data.submitted) facts.submitted.add(r.data.task);
+      // 12.94: una calificación publicada que capturó quien enseña (trabajo en papel, alumno sin teléfono) cuenta como
+      // entrega. Al alumno solo le llega el número si está publicada (sin el campo `published`).
+      if (r.data.submitted || (r.data.manual && r.data.published !== false && typeof r.data.grade === 'number')) facts.submitted.add(r.data.task);
       // Al alumno solo le llegan las calificaciones publicadas (sin el campo `published`).
       if (r.data.published !== false && typeof r.data.grade === 'number') facts.grades.set(r.data.task, Math.max(facts.grades.get(r.data.task) ?? -1, r.data.grade));
     }

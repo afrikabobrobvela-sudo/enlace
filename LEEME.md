@@ -1,9 +1,16 @@
-# Enlace · versión 12.93
+# Enlace · versión 12.94
 
 Plataforma académica independiente para docentes y alumnos de cualquier academia (nació en una academia de Física), con interfaz inspirada en Brightspace.
 No es el código de D2L Brightspace ni una plataforma oficial de ninguna institución.
 
 Esta versión se despliega en **tu propia cuenta de Cloudflare** (Workers + D1 + R2, plan gratuito) y ya no depende de ChatGPT Sites.
+
+## Novedades de la versión 12.94 (condiciones: quién cumple y entregas en papel)
+
+- **Una calificación que capturas tú cuenta como entrega.** Si una evaluación (o cualquier elemento) tiene la condición «Entregó la actividad», el alumno que no pudo subirla (no tiene teléfono, la entregó en papel) la cumple cuando capturas **y publicas** su calificación en esa actividad. Un borrador sin publicar no cuenta (igual que antes con «Sacó al menos …»).
+- **Quién cumple las condiciones, en la página del examen.** Al abrir una evaluación con condiciones ves un recuadro «Condiciones para presentar»: cada condición, cuántos alumnos la cumplen y, abierta, la lista de quienes **no** la cumplen con lo que les falta (por ejemplo, «Le falta: Entregó la actividad “Ejercicios caída libre”»). Respeta el filtro de secciones y las secciones de la evaluación.
+- Para ver exactamente lo que ve un alumno, sigue estando «Ver lo que ve» en el Listado de alumnos.
+- No hay migraciones en esta versión.
 
 ## Novedades de la versión 12.93 (más grupos de preguntas al azar)
 
