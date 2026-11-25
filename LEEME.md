@@ -1,9 +1,14 @@
-# Enlace · versión 12.96
+# Enlace · versión 12.97
 
 Plataforma académica independiente para docentes y alumnos de cualquier academia (nació en una academia de Física), con interfaz inspirada en Brightspace.
 No es el código de D2L Brightspace ni una plataforma oficial de ninguna institución.
 
 Esta versión se despliega en **tu propia cuenta de Cloudflare** (Workers + D1 + R2, plan gratuito) y ya no depende de ChatGPT Sites.
+
+## Novedades de la versión 12.97 (contador de preguntas contestadas)
+
+- Corrige el contador «N de 30 contestadas» del examen: con «Sin regresar a preguntas anteriores» siempre decía 1, porque solo contaba la pregunta en pantalla. Ahora cuenta también las que ya quedaron atrás y se actualiza al pasar de pregunta.
+- Solo cambia lo que se muestra: las respuestas ya se guardaban bien. No hay migraciones.
 
 ## Novedades de la versión 12.96 (el examen ya no se envía antes de tiempo)
 
