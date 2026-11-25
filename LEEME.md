@@ -1,9 +1,15 @@
-# Enlace · versión 12.94
+# Enlace · versión 12.95
 
 Plataforma académica independiente para docentes y alumnos de cualquier academia (nació en una academia de Física), con interfaz inspirada en Brightspace.
 No es el código de D2L Brightspace ni una plataforma oficial de ninguna institución.
 
 Esta versión se despliega en **tu propia cuenta de Cloudflare** (Workers + D1 + R2, plan gratuito) y ya no depende de ChatGPT Sites.
+
+## Novedades de la versión 12.95 (obligar a contestar en el examen)
+
+- Opción nueva del modo examen: **«Obligar a contestar cada pregunta antes de avanzar o enviar»** (requiere «Una pregunta a la vez»). Si el alumno deja la pregunta en blanco (o una relación de columnas a medias), «Guardar y siguiente» no avanza y le aparece «Contesta esta pregunta para continuar»; tampoco puede enviar con la última en blanco. El envío automático al acabarse el tiempo no cambia: se manda lo que haya.
+- Está apagada por omisión; actívala en «Editar evaluación» → Modo examen. Se puede combinar con «Sin regresar a preguntas anteriores».
+- No hay migraciones en esta versión.
 
 ## Novedades de la versión 12.94 (condiciones: quién cumple y entregas en papel)
 

@@ -339,8 +339,9 @@ function examFields(input) {
   const lockGrace = LOCK_GRACES.includes(Number(input.lockGrace)) ? Number(input.lockGrace) : 5;
   // lockPlatform: mientras contesta, Enlace solo le responde el examen (ni otros cursos ni materiales).
   // prepareDevice (12.91): antes de empezar, el alumno confirma que activó «No molestar» y fijó la pantalla.
+  // requireAnswer (12.95): con una pregunta a la vez, no puede avanzar ni enviar sin contestar la que tiene en pantalla.
   return {
-    enabled: true, password, oneByOne, noBack: oneByOne && input.noBack === true, place, lockOnLeave, lockGrace: lockOnLeave ? lockGrace : 0,
+    enabled: true, password, oneByOne, noBack: oneByOne && input.noBack === true, requireAnswer: oneByOne && input.requireAnswer === true, place, lockOnLeave, lockGrace: lockOnLeave ? lockGrace : 0,
     lockPlatform: input.lockPlatform === true, prepareDevice: input.prepareDevice !== false,
   };
 }

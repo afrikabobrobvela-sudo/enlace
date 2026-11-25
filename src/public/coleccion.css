@@ -1166,3 +1166,6 @@ body.exam-running .test-student-bar { display: none; }
 .cond-status-list .table-subtext { display: block; }
 .cond-status-ok { margin-top: 10px; }
 .cond-status-ok > summary { cursor: pointer; min-height: 24px; }
+
+/* 12.95 · «Obligar a contestar»: la pregunta sin respuesta se marca un momento al intentar avanzar. */
+#quizAttempt fieldset.exam-needs-answer { outline: 2px solid #b42318; outline-offset: 4px; border-radius: var(--radius-sm); }

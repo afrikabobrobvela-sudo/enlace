@@ -514,6 +514,7 @@ function examSettingsHtml(exam) {
       <label>Contraseña para empezar (opcional; la dictas en el salón. Si pones un código por sección, manda el de la sección)<input name="examPassword" value="${esc(exam?.password || '')}" maxlength="30" autocomplete="off" placeholder="Por ejemplo: gauss"></label>
       <label class="check-label"><input type="checkbox" name="oneByOne" ${exam?.oneByOne ? 'checked' : ''}> Una pregunta a la vez</label>
       <label class="check-label"><input type="checkbox" name="noBack" ${exam?.noBack ? 'checked' : ''}> Sin regresar a preguntas anteriores (requiere "una pregunta a la vez")</label>
+      <label class="check-label"><input type="checkbox" name="requireAnswer" ${exam?.requireAnswer ? 'checked' : ''}> Obligar a contestar cada pregunta antes de avanzar o enviar (requiere "una pregunta a la vez")</label>
       <label class="check-label"><input type="checkbox" name="lockPlatform" ${exam?.lockPlatform || !exam ? 'checked' : ''}> Bloquear el resto de Enlace mientras contesta: no puede abrir otros cursos, materiales, foros ni avisos, aunque abra otra pestaña o vuelva a iniciar sesión</label>
       <label class="check-label"><input type="checkbox" name="lockOnLeave" ${exam?.lockOnLeave ? 'checked' : ''}> Bloquear si sale de la página: para continuar necesita un código que tú le das (aparece en tu monitor del examen). Las salidas sin conexión (modo avión) también cuentan, en cuanto vuelve la conexión</label>
       <label class="check-label"><input type="checkbox" name="prepareDevice" ${exam?.prepareDevice !== false ? 'checked' : ''}> Pedir que preparen el teléfono antes de empezar: «No molestar» y fijar la pantalla (Android) o «Acceso guiado» (iPhone), con los pasos de su dispositivo. Así no les llegan notificaciones de WhatsApp ni pueden cambiar de app</label>
@@ -533,7 +534,7 @@ function examSettingsHtml(exam) {
 
 /** Activa en el editor las defensas compatibles entre sí; el docente todavía decide si guarda. */
 function hardenExamSettings() {
-  for (const name of ['exam', 'oneByOne', 'noBack', 'lockPlatform', 'lockOnLeave', 'prepareDevice', 'shuffle', 'shuffleOptions', 'seb']) {
+  for (const name of ['exam', 'oneByOne', 'noBack', 'requireAnswer', 'lockPlatform', 'lockOnLeave', 'prepareDevice', 'shuffle', 'shuffleOptions', 'seb']) {
     const input = document.querySelector(`input[name="${name}"]`);
     if (input) input.checked = true;
   }
@@ -568,6 +569,7 @@ function readExamSettings(f) {
     password: String(f.get('examPassword') || '').trim(),
     oneByOne,
     noBack: oneByOne && f.get('noBack') === 'on',
+    requireAnswer: oneByOne && f.get('requireAnswer') === 'on',
     place,
     lockOnLeave,
     lockGrace: Number(f.get('lockGrace') || 5),
@@ -931,7 +933,7 @@ async function startQuizAttempt(quizId, extra = {}) {
       <div class="quiz-attempt-head"><strong>Intento ${data.attempt}</strong>${exam?.oneByOne ? '<span id="examProgress" class="muted"></span>' : paged ? '<span class="muted" data-page-label></span>' : ''}<span id="quizAnswered" class="quiz-answered"></span><span id="quizSaveStatus" class="quiz-save-status" role="status" aria-live="polite"></span>${data.deadline ? '<span class="quiz-clock" id="quizClock" role="timer"></span><span id="quizClockAlert" class="sr-only" role="alert"></span>' : ''}</div>
       ${exam?.flagged ? '<p class="warning-note">No se pudo confirmar que estés en el salón: tu docente lo verá junto a tu examen.</p>' : ''}
       ${questions}<p class="form-error error" hidden></p>
-      ${exam?.oneByOne ? `<p class="exam-nav-note">${exam.noBack ? 'Al avanzar se guarda la respuesta y ya no podrás regresar. Si la dejas vacía, se guardará sin respuesta.' : 'Cada cambio de pregunta se guarda automáticamente.'}${exam.randomOrder ? ' El orden es aleatorio para este intento.' : ''} No se abre otra página.</p><div class="exam-nav"><button type="button" class="secondary" data-exam-nav="prev">‹ Anterior</button><button type="button" class="primary" data-exam-nav="next">${exam.randomOrder ? 'Guardar y siguiente aleatoria ›' : 'Guardar y siguiente ›'}</button></div>` : ''}
+      ${exam?.oneByOne ? `<p class="exam-nav-note">${exam.noBack ? `Al avanzar se guarda la respuesta y ya no podrás regresar.${exam.requireAnswer ? '' : ' Si la dejas vacía, se guardará sin respuesta.'}` : 'Cada cambio de pregunta se guarda automáticamente.'}${exam.requireAnswer ? ' Debes contestar cada pregunta para avanzar.' : ''}${exam.randomOrder ? ' El orden es aleatorio para este intento.' : ''} No se abre otra página.</p><div class="exam-nav"><button type="button" class="secondary" data-exam-nav="prev">‹ Anterior</button><button type="button" class="primary" data-exam-nav="next">${exam.randomOrder ? 'Guardar y siguiente aleatoria ›' : 'Guardar y siguiente ›'}</button></div>` : ''}
       ${paged ? '<div class="exam-nav"><button type="button" class="secondary" data-page-nav="prev">‹ Página anterior</button><button type="button" class="primary" data-page-nav="next">Página siguiente ›</button></div>' : ''}
       <button class="primary" id="quizSubmit">Enviar evaluación</button></form>`;
   const form = $('#quizAttempt');
@@ -956,6 +958,11 @@ async function startQuizAttempt(quizId, extra = {}) {
       }
       e.preventDefault();
       e.stopImmediatePropagation();
+      // 12.95: con «obligar a contestar», la última pregunta también debe tener respuesta antes de enviar.
+      if (exam?.requireAnswer && exam.oneByOne && examState) {
+        const shown = form.querySelectorAll('fieldset[data-position]')[examState.position];
+        if (!examBoxAnswered(shown)) return examMustAnswer(shown);
+      }
       const missing = total - answeredCount();
       const ok = await examConfirm(
         missing ? `Te ${missing === 1 ? 'falta 1 pregunta' : `faltan ${missing} preguntas`} sin contestar; contarán como incorrectas. ¿Enviar de todos modos? Después ya no podrás cambiar tus respuestas.` : 'Contestaste todas las preguntas. ¿Enviar la evaluación? Después ya no podrás cambiar tus respuestas.',
@@ -1391,7 +1398,7 @@ function examIntroHtml(exam, used) {
     <li>${fullscreen ? 'Se abre en pantalla completa. ' : ''}Si sales de la página, cambias de aplicación o de pestaña, queda registrado con la hora y la duración, y tu docente lo verá.</li>
     <li>No se puede copiar, pegar ni usar el menú del botón derecho.</li>
     <li>No se permiten capturas de pantalla: cada pregunta lleva tu nombre como marca de agua, en computadora la tecla de captura tapa el examen y queda registrada, y el examen no se puede imprimir.</li>
-    ${exam.oneByOne ? `<li>Verás una pregunta a la vez${exam.noBack ? ' y <strong>no podrás regresar</strong> a las anteriores' : ''}.</li>` : ''}
+    ${exam.oneByOne ? `<li>Verás una pregunta a la vez${exam.noBack ? ' y <strong>no podrás regresar</strong> a las anteriores' : ''}.${exam.requireAnswer ? ' <strong>Debes contestar cada pregunta</strong> para pasar a la siguiente.' : ''}</li>` : ''}
     ${exam.lockOnLeave ? `<li><strong>Si sales de la página${exam.lockGrace ? ` más de ${exam.lockGrace} segundos` : ''} (otra aplicación, WhatsApp, responder una notificación, bloquear el teléfono), el examen se bloquea</strong> y necesitarás un código de tu docente para continuar. <strong>A la 3.ª salida se bloquea aunque sean salidas cortas.</strong> El tiempo sigue corriendo.</li>` : ''}
     <li><strong>El modo avión no oculta nada:</strong> si te quedas sin conexión, queda registrado y tu docente lo ve en vivo; las salidas que hagas sin conexión se registran${exam.lockOnLeave ? ' y bloquean el examen' : ''} en cuanto vuelve la conexión.</li>
     ${exam.checksLocation ? '<li>Se pedirá tu ubicación para confirmar que estás en el salón (solo se guarda la distancia).</li>' : ''}
@@ -1903,6 +1910,30 @@ function showExamQuestion() {
   boxes[position]?.querySelector('input')?.focus({ preventScroll: true });
 }
 
+/**
+ * ¿Contestó la pregunta de este recuadro? Opción única: alguna marcada; selección múltiple: al menos una; listas
+ * (relacionar, ordenar) y espacios de texto (completar, respuesta corta, numérica): todos llenos.
+ */
+function examBoxAnswered(box) {
+  if (!box) return true;
+  const inputs = [...box.querySelectorAll('input, select, textarea')].filter((i) => !i.disabled && i.type !== 'hidden');
+  if (!inputs.length) return true;
+  const radios = inputs.filter((i) => i.type === 'radio');
+  const checks = inputs.filter((i) => i.type === 'checkbox');
+  const fields = inputs.filter((i) => i.type !== 'radio' && i.type !== 'checkbox');
+  if (radios.length && !radios.some((i) => i.checked)) return false;
+  if (checks.length && !checks.some((i) => i.checked)) return false;
+  return fields.every((i) => String(i.value).trim() !== '');
+}
+
+/** Aviso dentro de la página (sin ventanas nativas, que en el examen cuentan como salida). */
+function examMustAnswer(box) {
+  toast('Contesta esta pregunta para continuar.');
+  box?.classList.add('exam-needs-answer');
+  setTimeout(() => box?.classList.remove('exam-needs-answer'), 2400);
+  box?.querySelector('input:not([type=hidden]), select, textarea')?.focus({ preventScroll: false });
+}
+
 async function examNavigate(direction) {
   const state = examState;
   if (!state || state.navigating) return;
@@ -1911,8 +1942,10 @@ async function examNavigate(direction) {
   const destination = direction === 'next' ? Math.min(previousPosition + 1, boxes.length - 1) : state.exam.noBack ? previousPosition : Math.max(previousPosition - 1, 0);
   if (destination === previousPosition) return;
   if (direction === 'next') {
+    const answered = examBoxAnswered(boxes[previousPosition]);
+    // 12.95: con «obligar a contestar», no avanza hasta que conteste la pregunta que tiene en pantalla.
+    if (state.exam.requireAnswer && !answered) return examMustAnswer(boxes[previousPosition]);
     if (state.exam.noBack) {
-      const answered = [...boxes[previousPosition].querySelectorAll('input, select, textarea')].some((i) => (i.type === 'radio' || i.type === 'checkbox' ? i.checked : i.value.trim()));
       // Confirmación dentro de la página: la ventana nativa (confirm) le quita el foco a la página y en el celular el
       // aviso de «salió» llegaba después de cerrarla, así que pasar de pregunta contaba como una salida (12.32).
       state.navigating = true;

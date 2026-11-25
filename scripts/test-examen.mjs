@@ -50,15 +50,21 @@ await call('docente', '/api/record', examen({ enabled: true, password: 'abc' }),
 await call('docente', '/api/record', examen({ enabled: true, place: { ...salon, radius: 77 } }), 400);
 await call('docente', '/api/record', examen({ enabled: true, place: { lat: 200, lng: 0, radius: 150 } }), 400);
 const q = await call('docente', '/api/record', examen({ enabled: true, password: 'gauss', oneByOne: true, noBack: true, place: { ...salon, radius: 150 } }), 201);
-assert.deepEqual(q.data.settings.exam, { enabled: true, password: 'gauss', oneByOne: true, noBack: true, place: { ...salon, radius: 150 }, lockOnLeave: false, lockGrace: 0, lockPlatform: false, prepareDevice: true });
+assert.deepEqual(q.data.settings.exam, { enabled: true, password: 'gauss', oneByOne: true, noBack: true, requireAnswer: false, place: { ...salon, radius: 150 }, lockOnLeave: false, lockGrace: 0, lockPlatform: false, prepareDevice: true });
 // "Sin regresar" sin "una pregunta a la vez" no tiene sentido: se desactiva.
 const suelto = await call('docente', '/api/record', examen({ enabled: true, noBack: true }), 201);
 assert.equal(suelto.data.settings.exam.noBack, false);
-checks += 2;
+// 12.95: «obligar a contestar» solo vale con una pregunta a la vez y llega al alumno.
+const obligado = await call('docente', '/api/record', examen({ enabled: true, oneByOne: true, noBack: true, requireAnswer: true }), 201);
+assert.equal(obligado.data.settings.exam.requireAnswer, true);
+assert.equal((await call('docente', '/api/record', examen({ enabled: true, requireAnswer: true }), 201)).data.settings.exam.requireAnswer, false);
+assert.equal((await call('ana', '/api/course?id=' + c)).records.find((r) => r.id === obligado.id).data.settings.exam.requireAnswer, true);
+assert.equal((await call('ana', '/api/attempt/start', { course: c, quiz: obligado.id })).exam.requireAnswer, true, 'Llega al empezar (el navegador lo aplica)');
+checks += 6;
 
 // ---- El alumno no recibe la contraseña ni la ubicación del salón ----
 const visto = (await call('ana', '/api/course?id=' + c)).records.find((r) => r.id === q.id);
-assert.deepEqual(visto.data.settings.exam, { enabled: true, oneByOne: true, noBack: true, needsPassword: true, checksLocation: true, lockOnLeave: false, lockGrace: 0, lockPlatform: false, prepareDevice: true });
+assert.deepEqual(visto.data.settings.exam, { enabled: true, oneByOne: true, noBack: true, requireAnswer: false, needsPassword: true, checksLocation: true, lockOnLeave: false, lockGrace: 0, lockPlatform: false, prepareDevice: true });
 assert(!JSON.stringify(visto).includes('gauss') && !JSON.stringify(visto).includes('98.2016'));
 const vistaPrevia = (await call('docente', `/api/course?id=${c}&as=student`)).records.find((r) => r.id === q.id);
 assert(!JSON.stringify(vistaPrevia).includes('gauss'));
