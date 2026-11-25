@@ -10,6 +10,7 @@ Esta versión se despliega en **tu propia cuenta de Cloudflare** (Workers + D1 +
 - **«Cerrar y calificar» en el seguimiento en vivo**: junto a cada alumno que sigue «contestando» (o bloqueado). Sirve cuando a un alumno se le acabó el tiempo y no volvió a entrar, o se le descompuso el teléfono. Pide confirmación, califica con las respuestas que tenía guardadas y el alumno ya no puede seguir.
 - **Editor de evaluaciones**: el título de la ventana y los botones «Cerrar» y «Guardar» quedan fijos arriba y abajo mientras bajas. Ya no hay que llegar al final de todas las preguntas para guardar; en el teléfono ya era así.
 - **Aviso de cambios sin guardar**: si cambiaste algo y cierras con la ✕, «Cerrar» o Esc, Enlace pregunta «¿Quieres guardarlos antes de cerrar?» con tres opciones: «Guardar», «Salir sin guardar» o «Seguir editando». Vale para todas las ventanas con «Guardar»; si no cambiaste nada, se cierra directo.
+- **Calendario de fechas completo**: al elegir una fecha (actividades, evaluaciones, accesos especiales) el calendario a veces salía cortado, sobre todo en el iPad. Ahora se abre encima de todo, siempre dentro de la pantalla, y si el campo estaba fuera de la vista primero lo acerca.
 - No hay migraciones.
 
 ## Novedades de la versión 12.98 (no se podía enviar el examen)

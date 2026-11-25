@@ -1182,3 +1182,7 @@ dialog.unsaved-ask { width: min(520px, 92vw); }
 dialog.unsaved-ask h2 { margin: 0 0 8px; font-size: 20px; }
 dialog.unsaved-ask p { margin: 0 0 4px; }
 dialog.unsaved-ask .dialog-actions { justify-content: flex-end; }
+
+/* 12.99: el calendario se abre como popover (capa superior): sin el centrado ni el marco que el navegador le da. */
+.dt-pop[popover] { margin: 0; color: var(--ink); background: #fff; }
+.dt-pop[popover]:not(.is-sheet) { right: auto; bottom: auto; }
