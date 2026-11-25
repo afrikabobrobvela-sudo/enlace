@@ -1,9 +1,15 @@
-# Enlace · versión 12.97
+# Enlace · versión 12.98
 
 Plataforma académica independiente para docentes y alumnos de cualquier academia (nació en una academia de Física), con interfaz inspirada en Brightspace.
 No es el código de D2L Brightspace ni una plataforma oficial de ninguna institución.
 
 Esta versión se despliega en **tu propia cuenta de Cloudflare** (Workers + D1 + R2, plan gratuito) y ya no depende de ChatGPT Sites.
+
+## Novedades de la versión 12.98 (no se podía enviar el examen)
+
+- Corrige un error que impedía enviar el examen con «Escribe un número en la pregunta N». Pasaba cuando un alumno escribía algo que no es un número (por ejemplo «9.8 m/s») en una pregunta numérica que ya había dejado atrás con «Sin regresar»: ya no podía corregirla y tampoco enviar.
+- Ahora esa respuesta cuenta como incorrecta y el examen se envía. Se guarda tal como la escribió, para que el docente la vea en los resultados.
+- Los alumnos que ya estaban atorados pueden volver a tocar «Enviar evaluación» en cuanto se publique; no hace falta recargar la página. No hay migraciones.
 
 ## Novedades de la versión 12.97 (contador de preguntas contestadas)
 

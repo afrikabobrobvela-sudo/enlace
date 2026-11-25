@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { api } from '../src/server/api.js';
 import { completeLogin, sessionCookieForTests } from '../src/server/auth.js';
-import { evaluate } from '../src/server/quizzes.js';
+import { evaluate, gradeAttempt } from '../src/server/quizzes.js';
 import { memoryBucket, openD1 } from './lib/d1-sqlite.mjs';
 
 let checks = 0;
@@ -93,7 +93,6 @@ checks += 5;
 
 // Respuestas: tolerancia 2 %, coma decimal.
 const t = Math.sqrt((2 * h) / 9.81);
-await call('ana', '/api/attempt', { course: c, quiz: q.id, answers: { 0: 'abc', 1: 1, 2: '4' } }, 400);
 const r1 = await call('ana', '/api/attempt', { course: c, quiz: q.id, answers: { 0: (t * 1.015).toFixed(4).replace('.', ','), 1: 1, 2: '4' } }, 201);
 assert.deepEqual([r1.data.correct, r1.data.total, r1.data.score, r1.data.attempt], [3, 3, 10, 1]);
 assert.deepEqual(r1.data.details.map((d) => d.correct), [true, true, true].slice(0, 3));
@@ -131,6 +130,21 @@ const corregida = await call('docente', '/api/record', { course: c, kind: 'quiz'
 assert.deepEqual(corregida.regraded, { checked: 1, changed: 1 });
 assert.equal(store.raw().prepare('SELECT score FROM aula_attempts WHERE quiz=?').get(vieja.id).score, 0);
 checks += 3;
+
+// 12.98: una respuesta numérica que no es número cuenta como incorrecta y no impide enviar (con «Sin regresar» el
+// alumno ya no podía corregirla).
+{
+  const quiz = { data: { questions: [
+    { type: 'numeric', text: 'g', answer: '9.8', tolerance: 1 },
+    { type: 'sigfig', text: 'h', answer: '1.5', tolerance: 1, figures: 2, penalty: 50 },
+    { type: 'numeric', text: 'k', answer: '2', tolerance: 0 },
+  ] } };
+  const r = gradeAttempt(quiz, [{ index: 0 }, { index: 1 }, { index: 2 }], { 0: '9.8 m/s', 1: 'uno', 2: '2' });
+  assert.deepEqual(r.details.map((d) => d.credit), [0, 0, 1]);
+  assert.equal(r.details[0].answer, '9.8 m/s');
+  assert.equal(r.correct, 1);
+  checks += 3;
+}
 
 assert.deepEqual(store.raw().prepare('PRAGMA foreign_key_check').all(), []);
 console.log(`PASS: ${checks} verificaciones de evaluaciones — fórmulas seguras, preguntas numéricas con datos por alumno y tolerancia, varios intentos, tiempo límite y orden aleatorio.`);

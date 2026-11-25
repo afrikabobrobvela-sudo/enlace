@@ -672,7 +672,9 @@ export function gradeAttempt(quiz, instance, answers) {
       return { index: item.index, answer: original, correct: ok, credit };
     }
     const value = parseNumber(raw);
-    if (!Number.isFinite(value)) fail(`Escribe un número en la pregunta ${n + 1} (por ejemplo 9.8).`);
+    // 12.98: una respuesta que no es número cuenta como incorrecta en vez de impedir el envío (con «Sin regresar» el
+    // alumno ya no puede corregirla y quedaba atorado sin poder enviar).
+    if (!Number.isFinite(value)) return { index: item.index, answer: String(raw).trim().slice(0, 60), correct: false, credit: 0, ...values };
     const expected = evaluate(q.answer, item.values);
     const allowed = Math.max(Math.abs(expected) * (q.tolerance / 100), 1e-9);
     const ok = Math.abs(value - expected) <= allowed;
