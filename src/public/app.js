@@ -714,17 +714,32 @@ async function closeModalAsking() {
   else if (choice === 'discard') dialog.close();
 }
 
-function unsavedChoice() {
+/**
+ * 12.99: salir de una pantalla con formulario (editor de actividades, revisión…) con cambios sin guardar. Devuelve
+ * true si se puede salir. «Guardar» guarda con el botón «Guardar y cerrar» (o el primero) y se queda donde lleve el
+ * guardado; «Salir sin guardar» deja salir.
+ */
+async function leavePageAsking() {
+  const form = [...document.querySelectorAll('#main form')].find((f) => f.querySelector('button[type=submit]'));
+  if (!form) return confirm('Hay cambios sin guardar. ¿Quieres salir de esta pantalla?');
+  const choice = await unsavedChoice('¿Quieres guardarlos antes de salir?');
+  if (choice === 'discard') return true;
+  if (choice === 'save') form.requestSubmit(form.querySelector('button[type=submit][value=close]') || form.querySelector('button[type=submit]'));
+  return false;
+}
+
+function unsavedChoice(question = '¿Quieres guardarlos antes de cerrar?') {
   let ask = document.getElementById('unsavedAsk');
   if (!ask) {
     ask = document.createElement('dialog');
     ask.id = 'unsavedAsk';
     ask.className = 'unsaved-ask';
     ask.setAttribute('aria-labelledby', 'unsavedAskTitle');
-    ask.innerHTML = `<h2 id="unsavedAskTitle">Cambios sin guardar</h2><p>No has guardado los cambios. ¿Quieres guardarlos antes de cerrar?</p>
+    ask.innerHTML = `<h2 id="unsavedAskTitle">Cambios sin guardar</h2><p>No has guardado los cambios. <span data-unsaved-question></span></p>
       <div class="dialog-actions"><button type="button" class="text-btn" data-unsaved="keep">Seguir editando</button><button type="button" class="secondary" data-unsaved="discard">Salir sin guardar</button><button type="button" class="primary" data-unsaved="save">Guardar</button></div>`;
     document.body.append(ask);
   }
+  ask.querySelector('[data-unsaved-question]').textContent = question;
   return new Promise((resolve) => {
     const done = (value) => {
       ask.onclick = null;
@@ -990,7 +1005,7 @@ document.addEventListener('click', async (e) => {
     return;
   try {
     if (b.dataset.section || ['home', 'teachers', 'reports', 'users', 'calendar', 'course', 'hub', 'task', 'edit-task', 'new-task', 'review'].includes(b.dataset.action)) {
-      if (dirty && !confirm('Hay cambios sin guardar. ¿Quieres salir de esta pantalla?'))
+      if (dirty && !(await leavePageAsking()))
         return;
       dirty = false;
     }
