@@ -721,7 +721,7 @@ function renderQuiz() {
         ? `<div class="warning-note void-note"><p><b>${emptyAttempts.length} ${emptyAttempts.length === 1 ? 'intento se cerró' : 'intentos se cerraron'} sin ninguna respuesta</b> (de ${new Set(emptyAttempts.map((a) => a.author)).size} ${new Set(emptyAttempts.map((a) => a.author)).size === 1 ? 'alumno' : 'alumnos'}): se acabó el tiempo antes de que contestaran. Si fue por la configuración, devuélvelos para que puedan volver a presentar.</p><button type="button" class="secondary" data-void-empty="${esc(q.id)}">Devolver intentos sin respuestas</button></div>`
         : ''
     }
-      <section class="exam-monitor" id="examMonitor"><p class="muted">Cargando quién está contestando y quién ya terminó…</p></section>${drawNote}${questions}
+      ${typeof conditionsStatusHtml === 'function' ? conditionsStatusHtml(q) : ''}<section class="exam-monitor" id="examMonitor"><p class="muted">Cargando quién está contestando y quién ya terminó…</p></section>${drawNote}${questions}
       <h2>Resultados</h2><div class="table-wrap"><table><thead><tr><th>Alumno</th><th>Mejor calificación</th><th>Intentos</th><th>Último envío</th>${exam ? '<th>Integridad</th>' : ''}<th>Respuestas</th></tr></thead><tbody>${
         rows
           .map(

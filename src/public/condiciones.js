@@ -100,3 +100,76 @@ document.addEventListener('change', (e) => {
   const editor = e.target.closest('[data-conditions]');
   row.outerHTML = conditionRowHtml({ type: e.target.value }, editor.dataset.self);
 });
+
+/* ---- Quién cumple las condiciones (12.94) ---------------------------------------------------------------------
+ * En la página de una evaluación (o actividad) con condiciones, quien enseña ve cada condición y qué alumnos la
+ * cumplen. Misma regla que el servidor (`studentFacts()`/`conditionsMet()` en src/server/condiciones.js): una
+ * calificación publicada que capturó quien enseña cuenta como entrega. */
+
+function conditionFactsFor(member) {
+  const facts = { opened: new Set(), completed: new Set(), submitted: new Set(), grades: new Map(), scores: new Map() };
+  for (const p of current?.progress || []) {
+    if (p.member !== member.id) continue;
+    if (p.opened_at) facts.opened.add(p.record);
+    if (p.completed_at) facts.completed.add(p.record);
+  }
+  const author = member.user_id || `demo:${member.id}`;
+  for (const r of current?.records || []) {
+    if (r.kind === 'submission' && r.data.member === member.id) {
+      const graded = r.data.published !== false && typeof r.data.grade === 'number';
+      if (r.data.submitted || (r.data.manual && graded)) facts.submitted.add(r.data.task);
+      if (graded) facts.grades.set(r.data.task, Math.max(facts.grades.get(r.data.task) ?? -1, r.data.grade));
+    }
+    if (r.kind === 'attempt' && r.author === author && typeof r.data.score === 'number') facts.scores.set(r.data.quiz, Math.max(facts.scores.get(r.data.quiz) ?? -1, r.data.score));
+  }
+  return facts;
+}
+
+function conditionItemMet(x, facts) {
+  switch (x.type) {
+    case 'material_done':
+      return facts.completed.has(x.target);
+    case 'material_opened':
+      return facts.opened.has(x.target);
+    case 'task_submitted':
+      return facts.submitted.has(x.target);
+    case 'task_grade':
+      return (facts.grades.get(x.target) ?? -1) >= x.value;
+    case 'quiz_done':
+      return facts.scores.has(x.target);
+    case 'quiz_score':
+      return (facts.scores.get(x.target) ?? -1) >= x.value;
+  }
+  return false;
+}
+
+function conditionItemText(x) {
+  const title = find(x.target)?.data.title;
+  return `${CONDITION_VALUE.includes(x.type) ? CONDITION_LABELS[x.type].replace('…', String(x.value)) : CONDITION_LABELS[x.type]} ${title ? `«${title}»` : '(elemento eliminado)'}`;
+}
+
+/** Panel para quien enseña: las condiciones del elemento y quién las cumple (alumnos de la vista y de su sección). */
+function conditionsStatusHtml(r) {
+  const c = r?.data?.conditions;
+  if (!teaches() || !c?.items?.length) return '';
+  const members = (typeof studentsInView === 'function' ? studentsInView() : current.members.filter((m) => m.role === 'student')).filter((m) =>
+    typeof itemApplies === 'function' ? itemApplies(r, m) : true,
+  );
+  const rows = members.map((m) => {
+    const facts = conditionFactsFor(m);
+    const missing = c.items.filter((x) => !conditionItemMet(x, facts));
+    const ok = c.mode === 'any' ? missing.length < c.items.length : !missing.length;
+    return { m, ok, missing };
+  });
+  const blocked = rows.filter((x) => !x.ok);
+  const okRows = rows.filter((x) => x.ok);
+  const studentItem = (x) => `<li><b>${esc(x.m.name)}</b>${x.ok ? '' : `<span class="table-subtext">Le falta: ${esc(x.missing.map(conditionItemText).join(c.mode === 'any' ? ' (o) ' : '; '))}</span>`}</li>`;
+  const kind = r.kind === 'quiz' ? 'presentar' : 'verlo';
+  return `<details class="cond-status ${blocked.length ? 'has-blocked' : ''}" ${blocked.length ? 'open' : ''}>
+    <summary><span>Condiciones para ${kind}</span> <b>${okRows.length} de ${rows.length}</b> ${rows.length === 1 ? 'alumno las cumple' : 'alumnos las cumplen'}${blocked.length ? ` · <span class="cond-status-alert">${blocked.length} sin acceso</span>` : ''}</summary>
+    <ul class="cond-status-rules">${c.items.map((x) => `<li>${esc(conditionItemText(x))}</li>`).join('')}</ul>
+    <p class="muted">${c.mode === 'any' ? 'Basta con cumplir una.' : 'Debe cumplir todas.'} Quien no las cumple no ve ${r.kind === 'quiz' ? 'la evaluación' : 'el elemento'}. Si un alumno entregó en papel o no tiene teléfono, captura y <b>publica</b> su calificación en esa actividad: cuenta como entregada.</p>
+    ${blocked.length ? `<h3>No las cumplen (${blocked.length})</h3><ul class="cond-status-list">${blocked.map(studentItem).join('')}</ul>` : '<p class="real-status">Todos los alumnos cumplen las condiciones.</p>'}
+    ${okRows.length && blocked.length ? `<details class="cond-status-ok"><summary>Sí las cumplen (${okRows.length})</summary><ul class="cond-status-list">${okRows.map(studentItem).join('')}</ul></details>` : ''}
+  </details>`;
+}

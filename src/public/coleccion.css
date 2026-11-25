@@ -1153,3 +1153,16 @@ body.exam-running .test-student-bar { display: none; }
   .test-student-bar { padding: 8px 16px; }
   .test-student-bar button { min-height: 44px; }
 }
+
+/* 12.94 · Quién cumple las condiciones de una evaluación (página del docente). */
+.cond-status { margin: 0 0 16px; padding: 12px 16px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface, #fff); }
+.cond-status.has-blocked { border-color: #e6b8b3; }
+.cond-status > summary { cursor: pointer; font-weight: 700; display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; min-height: 24px; }
+.cond-status-alert { color: #b42318; }
+.cond-status-rules { margin: 10px 0 6px; padding-left: 1.2em; }
+.cond-status h3 { margin: 12px 0 6px; font-size: 15px; }
+.cond-status-list { margin: 0; padding-left: 1.2em; }
+.cond-status-list li { margin: 0 0 6px; }
+.cond-status-list .table-subtext { display: block; }
+.cond-status-ok { margin-top: 10px; }
+.cond-status-ok > summary { cursor: pointer; min-height: 24px; }

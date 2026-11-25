@@ -156,7 +156,8 @@ assert.equal(start.attempt, 1);
 // Ana: por el puntaje del quiz 1 (necesita 8).
 await call('ana', '/api/attempt/start', { course: c, quiz: quiz.id });
 await call('ana', '/api/attempt', { course: c, quiz: quiz.id, answers: { 0: 1 } }, 201); // falso: 0
-assert(!(await ids('ana')).has(quiz2.id));
+// 12.94: Ana no entregó la Tarea 1, pero el docente capturó y publicó su calificación: cuenta como entrega.
+assert((await ids('ana')).has(quiz2.id));
 await call('ana', '/api/attempt/start', { course: c, quiz: quiz.id });
 await call('ana', '/api/attempt', { course: c, quiz: quiz.id, answers: { 0: 0 } }, 201); // verdadero: 10
 assert((await ids('ana')).has(quiz2.id));
@@ -165,6 +166,21 @@ checks += 4;
 avisos = (await call('ana', '/api/notifications')).items.map((i) => i.id);
 assert(avisos.includes(quiz2.id) && avisos.includes(dentro.id));
 checks++;
+
+// ---- 12.94: una calificación capturada por el docente (alumno sin teléfono, entrega en papel) cuenta como entrega
+// solo cuando está publicada ----
+const papel = await record('task', { title: 'Tarea en papel', submissionMode: 'text' });
+const parcial = await record('quiz', { title: 'Parcial', questions: [{ type: 'truefalse', text: '¿1 = 1?', correct: true }], conditions: cond([{ type: 'task_submitted', target: papel.id }]) });
+assert(!(await ids('luis')).has(parcial.id));
+await call('docente', '/api/grade', { course: c, task: papel.id, member: luisM.id, grade: 8, publish: false });
+assert(!(await ids('luis')).has(parcial.id), 'Un borrador no cuenta');
+await call('luis', '/api/attempt/start', { course: c, quiz: parcial.id }, 403);
+const capturada = (await call('docente', '/api/course?id=' + c)).records.find((r) => r.kind === 'submission' && r.data.task === papel.id && r.data.member === luisM.id);
+await call('docente', '/api/grade', { course: c, task: papel.id, member: luisM.id, revision: capturada.revision, grade: 8, publish: true });
+assert((await ids('luis')).has(parcial.id), 'Publicada, cuenta como entrega');
+assert.equal((await call('luis', '/api/attempt/start', { course: c, quiz: parcial.id })).attempt, 1);
+assert(!(await ids('ana')).has(parcial.id), 'A Ana todavía le falta');
+checks += 4;
 
 // ---- Si se elimina el elemento de una condición, queda bloqueado (y el docente lo ve al editar) ----
 const extra = await record('material', { title: 'Extra' });
