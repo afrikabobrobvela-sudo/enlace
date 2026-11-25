@@ -2024,7 +2024,11 @@ const routes = {
     const body = await readJson(request);
     requireTeacher(await access(db, user, body.course));
     const quiz = await contentRecord(db, String(body.quiz ?? ''), body.course, 'quiz');
+    // 12.98: un intento que se cerró sin calificar pero tiene respuestas guardadas no está vacío (se recupera con
+    // «Recalificar intentos cerrados»): borrarlo perdería esas respuestas.
     const empty = `a.quiz=?1 AND a.course=?2 AND a.details IS NULL AND a.answers='[]' AND (?3 IS NULL OR a.user_id=?3)
+      AND NOT EXISTS (SELECT 1 FROM aula_attempt_starts p WHERE p.quiz=a.quiz AND p.user_id=a.user_id AND p.attempt=a.attempt
+                      AND coalesce(p.progress,'') NOT IN ('','{}','null'))
       AND NOT EXISTS (SELECT 1 FROM aula_attempt_starts s WHERE s.quiz=a.quiz AND s.user_id=a.user_id
                       AND NOT EXISTS (SELECT 1 FROM aula_attempts x WHERE x.quiz=s.quiz AND x.user_id=s.user_id AND x.attempt=s.attempt))`;
     const who = body.user ? String(body.user) : null;
@@ -2041,6 +2045,64 @@ const routes = {
       db.prepare("DELETE FROM aula_attempts WHERE course=?1 AND quiz=?2 AND details IS NULL AND answers='[]' AND id IN (SELECT json_extract(value,'$.id') FROM json_each(?3))").bind(body.course, quiz.id, list),
     ]);
     return json({ voided: rows.length, students: new Set(rows.map((r) => r.user_id)).size });
+  },
+
+  // 12.98: recalifica los intentos que se cerraron al acabarse el tiempo sin poder calificarse (calificación 0 y sin
+  // detalle, con respuestas guardadas en aula_attempt_starts). Pasaba cuando una respuesta numérica guardada no era
+  // un número. Solo toca intentos sin detalle; conserva la fecha de envío.
+  'POST /api/quiz/recover-closed': async ({ db, user, request }) => {
+    const body = await readJson(request);
+    requireTeacher(await access(db, user, body.course));
+    const quiz = await contentRecord(db, String(body.quiz ?? ''), body.course, 'quiz');
+    const rows = await all(
+      db,
+      `SELECT a.id, a.user_id, a.attempt, s.progress, s.position FROM aula_attempts a
+         JOIN aula_attempt_starts s ON s.quiz=a.quiz AND s.user_id=a.user_id AND s.attempt=a.attempt
+        WHERE a.quiz=?1 AND a.course=?2 AND a.details IS NULL AND coalesce(s.progress,'') NOT IN ('','{}','null')`,
+      quiz.id,
+      body.course,
+    );
+    const updates = [];
+    for (const row of rows) {
+      let saved = null;
+      try {
+        saved = JSON.parse(row.progress);
+      } catch {
+        continue;
+      }
+      if (!saved || typeof saved !== 'object' || !Object.keys(saved).length) continue;
+      const instance = quizInstance(quiz, row.user_id, row.attempt);
+      let graded;
+      try {
+        graded = gradeAttempt(quiz, instance, finalAnswers(quiz, instance, row, saved));
+      } catch {
+        continue;
+      }
+      updates.push({
+        id: row.id,
+        answers: JSON.stringify(graded.details.map((d) => d.answer)),
+        details: JSON.stringify(graded.details),
+        correct: graded.correct,
+        total: graded.total,
+        score: Math.min(10, Math.max(0, graded.score)),
+      });
+    }
+    if (updates.length) {
+      await run(
+        db,
+        `UPDATE aula_attempts SET
+           answers=(SELECT json_extract(j.value,'$.answers') FROM json_each(?1) j WHERE json_extract(j.value,'$.id')=aula_attempts.id),
+           details=(SELECT json_extract(j.value,'$.details') FROM json_each(?1) j WHERE json_extract(j.value,'$.id')=aula_attempts.id),
+           correct=(SELECT json_extract(j.value,'$.correct') FROM json_each(?1) j WHERE json_extract(j.value,'$.id')=aula_attempts.id),
+           total=(SELECT json_extract(j.value,'$.total') FROM json_each(?1) j WHERE json_extract(j.value,'$.id')=aula_attempts.id),
+           score=(SELECT json_extract(j.value,'$.score') FROM json_each(?1) j WHERE json_extract(j.value,'$.id')=aula_attempts.id)
+         WHERE quiz=?2 AND course=?3 AND details IS NULL AND id IN (SELECT json_extract(value,'$.id') FROM json_each(?1))`,
+        JSON.stringify(updates),
+        quiz.id,
+        body.course,
+      );
+    }
+    return json({ recovered: updates.length, checked: rows.length });
   },
 
   // Duplicar una evaluación (12.30), en el mismo curso o en otro donde también enseñe. La copia queda oculta, sin
