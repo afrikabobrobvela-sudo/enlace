@@ -1169,3 +1169,16 @@ body.exam-running .test-student-bar { display: none; }
 
 /* 12.95 · «Obligar a contestar»: la pregunta sin respuesta se marca un momento al intentar avanzar. */
 #quizAttempt fieldset.exam-needs-answer { outline: 2px solid #b42318; outline-offset: 4px; border-radius: var(--radius-sm); }
+
+/* 12.99: en escritorio, los botones de la ventana (Guardar) quedan fijos abajo y el título arriba: en una
+   evaluación larga ya no hay que bajar hasta el final para guardar. El teléfono ya lo hacía (movil.css). */
+@media (min-width: 721px) {
+  dialog#modal .dialog-head { position: sticky; top: -28px; z-index: 3; margin: -28px -28px 16px; padding: 18px 28px 12px; background: #fff; }
+  dialog#modal .dialog-actions { position: sticky; bottom: -28px; z-index: 3; margin: 16px -28px -28px; padding: 12px 28px; background: #fff; border-top: 1px solid var(--line); box-shadow: 0 -6px 14px rgb(17 26 46 / 0.06); }
+}
+
+/* 12.99: aviso de cambios sin guardar al cerrar una ventana. */
+dialog.unsaved-ask { width: min(520px, 92vw); }
+dialog.unsaved-ask h2 { margin: 0 0 8px; font-size: 20px; }
+dialog.unsaved-ask p { margin: 0 0 4px; }
+dialog.unsaved-ask .dialog-actions { justify-content: flex-end; }

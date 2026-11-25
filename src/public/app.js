@@ -701,6 +701,61 @@ function modal(title, html, handler, saveLabel = 'Guardar') {
   };
   $('#modal').showModal();
 }
+/**
+ * 12.99: cerrar la ventana con la X, «Cerrar» o Esc. Si es un formulario con «Guardar» y se cambió algo
+ * (`dataset.changed`, lo marca navegacion.js al escribir), pregunta antes: guardar, salir sin guardar o seguir.
+ */
+async function closeModalAsking() {
+  const dialog = $('#modal');
+  if (!dialog.open) return;
+  if (!dialog.dataset.changed || $('#formSave').hidden || busy) return dialog.close();
+  const choice = await unsavedChoice();
+  if (choice === 'save') $('#form').requestSubmit($('#formSave'));
+  else if (choice === 'discard') dialog.close();
+}
+
+function unsavedChoice() {
+  let ask = document.getElementById('unsavedAsk');
+  if (!ask) {
+    ask = document.createElement('dialog');
+    ask.id = 'unsavedAsk';
+    ask.className = 'unsaved-ask';
+    ask.setAttribute('aria-labelledby', 'unsavedAskTitle');
+    ask.innerHTML = `<h2 id="unsavedAskTitle">Cambios sin guardar</h2><p>No has guardado los cambios. ¿Quieres guardarlos antes de cerrar?</p>
+      <div class="dialog-actions"><button type="button" class="text-btn" data-unsaved="keep">Seguir editando</button><button type="button" class="secondary" data-unsaved="discard">Salir sin guardar</button><button type="button" class="primary" data-unsaved="save">Guardar</button></div>`;
+    document.body.append(ask);
+  }
+  return new Promise((resolve) => {
+    const done = (value) => {
+      ask.onclick = null;
+      ask.oncancel = null;
+      if (ask.open) ask.close();
+      resolve(value);
+    };
+    ask.onclick = (e) => {
+      const b = e.target.closest('[data-unsaved]');
+      if (b) done(b.dataset.unsaved);
+    };
+    ask.oncancel = (e) => {
+      e.preventDefault();
+      done('keep');
+    };
+    ask.showModal();
+    ask.querySelector('[data-unsaved="save"]').focus();
+  });
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  // Esc también pregunta si hay cambios sin guardar.
+  document.getElementById('modal')?.addEventListener('cancel', (e) => {
+    const dialog = e.currentTarget;
+    if (dialog.dataset.changed && !$('#formSave').hidden) {
+      e.preventDefault();
+      closeModalAsking();
+    }
+  });
+});
+
 /** «Mi perfil»: recibir (o no) el resumen diario por correo. Solo si la administración configuró el correo. */
 function emailDigestHtml() {
   if (!me.mailEnabled)
@@ -987,7 +1042,7 @@ document.addEventListener('click', async (e) => {
         }
         break;
       case 'close':
-        $('#modal').close();
+        closeModalAsking();
         break;
       case 'new-course':
         courseModal();

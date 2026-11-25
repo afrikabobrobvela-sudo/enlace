@@ -595,6 +595,9 @@ document.addEventListener('change', (e) => {
 
 function quizEditorAction(action, target) {
   quizDraft = readQuizQuestions();
+  // Agregar, mover o quitar preguntas también cuenta como cambio sin guardar (12.99).
+  const dialog = target.closest('dialog');
+  if (dialog) dialog.dataset.changed = '1';
   const box = target.closest('[data-question]');
   const q = box ? quizDraft[Number(box.dataset.question)] : null;
   if (action === 'add-question' && quizDraft.length < QUIZ_MAX_QUESTIONS) quizDraft.push(blankQuestion(quizDraft.at(-1)?.type));
@@ -1311,7 +1314,7 @@ async function loadExamMonitor(quizId) {
     .filter((r) => r.locked)
     .map((r) => `<li class="exam-locked-row"><div><strong>${esc(r.name)}</strong> <span class="muted">bloqueado desde las ${esc(new Date(r.lockedAt).toLocaleTimeString('es-MX', { timeStyle: 'short' }))}${
       r.unlockFailures ? ` · ${r.unlockFailures} ${r.unlockFailures === 1 ? 'código equivocado' : 'códigos equivocados'}` : ''
-    }</span></div><span class="exam-unlock-code" aria-label="Código para continuar">${esc(r.unlockCode || '')}</span><button type="button" class="table-link" data-exam-resume="${esc(r.user)}">Permitir continuar</button></li>`)
+    }</span></div><span class="exam-unlock-code" aria-label="Código para continuar">${esc(r.unlockCode || '')}</span><button type="button" class="table-link" data-exam-resume="${esc(r.user)}">Permitir continuar</button>${closeAttemptButton(r)}</li>`)
     .join('');
   // 12.91: en vivo, quién está fuera de la página y quién lleva rato sin señal (sin conexión, modo avión).
   const liveStatus = (r) =>
@@ -1322,7 +1325,7 @@ async function loadExamMonitor(quizId) {
     .filter((r) => !r.locked)
     .map((r) => `<li><strong>${esc(r.name)}</strong>${r.section && !selectedSection() ? ` <span class="quiz-pool-tag">${esc(sectionName(r.section))}</span>` : ''} ${liveStatus(r)}<span class="muted">intento ${r.attempt} · ${r.answered} de ${data.total} contestadas · desde ${esc(new Date(r.started).toLocaleTimeString('es-MX', { timeStyle: 'short' }))}</span>${
       integrityText(r) ? ` <span class="integrity-warn">${esc(integrityText(r))}</span>` : ''
-    }</li>`)
+    } ${closeAttemptButton(r)}</li>`)
     .join('');
   const outOfReach = data.running.filter((r) => !r.locked && liveStatus(r)).length;
   const blocked = data.blocked
@@ -1364,6 +1367,27 @@ async function loadExamMonitor(quizId) {
     }
     ${notStarted.length ? `<details class="monitor-pending"><summary>No han empezado (${notStarted.length})</summary><p>${notStarted.map((m) => esc(m.name)).join(' · ')}</p></details>` : ''}`;
 }
+
+/** 12.99: cerrar y calificar con lo guardado el intento en curso de un alumno. */
+function closeAttemptButton(r) {
+  return `<button type="button" class="table-link danger-link" data-exam-close="${esc(r.user)}" data-name="${esc(r.name)}">Cerrar y calificar</button>`;
+}
+
+document.addEventListener('click', async (e) => {
+  const close = e.target.closest('[data-exam-close]');
+  if (!close) return;
+  if (!confirm(`¿Cerrar el intento de ${close.dataset.name}? Se calificará con las respuestas que tiene guardadas y ya no podrá seguir contestando.`)) return;
+  close.disabled = true;
+  try {
+    const r = await request('/api/exam/close', { course: current.course.id, quiz: detail, user: close.dataset.examClose });
+    toast(`Intento cerrado: ${r.correct} de ${r.total} correctas, calificación ${Number(r.score).toFixed(2)}.`);
+    await reload();
+    await loadExamMonitor(detail);
+  } catch (error) {
+    close.disabled = false;
+    toast(error.message);
+  }
+});
 
 document.addEventListener('click', async (e) => {
   const detailBtn = e.target.closest('[data-integrity]');

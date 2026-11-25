@@ -387,5 +387,14 @@ assert.deepEqual(JSON.parse(fila.answers), ['4 m/s', 3]);
 assert.equal((await call('docente', '/api/quiz/recover-closed', { course: c, quiz: numerico.id })).recovered, 0, 'No vuelve a tocar un intento ya calificado');
 checks += 6;
 
+// ---- 12.99: «Cerrar y calificar» desde el monitor (el alumno ya no volvió a entrar) ------------------------------
+store.raw().prepare('INSERT INTO aula_attempt_starts (quiz,user_id,attempt,started,progress,position) VALUES (?,?,?,?,?,?)').run(numerico.id, raulId, 1, hours(0), JSON.stringify({ 0: '4', 1: '3' }), 1);
+await call('raul', '/api/exam/close', { course: c, quiz: numerico.id, user: raulId }, 403);
+const cerrado = await call('docente', '/api/exam/close', { course: c, quiz: numerico.id, user: raulId });
+assert.deepEqual([cerrado.correct, cerrado.total, cerrado.score], [2, 2, 10]);
+await call('docente', '/api/exam/close', { course: c, quiz: numerico.id, user: raulId }, 409);
+assert.equal((await call('raul', '/api/attempt/start', { course: c, quiz: numerico.id }, 409)).error.length > 0, true, 'Ya no puede seguir');
+checks += 4;
+
 assert.deepEqual(store.raw().prepare('PRAGMA foreign_key_check').all(), []);
 console.log(`PASS: ${checks} verificaciones de la 12.27 — CSV de Brightspace (8 tipos, HTML, errores por renglón, grupos), 60 puntos en 12 grupos, sorteos distintos, intento congelado, código con límite, tiempo agotado, 10 con todo correcto, sin clave en la red, recalificar, Safe Exam Browser y vista previa.`);
