@@ -941,11 +941,22 @@ async function startQuizAttempt(quizId, extra = {}) {
   if (paged) showAttemptPage(form, 0);
   // Cuántas lleva contestadas (12.36): a la vista todo el tiempo, también en el celular (el encabezado es fijo).
   const total = data.questions.length;
-  const answeredCount = () => Object.keys(collect()).length;
+  // 12.97: con «Sin regresar», las preguntas que quedaron atrás están deshabilitadas y FormData no las incluye; se
+  // habilitan solo mientras se cuentan (sin ceder el control, así nadie puede cambiarlas) para contarlas también.
+  const answeredCount = () => {
+    const locked = [...form.querySelectorAll('fieldset[data-position]')].filter((box) => box.disabled);
+    for (const box of locked) box.disabled = false;
+    try {
+      return Object.keys(collect()).length;
+    } finally {
+      for (const box of locked) box.disabled = true;
+    }
+  };
   const showAnswered = () => {
     const box = $('#quizAnswered');
     if (box) box.textContent = `${answeredCount()} de ${total} contestadas`;
   };
+  form.showAnswered = showAnswered;
   form.addEventListener('change', showAnswered);
   form.addEventListener('input', showAnswered);
   // 12.96: Enter (o «Ir/Enviar» del teclado del celular) en una respuesta no envía la evaluación: con una pregunta a
@@ -1924,6 +1935,7 @@ function showExamQuestion() {
   next.textContent = exam.randomOrder ? 'Guardar y siguiente aleatoria ›' : 'Guardar y siguiente ›';
   $('#quizSubmit').hidden = !last;
   $('#examProgress').textContent = `Pregunta ${Math.min(position + 1, boxes.length)} de ${boxes.length}`;
+  document.getElementById('quizAttempt')?.showAnswered?.();
   boxes[position]?.querySelector('input')?.focus({ preventScroll: true });
 }
 
