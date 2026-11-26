@@ -48,7 +48,7 @@ function stringList(input, label, { min, max, what, length = 200 }) {
 
 /** Cifras significativas de un número tal como se escribió ("0.0450" → 3, "1.20e3" → 3, "1200" → 2). */
 export function significantFigures(raw) {
-  const clean = String(raw ?? '').trim().replace(/\s+/g, '').replace(',', '.').replace(/^[-+]/, '');
+  const clean = String(raw ?? '').trim().replace(/\s+/g, '').replace(',', '.').replace(/^[-+−–]/, '');
   const mantissa = clean.split(/e/i)[0];
   if (!/^(\d+\.?\d*|\.\d+)$/.test(mantissa)) return 0;
   const hasPoint = mantissa.includes('.');

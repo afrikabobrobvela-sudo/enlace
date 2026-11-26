@@ -219,7 +219,7 @@ function newAnswerInputHtml(x, required) {
     case 'multishort':
       return `<div class="quiz-boxes">${Array.from({ length: x.boxes }, (_, k) => `<input name="${name}_${k}" autocomplete="off" ${required} maxlength="300" placeholder="Respuesta ${k + 1}">`).join('')}</div>`;
     case 'sigfig':
-      return `<p class="muted quiz-hint">Responde con ${x.figures} cifras significativas.</p><label class="quiz-number"><input name="${name}" inputmode="decimal" autocomplete="off" ${required} placeholder="Tu respuesta"> ${x.unit ? `<span>${esc(x.unit)}</span>` : ''}</label>`;
+      return `<p class="muted quiz-hint">Responde con ${x.figures} cifras significativas.</p><label class="quiz-number"><input name="${name}" inputmode="decimal" autocomplete="off" ${required} placeholder="Tu respuesta">${typeof QUIZ_SIGN_BUTTON === 'string' ? QUIZ_SIGN_BUTTON : ''} ${x.unit ? `<span>${esc(x.unit)}</span>` : ''}</label>`;
   }
   return '';
 }

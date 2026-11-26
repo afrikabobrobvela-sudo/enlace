@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { api } from '../src/server/api.js';
 import { completeLogin, sessionCookieForTests } from '../src/server/auth.js';
-import { evaluate, gradeAttempt } from '../src/server/quizzes.js';
+import { evaluate, gradeAttempt, parseNumber } from '../src/server/quizzes.js';
 import { memoryBucket, openD1 } from './lib/d1-sqlite.mjs';
 
 let checks = 0;
@@ -145,6 +145,9 @@ checks += 3;
   assert.equal(r.correct, 1);
   checks += 3;
 }
+// 12.101: el signo menos tipográfico (−) y la raya (–) también son negativos.
+assert.deepEqual(['−9.8', '–4,5', '-2', '1.2e−3'].map(parseNumber), [-9.8, -4.5, -2, 0.0012]);
+checks++;
 
 assert.deepEqual(store.raw().prepare('PRAGMA foreign_key_check').all(), []);
 console.log(`PASS: ${checks} verificaciones de evaluaciones — fórmulas seguras, preguntas numéricas con datos por alumno y tolerancia, varios intentos, tiempo límite y orden aleatorio.`);
