@@ -1,9 +1,16 @@
-# Enlace · versión 12.99
+# Enlace · versión 12.100
 
 Plataforma académica independiente para docentes y alumnos de cualquier academia (nació en una academia de Física), con interfaz inspirada en Brightspace.
 No es el código de D2L Brightspace ni una plataforma oficial de ninguna institución.
 
 Esta versión se despliega en **tu propia cuenta de Cloudflare** (Workers + D1 + R2, plan gratuito) y ya no depende de ChatGPT Sites.
+
+## Novedades de la versión 12.100 (salidas al bloquear el iPhone)
+
+- Corrige un hueco del modo examen en Safari del iPhone: al bloquear el teléfono, Safari congela la página y a veces no avisa que se ocultó (o avisa ya de regreso, con 0 segundos). Así algunos alumnos bloqueaban el teléfono, abrían otra página y volvían sin que contara como salida.
+- Ahora el examen se revisa a sí mismo cada fracción de segundo. Si la página estuvo congelada más de 4 segundos, cuenta como salida con su duración real, aunque el teléfono no haya avisado. También escucha el aviso `pagehide` que manda Safari. Con «Bloquear al salir», esas salidas bloquean igual que las demás (por tolerancia o por salidas repetidas).
+- **Bloquear el teléfono cuenta como salir**, también si se apaga la pantalla sola. La preparación del teléfono (iPhone y Android) ahora lo dice y explica cómo alargar el bloqueo automático durante el examen.
+- No hay migraciones.
 
 ## Novedades de la versión 12.99 (cerrar intentos desde el monitor y editor de evaluaciones)
 
