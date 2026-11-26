@@ -1492,12 +1492,14 @@ function examPrepareHtml() {
     ? [
         '<strong>Activa «No molestar»</strong>: desliza desde arriba de la pantalla y tócalo. Así no te llegan notificaciones de WhatsApp ni de otras apps.',
         '<strong>Fija esta pantalla</strong>: abre las apps recientes (botón cuadrado, o desliza desde abajo y mantén), toca el ícono de tu navegador sobre esta ventana y elige «Fijar» (si no aparece, actívalo en Ajustes → Seguridad → Fijar aplicación). Con la pantalla fijada no puedes cambiar de app ni abrir la cortina de notificaciones. Si no aparece «Fijar», actívalo en Ajustes → Seguridad → Fijar aplicaciones (el nombre cambia según la marca).',
+        '<strong>No bloquees el teléfono</strong> durante el examen: bloquearlo (o que se apague la pantalla) cuenta como salir. Si se te apaga solo, en Ajustes → Pantalla → Tiempo de espera de la pantalla elige el más largo.',
         'Al terminar el examen, suelta la pantalla: mantén presionados Atrás y Recientes, o desliza hacia arriba y mantén.',
       ]
     : ios
       ? [
           '<strong>Activa «No molestar»</strong>: abre el Centro de control y toca Concentración → No molestar. Así no te llegan notificaciones de WhatsApp ni de otras apps.',
           '<strong>Activa «Acceso guiado»</strong>: en Ajustes → Accesibilidad → Acceso guiado, enciéndelo. Vuelve aquí, presiona tres veces el botón lateral (o el de inicio) y toca «Iniciar». Así no puedes salir del navegador.',
+          '<strong>No bloquees el teléfono</strong> durante el examen: bloquearlo (o que se apague la pantalla) cuenta como salir. Si se te apaga solo, en Ajustes → Pantalla y brillo → Bloqueo automático elige «Nunca» y regrésalo al terminar.',
           'Al terminar el examen, presiona tres veces el botón lateral y toca «Finalizar».',
         ]
       : ['Cierra WhatsApp Web, el correo y las demás pestañas y programas.', '<strong>Activa «No molestar»</strong> en tu computadora (Windows: Asistente de concentración o No molestar; Mac: Concentración).'];
@@ -1548,7 +1550,10 @@ function startExam(quizId, data, collect) {
   window.addEventListener('offline', examNetworkCheck);
   examRecoverStored(examState);
   examNetworkCheck();
-  examState.focusPoll = setInterval(examAwayCheck, EXAM_FOCUS_POLL_MS);
+  examState.lastTick = Date.now();
+  window.addEventListener('pagehide', examPageHide);
+  window.addEventListener('pageshow', examAwayCheck);
+  examState.focusPoll = setInterval(examTick, EXAM_FOCUS_POLL_MS);
   examState.beat = setInterval(examBeat, EXAM_BEAT_MS);
 }
 
@@ -1560,6 +1565,34 @@ function startExam(quizId, data, collect) {
 const EXAM_BEAT_MS = 20_000;
 // Algunos teléfonos no avisan con «blur» cuando se responde una notificación desde la cortina: se revisa el foco.
 const EXAM_FOCUS_POLL_MS = 400;
+// 12.100: si entre dos revisiones pasan más de esto, la página estuvo congelada. En Safari del iPhone, al bloquear el
+// teléfono la página se congela al instante y a veces no avisa que se ocultó (o avisa ya de regreso, con 0 s): así
+// los alumnos podían ver otra página sin que contara como salida.
+const EXAM_FREEZE_GAP_MS = 4000;
+
+/** Revisión periódica del examen: el foco (examAwayCheck) y los congelamientos de la página. */
+function examTick() {
+  const state = examState;
+  if (!state) return;
+  const now = Date.now();
+  const gap = now - (state.lastTick || now);
+  state.lastTick = now;
+  // A la vista y con un hueco largo sin revisiones: la página estuvo congelada (bloqueo, otra app u otra pestaña).
+  // Si el aviso de «oculta» sí llegó, la salida ya está en curso y se cierra con la duración real al volver.
+  if (gap > EXAM_FREEZE_GAP_MS && !state.awaySince && !isSafeExamBrowser() && document.visibilityState === 'visible') {
+    state.awaySince = now - gap;
+    examStoreWrite(state);
+    examReturnCheck(false);
+  }
+  examAwayCheck();
+}
+
+/** Safari puede mandar `pagehide` (y no `visibilitychange`) al bloquear el teléfono o cambiar de pestaña. */
+function examPageHide() {
+  if (!examState || isSafeExamBrowser()) return;
+  markExamAway(Date.now());
+}
+
 const examStoreKey = (state) => `enlace-examen:${state.quizId}:${state.attempt}`;
 
 function examStoreWrite(state) {
@@ -1635,6 +1668,8 @@ function stopExam() {
   document.removeEventListener('fullscreenchange', examFullscreenCheck);
   document.removeEventListener('webkitfullscreenchange', examFullscreenCheck);
   window.removeEventListener('beforeunload', examBeforeUnload);
+  window.removeEventListener('pagehide', examPageHide);
+  window.removeEventListener('pageshow', examAwayCheck);
   document.removeEventListener('keydown', examCaptureKey, true);
   document.removeEventListener('keyup', examCaptureKey, true);
   window.removeEventListener('beforeprint', examPrint);
@@ -1771,10 +1806,13 @@ function markExamAway(since) {
 /** Al volver a la página: registra la salida con su duración (y, con bloqueo al salir, pregunta al servidor). */
 function examReturnCheck(away) {
   if (!away && examState.awaySince) {
-    const seconds = Math.round((Date.now() - examState.awaySince) / 1000);
+    // 12.100: si la página dejó de revisar antes del aviso de salida (se congeló), la salida empezó entonces.
+    const since = Math.min(examState.awaySince, (examState.lastTick || examState.awaySince) + EXAM_FOCUS_POLL_MS);
+    examState.lastTick = Date.now();
+    const seconds = Math.round((Date.now() - since) / 1000);
     // La salida queda en el teléfono hasta que el servidor la recibe. Si /back no contesta (sin conexión, modo avión),
     // va sin `judged` y el servidor decide el bloqueo cuando le llegue con el siguiente guardado (12.91).
-    const event = { kind: 'left', seconds, at: new Date(examState.awaySince).toISOString(), ...(examState.locked ? { judged: true } : {}) };
+    const event = { kind: 'left', seconds, at: new Date(since).toISOString(), ...(examState.locked ? { judged: true } : {}) };
     examState.awaySince = null;
     examEvent(event);
     if (examState.exam.lockOnLeave && !examState.locked) {
