@@ -638,7 +638,8 @@ export function quizInstance(quiz, userId, attempt) {
 /** Acepta "9.8", "9,8", "1.2e3" o "-3". */
 export function parseNumber(value) {
   if (typeof value === 'number') return value;
-  const clean = String(value ?? '').trim().replace(/\s+/g, '').replace(',', '.');
+  // 12.101: también el signo menos tipográfico (−) o una raya (–) que dejan algunos teclados o al pegar.
+  const clean = String(value ?? '').trim().replace(/\s+/g, '').replace(/^[−–]/, '-').replace(/e[−–]/i, 'e-').replace(',', '.');
   return /^[-+]?\d*\.?\d+(e[-+]?\d+)?$/i.test(clean) ? Number(clean) : NaN;
 }
 

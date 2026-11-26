@@ -1,9 +1,15 @@
-# Enlace · versión 12.100
+# Enlace · versión 12.101
 
 Plataforma académica independiente para docentes y alumnos de cualquier academia (nació en una academia de Física), con interfaz inspirada en Brightspace.
 No es el código de D2L Brightspace ni una plataforma oficial de ninguna institución.
 
 Esta versión se despliega en **tu propia cuenta de Cloudflare** (Workers + D1 + R2, plan gratuito) y ya no depende de ChatGPT Sites.
+
+## Novedades de la versión 12.101 (signo negativo en el examen)
+
+- En el iPhone, el teclado de las respuestas numéricas (aritmética y cifras significativas) no tiene la tecla «−», así que los alumnos no podían escribir resultados negativos. Ahora hay un botón **±** junto al campo: cambia el signo de lo que se escribió y el teclado sigue abierto.
+- Enlace también acepta como negativo el signo «−» tipográfico o la raya «–» que dejan algunos teclados o al copiar y pegar.
+- No hay migraciones.
 
 ## Novedades de la versión 12.100 (salidas al bloquear el iPhone)
 

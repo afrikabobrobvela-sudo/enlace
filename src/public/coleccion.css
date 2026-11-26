@@ -1186,3 +1186,9 @@ dialog.unsaved-ask .dialog-actions { justify-content: flex-end; }
 /* 12.99: el calendario se abre como popover (capa superior): sin el centrado ni el marco que el navegador le da. */
 .dt-pop[popover] { margin: 0; color: var(--ink); background: #fff; }
 .dt-pop[popover]:not(.is-sheet) { right: auto; bottom: auto; }
+
+/* 12.101: botón ± junto a las respuestas numéricas (el teclado decimal del iPhone no tiene «−»). */
+.quiz-number { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.quiz-sign { min-width: 44px; min-height: 44px; padding: 0 10px; border: 1px solid var(--line); border-radius: 10px; background: #fff; color: var(--ink); font-size: 22px; font-weight: 700; line-height: 1; cursor: pointer; }
+.quiz-sign:hover { background: #f2f6f9; }
+.quiz-sign:disabled { opacity: 0.5; cursor: default; }

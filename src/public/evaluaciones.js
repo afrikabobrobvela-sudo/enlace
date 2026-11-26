@@ -816,12 +816,27 @@ function attemptQuestionHtml(x, n, required) {
     isNewType(x.type)
       ? newAnswerInputHtml(x, required)
       : x.type === 'numeric'
-      ? `<label class="quiz-number"><input name="q_${x.index}" inputmode="decimal" autocomplete="off" ${required} placeholder="Tu respuesta"> ${x.unit ? `<span>${esc(x.unit)}</span>` : ''}</label>`
+      ? `<label class="quiz-number"><input name="q_${x.index}" inputmode="decimal" autocomplete="off" ${required} placeholder="Tu respuesta">${QUIZ_SIGN_BUTTON} ${x.unit ? `<span>${esc(x.unit)}</span>` : ''}</label>`
       : x.options.map((o, j) => `<label><input type="radio" ${required} name="q_${x.index}" value="${j}"> ${esc(o)}</label>`).join('')
   }${x.hint ? `<details class="quiz-hint-box"><summary>Ver pista</summary><p>${esc(x.hint)}</p></details>` : ''}</fieldset>`;
 }
 
 /** Respuestas del intento tal como las manda el navegador ({ índice original: respuesta }). */
+// 12.101: el teclado de decimales del iPhone no tiene «−»: un botón junto al campo cambia el signo.
+const QUIZ_SIGN_BUTTON = '<button type="button" class="quiz-sign" data-quiz-sign aria-label="Cambiar el signo (positivo o negativo)" title="Cambiar el signo">±</button>';
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('[data-quiz-sign]');
+  if (!b) return;
+  e.preventDefault();
+  const input = b.closest('label')?.querySelector('input');
+  if (!input || input.disabled || input.readOnly) return;
+  const v = input.value.trim();
+  input.value = /^[-−–]/.test(v) ? v.replace(/^[-−–]\s*/, '') : '-' + v;
+  input.dispatchEvent(new Event('input', { bubbles: true }));
+  input.dispatchEvent(new Event('change', { bubbles: true }));
+  input.focus({ preventScroll: true });
+});
+
 function collectAttemptAnswers(form, questions) {
   const data = new FormData(form);
   const answers = {};
