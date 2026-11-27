@@ -1,9 +1,16 @@
-# Enlace · versión 12.105
+# Enlace · versión 12.106
 
 Plataforma académica independiente para docentes y alumnos de cualquier academia (nació en una academia de Física), con interfaz inspirada en Brightspace.
 No es el código de D2L Brightspace ni una plataforma oficial de ninguna institución.
 
 Esta versión se despliega en **tu propia cuenta de Cloudflare** (Workers + D1 + R2, plan gratuito) y ya no depende de ChatGPT Sites.
+
+## Novedades de la versión 12.106 (enviar el examen al N.º bloqueo)
+
+- Opción nueva en el modo examen, junto a la tolerancia: «Enviar el examen al llegar a … bloqueos» (1 a 10, o «Nunca: solo se bloquea»). Requiere «Bloquear si sale de la página». En el editor viene en **3** por omisión.
+- Al llegar a ese bloqueo, el intento se envía con las respuestas que el alumno tenía guardadas y ya no puede seguir; ve el aviso «Saliste de la página y tu examen se bloqueó por 3.ª vez: se envió con las respuestas que tenías guardadas». En los resultados, la integridad dice «enviado por bloqueos».
+- Cuentan todos los bloqueos del intento (salir de la página, salidas cortas repetidas, sin conexión, otro dispositivo). Los alumnos lo ven en las reglas antes de empezar.
+- Las evaluaciones que ya existían siguen igual (sin envío por bloqueos) hasta que las abras y las vuelvas a guardar: el editor les propone 3.
 
 ## Novedades de la versión 12.105 (salir del alumno de prueba durante un examen)
 

@@ -521,6 +521,9 @@ function examSettingsHtml(exam) {
       <label>Tolerancia antes de bloquear<select name="lockGrace">${[0, 5, 15, 30]
         .map((g) => `<option value="${g}" ${(exam?.lockOnLeave ? exam.lockGrace : 5) === g ? 'selected' : ''}>${g ? `${g} segundos (por ejemplo, una notificación)` : 'Ninguna: se bloquea al salir'}</option>`)
         .join('')}</select></label>
+      <label>Enviar el examen al llegar a<select name="submitAfterLocks">${[0, 1, 2, 3, 4, 5, 6, 8, 10]
+        .map((n) => `<option value="${n}" ${(exam?.submitAfterLocks ?? 3) === n ? 'selected' : ''}>${n ? `${n} ${n === 1 ? 'bloqueo' : 'bloqueos'}` : 'Nunca: solo se bloquea'}</option>`)
+        .join('')}</select><small class="muted">Al llegar a ese bloqueo el examen se envía con lo que tenga contestado y no puede seguir (requiere «Bloquear si sale de la página»).</small></label>
       <label>Revisar que estén en el salón<select name="examRadius"><option value="0">No revisar la ubicación</option>${EXAM_RADII.map((r) => `<option value="${r}" ${place?.radius === r ? 'selected' : ''}>A menos de ${r} m del salón</option>`).join('')}</select></label>
       <p class="exam-place-row"><button type="button" class="secondary" data-exam-place>Usar mi ubicación actual como salón</button>
         <span class="muted" id="examPlaceStatus">${place ? 'Ubicación del salón guardada.' : 'Sin ubicación del salón.'}</span></p>
@@ -540,6 +543,8 @@ function hardenExamSettings() {
   }
   const grace = document.querySelector('select[name="lockGrace"]');
   if (grace) grace.value = '5';
+  const limit = document.querySelector('select[name="submitAfterLocks"]');
+  if (limit && limit.value === '0') limit.value = '3';
   document.querySelector('.exam-options')?.removeAttribute?.('hidden');
   const examOptions = document.querySelector('.exam-options');
   if (examOptions) examOptions.hidden = false;
@@ -573,6 +578,7 @@ function readExamSettings(f) {
     place,
     lockOnLeave,
     lockGrace: Number(f.get('lockGrace') || 5),
+    submitAfterLocks: lockOnLeave ? Number(f.get('submitAfterLocks') ?? 3) : 0,
     lockPlatform: f.get('lockPlatform') === 'on',
     prepareDevice: f.get('prepareDevice') === 'on',
   };
@@ -1276,6 +1282,7 @@ function integrityText(i) {
   if (i.fullscreenExits) parts.push(`dejó pantalla completa ${i.fullscreenExits} ${i.fullscreenExits === 1 ? 'vez' : 'veces'}`);
   if (i.offline) parts.push(`sin conexión ${i.offline} ${i.offline === 1 ? 'vez' : 'veces'} (${secondsText(i.offlineSeconds)})`);
   if (i.locks) parts.push(`se bloqueó ${i.locks} ${i.locks === 1 ? 'vez' : 'veces'}`);
+  if (i.endedByLocks) parts.push('enviado por bloqueos');
   if (i.copyAttempts) parts.push(`intentó copiar o pegar ${i.copyAttempts} ${i.copyAttempts === 1 ? 'vez' : 'veces'}`);
   if (i.captures) parts.push(`intentó una captura de pantalla ${i.captures} ${i.captures === 1 ? 'vez' : 'veces'}`);
   if (i.flag) parts.push(i.flag);
@@ -1293,7 +1300,7 @@ function integrityModal(author) {
   const attempts = records('attempt')
     .filter((a) => a.data.quiz === q.id && a.author === author && a.data.integrity)
     .sort((a, b) => (a.data.attempt || 1) - (b.data.attempt || 1));
-  const labels = { left: 'Salió de la página', fullscreen: 'Dejó pantalla completa', copy: 'Intentó copiar o pegar', capture: 'Intentó una captura de pantalla', locked: 'Examen bloqueado', unlocked: 'Desbloqueado', offline: 'Sin conexión (por ejemplo, modo avión)', silence: 'El servidor no supo del examen' };
+  const labels = { left: 'Salió de la página', fullscreen: 'Dejó pantalla completa', copy: 'Intentó copiar o pegar', capture: 'Intentó una captura de pantalla', locked: 'Examen bloqueado', unlocked: 'Desbloqueado', offline: 'Sin conexión (por ejemplo, modo avión)', silence: 'El servidor no supo del examen', ended: 'Examen enviado por bloqueos' };
   const timed = new Set(['left', 'offline', 'silence']);
   modal(
     `Integridad: ${attempts[0]?.data.name || ''}`, // modal() usa textContent para el título
@@ -1482,6 +1489,7 @@ function examIntroHtml(exam, used) {
     <li>No se permiten capturas de pantalla: cada pregunta lleva tu nombre como marca de agua, en computadora la tecla de captura tapa el examen y queda registrada, y el examen no se puede imprimir.</li>
     ${exam.oneByOne ? `<li>Verás una pregunta a la vez${exam.noBack ? ' y <strong>no podrás regresar</strong> a las anteriores' : ''}.${exam.requireAnswer ? ' <strong>Debes contestar cada pregunta</strong> para pasar a la siguiente.' : ''}</li>` : ''}
     ${exam.lockOnLeave ? `<li><strong>Si sales de la página${exam.lockGrace ? ` más de ${exam.lockGrace} segundos` : ''} (otra aplicación, WhatsApp, responder una notificación, bloquear el teléfono), el examen se bloquea</strong> y necesitarás un código de tu docente para continuar. <strong>A la 3.ª salida se bloquea aunque sean salidas cortas.</strong> El tiempo sigue corriendo.</li>` : ''}
+    ${exam.lockOnLeave && exam.submitAfterLocks ? `<li><strong>Al ${exam.submitAfterLocks}.º bloqueo tu examen se envía solo</strong> con lo que tengas contestado y ya no puedes seguir.</li>` : ''}
     <li><strong>El modo avión no oculta nada:</strong> si te quedas sin conexión, queda registrado y tu docente lo ve en vivo; las salidas que hagas sin conexión se registran${exam.lockOnLeave ? ' y bloquean el examen' : ''} en cuanto vuelve la conexión.</li>
     ${exam.checksLocation ? '<li>Se pedirá tu ubicación para confirmar que estás en el salón (solo se guarda la distancia).</li>' : ''}
     <li>Tus respuestas se guardan mientras contestas: si se cierra la página, vuelve a entrar y continúa donde ibas.</li></ul>
@@ -1871,6 +1879,7 @@ function examReturnCheck(away) {
           event.judged = true;
           state.backPending = false;
           examStoreWrite(state);
+          if (r?.closed && examState === state) return attemptClosed(r.message);
           if (r?.locked && examState === state) showExamLock();
           else if (examState === state) toast(`Saliste del examen ${seconds} s. Quedó registrado.`);
           saveExamProgress(true).catch(() => {});

@@ -167,5 +167,30 @@ const sql = (await import('node:fs')).readFileSync('drizzle/0049_examen_sin_sena
 assert(/ALTER TABLE `aula_attempt_starts` ADD `last_seen` text;/.test(sql) && !/DROP|DELETE|UPDATE /i.test(sql.replace(/^--.*$/gm, '')));
 checks++;
 
+// ---- 12.106: al N.º bloqueo el examen se envía con lo guardado ----
+await call('docente', '/api/record', { course: c, kind: 'quiz', data: { title: 'Mal', visible: true, questions: preguntas, settings: { attempts: 1, exam: { enabled: true, lockOnLeave: true, submitAfterLocks: 11 } } } }, 400);
+const corte = await examen('Con corte', { lockOnLeave: true, lockGrace: 0, submitAfterLocks: 2 });
+assert.equal(corte.data.settings.exam.submitAfterLocks, 2);
+assert.equal((await examen('Sin bloqueo', { lockOnLeave: false, submitAfterLocks: 3 })).data.settings.exam.submitAfterLocks, 0, 'Sin bloquear al salir no hay envío por bloqueos');
+await call('fer', '/api/attempt/start', ctx(corte));
+await call('fer', '/api/attempt/progress', ctx(corte, { answers: { 0: 1, 1: 0 }, position: 0 }));
+await call('fer', '/api/attempt/away', ctx(corte));
+assert.equal((await call('fer', '/api/attempt/back', ctx(corte, { seconds: 3 }))).locked, true, '1.er bloqueo: solo se bloquea');
+const ferId = store.raw().prepare("SELECT id FROM aula_users WHERE email='fer@example.test'").get().id;
+await call('docente', '/api/exam/resume', { course: c, quiz: corte.id, user: ferId });
+await call('fer', '/api/attempt/away', ctx(corte));
+const cerrado = await call('fer', '/api/attempt/back', ctx(corte, { seconds: 3 }));
+assert.equal(cerrado.closed, true, '2.º bloqueo: se envía');
+assert.match(cerrado.message, /2\.ª vez/);
+const enviado = store.raw().prepare('SELECT * FROM aula_attempts WHERE quiz=? AND user_id=?').get(corte.id, ferId);
+assert(enviado, 'Quedó el intento enviado');
+assert.equal(enviado.score, 10, 'Se calificó con las respuestas guardadas');
+const integridad = JSON.parse(enviado.integrity);
+assert.equal(integridad.endedByLocks, true);
+assert.equal(integridad.locks, 2);
+await call('fer', '/api/attempt/progress', ctx(corte, { answers: { 0: 0 }, position: 0 }), 409);
+await call('fer', '/api/attempt', ctx(corte, { answers: { 0: 0, 1: 1 } }), 409);
+checks += 7;
+
 assert.deepEqual(store.raw().prepare('PRAGMA foreign_key_check').all(), []);
 console.log(`PASS: ${checks} verificaciones del examen sin señal — salidas en modo avión que llegan tarde y bloquean, sin doble bloqueo, salidas cortas repetidas, silencio medido por el servidor, retomar tras perder la conexión, monitor en vivo y preparar el teléfono.`);

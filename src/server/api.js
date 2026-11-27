@@ -270,6 +270,32 @@ const lockCode = () => String(crypto.getRandomValues(new Uint32Array(1))[0] % 1_
 const lockEnabled = (quiz) => Boolean(quiz.data.settings?.exam?.lockOnLeave);
 
 /** Bloquea el intento (si no lo estaba) y deja constancia en sus eventos. */
+/**
+ * 12.106: bloquea y, si con este bloqueo llega al número que fijó el docente (`exam.submitAfterLocks`), envía el
+ * intento con lo guardado. Devuelve 'closed' si lo envió; si no, true (quedó bloqueado).
+ */
+async function lockOrClose(db, quiz, user, start, seconds, reason) {
+  await lockAttempt(db, start, seconds, reason);
+  const limit = Number(quiz.data.settings?.exam?.submitAfterLocks) || 0;
+  if (!limit) return true;
+  const fresh = await one(db, 'SELECT * FROM aula_attempt_starts WHERE quiz=? AND user_id=? AND attempt=?', start.quiz, start.user_id, start.attempt);
+  if (!fresh || (fresh.locks || 0) < limit) return true;
+  let events = [];
+  try {
+    events = JSON.parse(fresh.events || '[]');
+  } catch {
+    events = [];
+  }
+  events.push({ kind: 'ended', seconds: 0, reason: `${limit}.º bloqueo`, at: nowIso() });
+  fresh.events = JSON.stringify(events.slice(-MAX_EXAM_EVENTS));
+  await run(db, 'UPDATE aula_attempt_starts SET events=? WHERE quiz=? AND user_id=? AND attempt=?', fresh.events, fresh.quiz, fresh.user_id, fresh.attempt);
+  await closeExpiredAttempt(db, quiz, user, fresh);
+  return 'closed';
+}
+
+const LOCKS_MESSAGE = (n) => `Saliste de la página y tu examen se bloqueó por ${n}.ª vez: se envió con las respuestas que tenías guardadas.`;
+const failClosedByLocks = (quiz) => fail(LOCKS_MESSAGE(quiz.data.settings.exam.submitAfterLocks), 409, { closed: true });
+
 async function lockAttempt(db, start, seconds, reason = 'salida') {
   let events = [];
   try {
@@ -309,16 +335,13 @@ function exitsSinceUnlock(start) {
   return events.slice(last + 1).filter((e) => e.kind === 'left').length;
 }
 
-async function applyLock(db, quiz, start, seconds = null) {
+async function applyLock(db, quiz, user, start, seconds = null) {
   if (!lockEnabled(quiz) || !start) return false;
   if (start.locked_at) return true;
   if (!start.away_since) return false;
   const grace = quiz.data.settings.exam.lockGrace ?? 5;
   const away = seconds ?? (Date.now() - Date.parse(start.away_since)) / 1000;
-  if (away > grace) {
-    await lockAttempt(db, start, away);
-    return true;
-  }
+  if (away > grace) return lockOrClose(db, quiz, user, start, away, 'salida');
   await run(db, 'UPDATE aula_attempt_starts SET away_since=NULL WHERE quiz=? AND user_id=? AND attempt=?', start.quiz, start.user_id, start.attempt);
   return false;
 }
@@ -392,8 +415,9 @@ async function claimDevice(db, quiz, start, user) {
     if (!start.session_id) await run(db, 'UPDATE aula_attempt_starts SET session_id=? WHERE quiz=? AND user_id=? AND attempt=?', user.sid, start.quiz, start.user_id, start.attempt);
     return;
   }
-  if (lockEnabled(quiz) && !start.locked_at) await lockAttempt(db, start, 0, 'otro dispositivo');
-  else {
+  if (lockEnabled(quiz) && !start.locked_at) {
+    if ((await lockOrClose(db, quiz, user, start, 0, 'otro dispositivo')) === 'closed') return 'closed';
+  } else {
     let events = [];
     try {
       events = JSON.parse(start.events || '[]');
@@ -1834,15 +1858,16 @@ const routes = {
       }
       // Retomar desde otra sesión o dispositivo: se registra (y con bloqueo al salir, se bloquea).
       if (exam) {
-        await claimDevice(db, quiz, start, user);
+        if ((await claimDevice(db, quiz, start, user)) === 'closed') failClosedByLocks(quiz);
         start = await one(db, 'SELECT * FROM aula_attempt_starts WHERE quiz=? AND user_id=? AND attempt=?', quiz.id, user.id, attempt);
       }
       // 12.91: retomar después de un silencio largo (cerró el navegador sin conexión, modo avión): con bloqueo al
       // salir cuenta como una salida; sin él, queda registrado. Dentro de Safe Exam Browser no hay salidas.
       const silent = exam && !start.locked_at ? silenceOf(start) : 0;
       if (silent && !(await sebVerified(quiz, request))) {
-        if (lockEnabled(quiz) && silent > (exam.lockGrace ?? 5)) await lockAttempt(db, start, silent, 'retomó tras perder la conexión');
-        else {
+        if (lockEnabled(quiz) && silent > (exam.lockGrace ?? 5)) {
+          if ((await lockOrClose(db, quiz, user, start, silent, 'retomó tras perder la conexión')) === 'closed') failClosedByLocks(quiz);
+        } else {
           await run(
             db,
             `UPDATE aula_attempt_starts SET ${APPEND_EVENTS_SQL} WHERE quiz=?1 AND user_id=?2 AND attempt=?3`,
@@ -1856,7 +1881,8 @@ const routes = {
         start = await one(db, 'SELECT * FROM aula_attempt_starts WHERE quiz=? AND user_id=? AND attempt=?', quiz.id, user.id, attempt);
       }
       // Retomar después de salir (por ejemplo, cerró el navegador): si pasó la tolerancia, queda bloqueado.
-      const locked = exam ? await applyLock(db, quiz, start) : false;
+      const locked = exam ? await applyLock(db, quiz, user, start) : false;
+      if (locked === 'closed') failClosedByLocks(quiz);
       if (exam) await run(db, 'UPDATE aula_attempt_starts SET last_seen=? WHERE quiz=? AND user_id=? AND attempt=?', nowIso(), quiz.id, user.id, attempt);
       // Al navegador no van los valores internos ni las permutaciones (`perm`, `key`): solo lo que se ve, ya en su orden.
       const questions = quizInstance(quiz, user.id, attempt).map(({ values: _v, perm: _p, key: _k, ...q }) => q);
@@ -1961,7 +1987,7 @@ const routes = {
       const verdict = lateExitVerdict(start, events, exam);
       if (verdict) {
         const fresh = await one(db, 'SELECT * FROM aula_attempt_starts WHERE quiz=? AND user_id=? AND attempt=?', quiz.id, user.id, start.attempt);
-        await lockAttempt(db, fresh, verdict.seconds, verdict.reason);
+        if ((await lockOrClose(db, quiz, user, fresh, verdict.seconds, verdict.reason)) === 'closed') failClosedByLocks(quiz);
         fail(LOCKED_MESSAGE, 423, { locked: true });
       }
     }
@@ -1988,7 +2014,9 @@ const routes = {
     }
     if (start) assertInTime(quiz, start.started);
     if (exam) assertDevice(quiz, start, user);
-    if (exam && (await applyLock(db, quiz, start))) fail(LOCKED_MESSAGE, 423, { locked: true });
+    const lockedNow = exam ? await applyLock(db, quiz, user, start) : false;
+    if (lockedNow === 'closed') failClosedByLocks(quiz);
+    if (lockedNow) fail(LOCKED_MESSAGE, 423, { locked: true });
     const instance = quizInstance(quiz, user.id, attempt);
     const graded = gradeAttempt(quiz, instance, finalAnswers(quiz, instance, start, body.answers));
     const id = attemptId(quiz.id, user.id, attempt);
@@ -2225,10 +2253,11 @@ const routes = {
     // 12.30: salidas cortas repetidas (ver otra pestaña 3 o 4 segundos, varias veces) también bloquean: a la
     // SHORT_EXITS_LOCK.ª salida desde el último desbloqueo, aunque cada una haya durado menos que la tolerancia.
     if (reported > 0 && exitsSinceUnlock(start) + 1 >= SHORT_EXITS_LOCK) {
-      await lockAttempt(db, start, Math.max(reported, measured), 'salidas repetidas');
+      if ((await lockOrClose(db, quiz, user, start, Math.max(reported, measured), 'salidas repetidas')) === 'closed') return json({ closed: true, message: LOCKS_MESSAGE(quiz.data.settings.exam.submitAfterLocks) });
       return json({ locked: true, repeated: true });
     }
-    const locked = await applyLock(db, quiz, { ...start, away_since: start.away_since || nowIso() }, Math.max(reported, measured));
+    const locked = await applyLock(db, quiz, user, { ...start, away_since: start.away_since || nowIso() }, Math.max(reported, measured));
+    if (locked === 'closed') return json({ closed: true, message: LOCKS_MESSAGE(quiz.data.settings.exam.submitAfterLocks) });
     return json({ locked });
   },
 
