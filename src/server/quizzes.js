@@ -302,9 +302,14 @@ const SEB_KEY = /^[0-9a-f]{64}$/;
 /** `{ seb: { required, keys } }` si la evaluación exige Safe Exam Browser. */
 function sebFields(input) {
   if (!input || input.required !== true) return {};
+  // 12.107: `devices` = en qué equipos se exige ('ios', 'computer', 'android'); sin la llave, en todos.
+  let devices = Array.isArray(input.devices) ? [...new Set(input.devices.map(String))].filter((d) => ['ios', 'computer', 'android'].includes(d)) : null;
+  if (devices && !devices.length) fail('Elige al menos un tipo de equipo en el que se exige Safe Exam Browser.');
+  if (devices?.length === 3) devices = null;
+  const only = devices ? { devices: ['ios', 'computer', 'android'].filter((d) => devices.includes(d)) } : {};
   const keys = [...new Set((Array.isArray(input.keys) ? input.keys : String(input.keys ?? '').split(/[\s,;]+/)).map((k) => String(k).trim().toLowerCase()).filter(Boolean))];
   if (keys.length > 10 || keys.some((k) => !SEB_KEY.test(k))) fail('Cada llave de Safe Exam Browser tiene 64 caracteres hexadecimales (0-9 y a-f). Puedes pegar hasta 10, o dejarlo vacío para usar la configuración de Enlace.');
-  return { seb: { required: true, ...(keys.length ? { keys } : {}) } };
+  return { seb: { required: true, ...only, ...(keys.length ? { keys } : {}) } };
 }
 
 // ---- Modo examen ---------------------------------------------------------------------------------
@@ -358,6 +363,7 @@ export function publicSettings(settings) {
   const { startCode, seb, ...rest } = settings;
   // Safe Exam Browser: el alumno sabe que se exige, no las llaves.
   if (seb) rest.needsSeb = true;
+  if (seb?.devices) rest.sebDevices = seb.devices;
   if (!rest.exam) return startCode ? { ...rest, needsCode: true } : rest;
   const { password, place, ...exam } = rest.exam;
   return { ...rest, ...(startCode || password ? { needsCode: true } : {}), exam: { ...exam, needsPassword: Boolean(startCode || password), checksLocation: Boolean(place) } };

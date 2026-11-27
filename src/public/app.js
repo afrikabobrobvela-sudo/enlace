@@ -62,13 +62,18 @@ function toast(t) {
   clearTimeout(window.toastTimer);
   window.toastTimer = setTimeout(() => $('#toast').style.display = 'none', 5000);
 }
+// 12.107: iPhone/iPad (también con «Solicitar sitio de escritorio», que se anuncia como Mac pero es táctil). Lo usa
+// «Exigir Safe Exam Browser solo en iPhone y iPad»; el servidor además mira el User-Agent.
+const appleTouchDevice = () => /iPhone|iPad|iPod/i.test(navigator.userAgent || '') || (/Macintosh|MacIntel/.test(navigator.userAgent + ' ' + (navigator.platform || '')) && navigator.maxTouchPoints > 1);
+const deviceHeaders = () => (appleTouchDevice() ? { 'X-Enlace-Ios': '1' } : {});
+
 async function request(path, data, method = 'POST') {
   if (previewAsStudent && data !== undefined && path.startsWith('/api/'))
     throw new Error(PREVIEW_READONLY);
   const r = await fetch(path, {
     method: data === undefined ? 'GET' : method,
     credentials: 'same-origin',
-    headers: data === undefined ? {} : { 'Content-Type': 'application/json', 'X-Aula-Request': '1' },
+    headers: data === undefined ? {} : { 'Content-Type': 'application/json', 'X-Aula-Request': '1', ...deviceHeaders() },
     body: data === undefined ? undefined : JSON.stringify(data)
   });
   const b = await r.json();

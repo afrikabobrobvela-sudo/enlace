@@ -295,6 +295,28 @@ assert.equal((await worker.fetch(new Request(`https://t.local/seb/${tipos.id}.se
 assert.equal((await worker.fetch(new Request('https://t.local/seb/no-existe.seb'), env)).status, 404);
 checks += 4;
 
+// ---- 12.107: Safe Exam Browser solo en iPhone y iPad ------------------------------------------------
+const soloIos = await saveQuiz({ title: 'SEB solo iPhone', questions: [mixed[1]], settings: { seb: { required: true, devices: ['ios'] }, exam: { enabled: true, lockOnLeave: true, lockGrace: 0 } } });
+assert.deepEqual((await call('docente', '/api/course?id=' + c)).records.find((r) => r.id === soloIos.id).data.settings.seb, { required: true, devices: ['ios'] });
+const vistoIos = (await call('eva', '/api/course?id=' + c)).records.find((r) => r.id === soloIos.id).data.settings;
+ok(vistoIos.needsSeb === true && vistoIos.sebDevices.join() === 'ios', 'El alumno sabe que se exige SEB solo en iPhone y iPad');
+const iphone = { 'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Version/18.0 Mobile/15E148 Safari/604.1' };
+const android = { 'User-Agent': 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 Chrome/130.0 Mobile Safari/537.36' };
+assert.equal((await call('ana', '/api/attempt/start', { course: c, quiz: soloIos.id }, 403, iphone)).needsSeb, true, 'iPhone en Safari: no puede empezar');
+assert.equal((await call('luis', '/api/attempt/start', { course: c, quiz: soloIos.id }, 403, { 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Safari/605.1.15', 'X-Enlace-Ios': '1' })).needsSeb, true, 'iPhone con «sitio de escritorio» (se anuncia como Mac): tampoco');
+const evaStart = await call('eva', '/api/attempt/start', { course: c, quiz: soloIos.id }, 200, android);
+await call('eva', '/api/attempt/away', { course: c, quiz: soloIos.id, attempt: evaStart.attempt }, 200, android);
+assert.equal((await call('eva', '/api/attempt/back', { course: c, quiz: soloIos.id, attempt: evaStart.attempt, seconds: 3 }, 200, android)).locked, true, 'En Android presenta normal y las salidas sí bloquean');
+// Solo en computadoras: la computadora sin SEB no empieza; el iPhone sí. Los tres equipos = a todos (sin `devices`).
+const soloPc = await saveQuiz({ title: 'SEB solo computadora', questions: [mixed[1]], settings: { seb: { required: true, devices: ['computer'] } } });
+const pc = { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/130.0 Safari/537.36' };
+assert.equal((await call('luis', '/api/attempt/start', { course: c, quiz: soloPc.id }, 403, pc)).needsSeb, true, 'Computadora sin SEB: no puede empezar');
+await call('ana', '/api/attempt/start', { course: c, quiz: soloPc.id }, 200, iphone);
+await saveQuiz({ title: 'SEB sin equipos', questions: [mixed[1]], settings: { seb: { required: true, devices: [] } } }, 400);
+const todos = await saveQuiz({ title: 'SEB en todos', questions: [mixed[1]], settings: { seb: { required: true, devices: ['android', 'ios', 'computer'] } } });
+assert.deepEqual(todos.data.settings.seb, { required: true }, 'Marcar los tres equipos es exigirlo a todos');
+checks += 10;
+
 // ---- 12.31: resumen del monitor (quién terminó, con qué calificación, y quién no ha empezado) ------------
 const resumen = await call('docente', `/api/exam/monitor?course=${c}&quiz=${parcial.id}`);
 const anaRow = resumen.finished.find((r) => r.name === 'ana');
