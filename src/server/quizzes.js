@@ -312,6 +312,7 @@ function sebFields(input) {
 export const EXAM_RADII = [100, 150, 300, 500];
 // Bloqueo al salir: segundos fuera de la página que se toleran (una notificación, un toque sin querer).
 export const LOCK_GRACES = [0, 5, 15, 30];
+export const MAX_SUBMIT_AFTER_LOCKS = 10;
 export const MAX_UNLOCK_FAILURES = 5;
 export const MAX_PASSWORD_FAILURES = 10;
 // 12.91: 'offline' = el navegador estuvo sin conexión (por ejemplo, modo avión). El servidor agrega por su cuenta
@@ -337,11 +338,15 @@ function examFields(input) {
   const oneByOne = input.oneByOne === true;
   const lockOnLeave = input.lockOnLeave === true;
   const lockGrace = LOCK_GRACES.includes(Number(input.lockGrace)) ? Number(input.lockGrace) : 5;
+  // 12.106: al N.º bloqueo el examen se envía con lo guardado (0 = nunca; 3 por omisión en el editor).
+  const submitAfterLocks = Number(input.submitAfterLocks ?? 0);
+  if (!Number.isInteger(submitAfterLocks) || submitAfterLocks < 0 || submitAfterLocks > MAX_SUBMIT_AFTER_LOCKS) fail(`El envío por bloqueos debe ser de 1 a ${MAX_SUBMIT_AFTER_LOCKS} (o nunca).`);
   // lockPlatform: mientras contesta, Enlace solo le responde el examen (ni otros cursos ni materiales).
   // prepareDevice (12.91): antes de empezar, el alumno confirma que activó «No molestar» y fijó la pantalla.
   // requireAnswer (12.95): con una pregunta a la vez, no puede avanzar ni enviar sin contestar la que tiene en pantalla.
   return {
     enabled: true, password, oneByOne, noBack: oneByOne && input.noBack === true, requireAnswer: oneByOne && input.requireAnswer === true, place, lockOnLeave, lockGrace: lockOnLeave ? lockGrace : 0,
+    submitAfterLocks: lockOnLeave ? submitAfterLocks : 0,
     lockPlatform: input.lockPlatform === true, prepareDevice: input.prepareDevice !== false,
   };
 }
@@ -427,6 +432,8 @@ export function integritySummary(start) {
     copyAttempts: events.filter((e) => e.kind === 'copy').length,
     captures: events.filter((e) => e.kind === 'capture').length,
     locks: events.filter((e) => e.kind === 'locked').length,
+    // 12.106: se envió solo al llegar al número de bloqueos que fijó el docente.
+    endedByLocks: events.some((e) => e.kind === 'ended'),
     flag: start.flag || '',
     distance: start.distance ?? null,
     events: events.slice(-50),
