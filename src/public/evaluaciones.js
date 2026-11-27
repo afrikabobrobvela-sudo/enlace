@@ -25,7 +25,10 @@ function quizSettingsText(settings) {
   if (settings.results?.releaseAt && Date.parse(settings.results.releaseAt) > Date.now()) parts.push(`resultados a partir del ${fmt(settings.results.releaseAt)}`);
   if (settings.exam?.enabled) parts.push(`modo examen${settings.exam.oneByOne ? (settings.exam.noBack ? ', una pregunta a la vez sin regresar' : ', una pregunta a la vez') : ''}`);
   if (settings.perPage && !settings.exam?.oneByOne) parts.push(`${settings.perPage} ${settings.perPage === 1 ? 'pregunta' : 'preguntas'} por página`);
-  if (settings.seb || settings.needsSeb) parts.push((settings.seb?.only || settings.sebOnly) === 'ios' ? 'en iPhone y iPad, solo en Safe Exam Browser' : 'solo en Safe Exam Browser');
+  if (settings.seb || settings.needsSeb) {
+    const devices = settings.seb?.devices || settings.sebDevices;
+    parts.push(devices ? `solo en Safe Exam Browser en ${sebDevicesText(devices)}` : 'solo en Safe Exam Browser');
+  }
   return parts.join(' · ');
 }
 
@@ -426,7 +429,7 @@ function quizModal(old) {
             closesAt: iso(f.get('closesAt')),
             timerMode: f.get('timerFixed') === 'on' ? 'fixed' : 'attempt',
             perPage: Number(f.get('perPage') || 0),
-            seb: f.get('seb') === 'on' ? { required: true, keys: String(f.get('sebKeys') || ''), ...(f.get('sebOnly') === 'ios' ? { only: 'ios' } : {}) } : null,
+            seb: f.get('seb') === 'on' ? { required: true, keys: String(f.get('sebKeys') || ''), devices: f.getAll('sebDevice').map(String) } : null,
             results: { score: f.get('showScore') === 'on', review: f.get('showReview') === 'on' ? 'marks' : 'none', releaseAt: iso(f.get('releaseAt')) },
             exam: readExamSettings(f),
           },
@@ -456,8 +459,15 @@ const SEB_DOWNLOAD = 'https://safeexambrowser.org/download_en.html';
 
 const isAndroid = () => /Android/i.test(navigator.userAgent || '');
 const isIOS = () => appleTouchDevice();
-/** ¿A este alumno, en este equipo, se le exige SEB? (12.107: la evaluación puede pedirlo solo en iPhone y iPad) */
-const sebNeededHere = (settings) => Boolean(settings?.needsSeb) && (settings.sebOnly !== 'ios' || isIOS());
+/** Tipo de equipo, con la misma regla que `deviceOf()` del servidor. */
+const deviceKind = () => (isIOS() ? 'ios' : isAndroid() ? 'android' : 'computer');
+const SEB_DEVICE_NAMES = { ios: 'iPhone y iPad', computer: 'computadoras', android: 'Android' };
+const sebDevicesText = (devices) => {
+  const names = devices.map((d) => SEB_DEVICE_NAMES[d]).filter(Boolean);
+  return names.length > 1 ? `${names.slice(0, -1).join(', ')} y ${names.at(-1)}` : names[0] || '';
+};
+/** ¿A este alumno, en este equipo, se le exige SEB? (12.107: la evaluación puede pedirlo solo en algunos equipos) */
+const sebNeededHere = (settings) => Boolean(settings?.needsSeb) && (!settings.sebDevices || settings.sebDevices.includes(deviceKind()));
 
 /** Aviso para el alumno fuera de SEB (12.30): el botón, dónde descargarlo y qué hacer en un teléfono Android. */
 function sebRequiredHtml(quizId) {
@@ -494,7 +504,15 @@ function sebSettingsHtml(seb) {
   return `<fieldset class="quiz-settings"><legend>Safe Exam Browser</legend>
     <label class="check-label"><input type="checkbox" name="seb" ${seb?.required ? 'checked' : ''}> Exigir Safe Exam Browser: solo se puede empezar, guardar y enviar desde él</label>
     <div class="seb-options" ${seb?.required ? '' : 'hidden'}>
-      <label>¿A quién se le exige?<select name="sebOnly"><option value="">A todos (computadora, iPhone y iPad; en Android no existe)</option><option value="ios" ${seb?.only === 'ios' ? 'selected' : ''}>Solo en iPhone y iPad (Android y computadora presentan normal)</option></select></label>
+      <fieldset class="seb-devices"><legend>¿En qué equipos se exige?</legend>
+        ${[
+          ['ios', 'iPhone y iPad'],
+          ['computer', 'Computadoras (Windows y Mac)'],
+          ['android', 'Android: no pueden presentar (Safe Exam Browser no existe para Android)'],
+        ]
+          .map(([value, label]) => `<label class="check-label"><input type="checkbox" name="sebDevice" value="${value}" ${!seb?.devices || seb.devices.includes(value) ? 'checked' : ''}> ${label}</label>`)
+          .join('')}
+        <small class="muted">En los equipos sin marcar se presenta normal, con las demás protecciones del modo examen.</small></fieldset>
       <p class="muted">No necesitas preparar nada: Enlace arma la configuración. Tus alumnos (con Safe Exam Browser instalado) tocan <b>«Abrir en Safe Exam Browser»</b> en la evaluación y se abre ahí directamente; desde otro navegador no pueden empezar.</p>
       <p class="warning-note"><b>Google Assistant, Gemini y dictado:</b> una página abierta en Chrome, Safari o Android no puede detectar de forma fiable estas herramientas del sistema. Para una evaluación controlada exige Safe Exam Browser y supervisión; tampoco es posible detectar otro teléfono.</p>
       <details${seb?.keys?.length ? ' open' : ''}><summary>Avanzado: aceptar también mi propio archivo .seb</summary>
@@ -726,7 +744,7 @@ function renderQuiz() {
     const toReview = attempts.filter((a) => inSelectedSection(memberOfAuthor(a.author))).reduce((n, a) => n + (a.data.pending || 0), 0);
     const total = quizTotalPoints(q.data.questions, new Map((settings.draw || []).map((d) => [d.pool, d.count])));
     const sebInfo = settings.seb?.required
-      ? `<p class="real-status">Exige <b>Safe Exam Browser</b>${settings.seb.only === 'ios' ? ' <b>solo en iPhone y iPad</b> (Android y computadora presentan normal)' : ''}: tus alumnos ven el botón «Abrir en Safe Exam Browser». <a href="${esc(sebLink(q.id))}">Probarlo aquí</a> · <a href="/seb/${esc(q.id)}.seb" download>Descargar la configuración (.seb)</a></p>`
+      ? `<p class="real-status">Exige <b>Safe Exam Browser</b>${settings.seb.devices ? ` <b>en ${esc(sebDevicesText(settings.seb.devices))}</b> (los demás equipos presentan normal)` : ''}: tus alumnos ven el botón «Abrir en Safe Exam Browser». <a href="${esc(sebLink(q.id))}">Probarlo aquí</a> · <a href="/seb/${esc(q.id)}.seb" download>Descargar la configuración (.seb)</a></p>`
       : '';
     $('#main').innerHTML = `${head}<p class="quiz-meta">${total.exact ? '' : 'Aprox. '}${total.total} ${total.total === 1 ? 'punto' : 'puntos'} por alumno.</p>${sebInfo}<div class="toolbar">${button('Editar evaluación', 'edit-quiz', q.id, 'secondary')}<button class="secondary" type="button" data-quiz-preview="${esc(q.id)}">Vista previa</button>${specialAccessButton('quiz', q.id)}${
       essays ? `<button class="${toReview ? 'primary' : 'secondary'}" type="button" data-essay-review="${esc(q.id)}">Revisar respuestas escritas${toReview ? ` (${toReview} por calificar)` : ''}</button>` : ''

@@ -5,11 +5,12 @@ No es el código de D2L Brightspace ni una plataforma oficial de ninguna institu
 
 Esta versión se despliega en **tu propia cuenta de Cloudflare** (Workers + D1 + R2, plan gratuito) y ya no depende de ChatGPT Sites.
 
-## Novedades de la versión 12.107 (Safe Exam Browser solo en iPhone y iPad)
+## Novedades de la versión 12.107 (Safe Exam Browser por tipo de equipo)
 
-- En la configuración de la evaluación, al marcar «Exigir Safe Exam Browser» aparece «¿A quién se le exige?»: **A todos** (como antes) o **Solo en iPhone y iPad**. Con la segunda, quien entra desde un iPhone o iPad (también con «Solicitar sitio de escritorio» en Safari) no puede empezar fuera de Safe Exam Browser y ve el botón «Abrir en Safe Exam Browser»; en Android y computadora se presenta normal, con el bloqueo al salir y lo demás.
-- Es una medida disuasiva: la detección usa lo que anuncia el navegador. Un alumno con iPhone puede presentar desde una computadora o un Android, que tienen las protecciones normales.
-- Avisa a tus alumnos con iPhone que instalen Safe Exam Browser (gratis en la App Store) antes del examen.
+- En la configuración de la evaluación, al marcar «Exigir Safe Exam Browser» aparece «¿En qué equipos se exige?» con tres casillas: **iPhone y iPad**, **Computadoras (Windows y Mac)** y **Android** (como Safe Exam Browser no existe para Android, marcarla significa que desde Android no se puede presentar). Las tres marcadas = a todos, como antes.
+- En un equipo marcado, el alumno no puede empezar fuera de Safe Exam Browser y ve el botón «Abrir en Safe Exam Browser» (en iPhone también con «Solicitar sitio de escritorio»). En los equipos sin marcar se presenta normal, con el bloqueo al salir y lo demás.
+- Es disuasivo: la detección usa lo que anuncia el navegador, y un alumno puede presentar desde otro tipo de equipo que no tenga marcado.
+- Avisa a tus alumnos que instalen Safe Exam Browser (gratis) antes del examen en los equipos donde lo exijas.
 
 ## Novedades de la versión 12.106 (enviar el examen al N.º bloqueo)
 

@@ -92,7 +92,16 @@ export function sebPlist(settings) {
 export const fromAppleTouch = (request) => /iPhone|iPad|iPod/i.test(request.headers.get('User-Agent') || '') || request.headers.get('X-Enlace-Ios') === '1';
 
 /** ¿Esta evaluación le exige SEB a esta solicitud? (todas, o solo las de iPhone y iPad) */
-const sebApplies = (seb, request) => Boolean(seb?.required) && (seb.only !== 'ios' || fromAppleTouch(request));
+export const SEB_DEVICES = ['ios', 'computer', 'android'];
+
+/** Tipo de equipo de la solicitud: 'ios' (iPhone/iPad), 'android' o 'computer'. */
+export function deviceOf(request) {
+  if (fromAppleTouch(request)) return 'ios';
+  return /Android/i.test(request.headers.get('User-Agent') || '') ? 'android' : 'computer';
+}
+
+/** ¿Esta evaluación le exige SEB a esta solicitud? Sin `devices`, a todos (como antes de 12.107). */
+const sebApplies = (seb, request) => Boolean(seb?.required) && (!seb.devices || seb.devices.includes(deviceOf(request)));
 
 export async function sebAllows(quiz, request) {
   const seb = quiz.data.settings?.seb;
