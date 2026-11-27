@@ -141,12 +141,20 @@ function renderTestStudentBar() {
   bar.innerHTML = `<span><strong>Alumno de prueba.</strong> Ves y haces todo como un alumno de este curso; lo que hagas se guarda.</span>
     <button type="button" class="secondary" data-test-return>${info.canReturn ? 'Volver a mi cuenta' : 'Salir'}</button>`;
   bar.querySelector('[data-test-return]').onclick = async (e) => {
-    e.currentTarget.disabled = true;
+    const button = e.currentTarget;
+    // 12.105: la barra sigue a la vista durante un examen (antes se ocultaba y la cuenta de prueba quedaba atrapada
+    // hasta que terminaba el tiempo). El intento queda en curso: se cierra desde el monitor o se reinicia la cuenta.
+    if (typeof examState !== 'undefined' && examState) {
+      const ok = await examConfirm('Vas a salir del alumno de prueba con el examen sin enviar. El intento queda en curso: puedes retomarlo, cerrarlo desde el monitor o reiniciar el alumno de prueba.', 'Salir');
+      if (!ok) return;
+      stopExam();
+    }
+    button.disabled = true;
     try {
       const r = await testStudentCall('/auth/prueba/volver', {});
       reopenCourse(r.relogin ? null : r.course);
     } catch (error) {
-      e.currentTarget.disabled = false;
+      button.disabled = false;
       toast(error.message);
     }
   };

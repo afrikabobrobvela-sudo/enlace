@@ -1,9 +1,13 @@
-# Enlace · versión 12.104
+# Enlace · versión 12.105
 
 Plataforma académica independiente para docentes y alumnos de cualquier academia (nació en una academia de Física), con interfaz inspirada en Brightspace.
 No es el código de D2L Brightspace ni una plataforma oficial de ninguna institución.
 
 Esta versión se despliega en **tu propia cuenta de Cloudflare** (Workers + D1 + R2, plan gratuito) y ya no depende de ChatGPT Sites.
+
+## Novedades de la versión 12.105 (salir del alumno de prueba durante un examen)
+
+- La barra amarilla del alumno de prueba ya no se oculta durante un examen: «Volver a mi cuenta» funciona en cualquier momento (antes la cuenta de prueba quedaba atrapada en el examen hasta que acababa el tiempo). Antes de salir pregunta; el intento queda en curso y se puede retomar, cerrar desde el monitor («Cerrar y calificar») o borrar con «Reiniciar» del alumno de prueba.
 
 ## Novedades de la versión 12.104 (sin seleccionar texto y examen tapado al salir)
 

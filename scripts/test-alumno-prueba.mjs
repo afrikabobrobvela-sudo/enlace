@@ -177,6 +177,8 @@ assert.equal((await authAs(jar(valueOf(docente), valueOf(docente)), '/auth/prueb
 checks += 1;
 // Desde la cuenta de una persona real, la cookie guardada no sirve para entrar como otra (la API la ignora).
 assert.equal((await apiAs(jar(valueOf(await login('ana')), valueOf(docente)), '/api/me')).email, 'ana@example.test');
+assert.equal((await call('ana', '/api/me')).testStudent, null, 'Un alumno real no recibe testStudent: su interfaz no muestra la barra del alumno de prueba');
+assert.equal((await call('docente', '/api/me')).testStudent, null, 'Quien enseña tampoco');
 checks += 1;
 
 // ---- Otro dispositivo: enlace de un solo uso, que nunca regresa a la cuenta de docente ----
