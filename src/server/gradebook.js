@@ -81,7 +81,7 @@ export function categoryGradeRecord(row) {
   return {
     id: row.id,
     course: row.course,
-    kind: 'category-grade',
+    kind: row.kind === 'grade-override' ? 'grade-override' : 'category-grade',
     author: row.author,
     revision: row.revision,
     created: row.created,
@@ -205,18 +205,18 @@ export async function courseGradebook(db, course, { teacher, userId, memberId = 
     ? await all(
         db,
         `SELECT r.* FROM aula_records r
-         JOIN aula_grade_categories c ON c.id=json_extract(r.data,'$.category') AND c.course=r.course
+         LEFT JOIN aula_grade_categories c ON c.id=json_extract(r.data,'$.category') AND c.course=r.course
          JOIN aula_members m ON m.id=json_extract(r.data,'$.member') AND m.course=r.course AND m.role='student'
-         WHERE r.course=? AND r.kind='category-grade' ORDER BY r.created`,
+         WHERE r.course=? AND (r.kind='grade-override' OR (r.kind='category-grade' AND c.id IS NOT NULL)) ORDER BY r.created`,
         course,
       )
     : who
       ? await all(
           db,
           `SELECT r.* FROM aula_records r
-           JOIN aula_grade_categories c ON c.id=json_extract(r.data,'$.category') AND c.course=r.course
+           LEFT JOIN aula_grade_categories c ON c.id=json_extract(r.data,'$.category') AND c.course=r.course
            JOIN aula_members m ON m.id=json_extract(r.data,'$.member') AND m.course=r.course AND m.role='student'
-           WHERE r.course=?1 AND r.kind='category-grade' AND ${memberId ? 'm.id=?2' : 'm.user_id=?2'} ORDER BY r.created`,
+           WHERE r.course=?1 AND (r.kind='grade-override' OR (r.kind='category-grade' AND c.id IS NOT NULL)) AND ${memberId ? 'm.id=?2' : 'm.user_id=?2'} ORDER BY r.created`,
           course,
           who,
         )

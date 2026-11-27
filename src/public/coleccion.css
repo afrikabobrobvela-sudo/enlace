@@ -1203,3 +1203,10 @@ body.exam-running #quizAttempt :is(input, textarea, [contenteditable="true"]) { 
 /* …y al perder el foco se tapa, para que la miniatura de pestañas o aplicaciones recientes no muestre la pregunta. */
 body.exam-covered #main { visibility: hidden; }
 body.exam-covered::after { content: 'Examen en curso · vuelve a esta página para continuar'; position: fixed; inset: 0; display: grid; place-items: center; padding: 24px; text-align: center; background: var(--surface, #fff); color: var(--ink); font-weight: 600; z-index: 9999; }
+
+/* 12.112: casillas que sustituyen un cálculo (evaluación, parcial, final): mismo aspecto que la captura de un rubro. */
+.override-input { display: block; width: 4.8em; margin: 0 auto; padding: 6px; text-align: right; font-variant-numeric: tabular-nums; }
+.override-input.is-saving { background: #f7fbfd; }
+.override-input.is-error { border-color: #b42318; box-shadow: 0 0 0 2px rgba(180, 35, 24, 0.15); }
+.gradebook td.gb-fail .override-input, .gradebook td.gb-pass .override-input, .gradebook td.grade-low .override-input, .gradebook td.grade-pass .override-input { background: rgba(255, 255, 255, 0.7); }
+@media (max-width: 720px) { .override-input { min-height: 44px; } }

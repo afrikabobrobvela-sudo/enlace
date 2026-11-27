@@ -259,4 +259,28 @@ run('removeDraftTerm(draft, 2)');
 assert(JSON.parse(run('JSON.stringify(draft.categories)')).some((x) => x.name === 'Tareas (Parcial 3)' && !x.term));
 checks += 15;
 
+// ---- 12.112: capturas manuales que sustituyen un cálculo (evaluación, parcial, final) ----
+{
+  const datos = await course();
+  const ana = datos.members.find((m) => m.role === 'student');
+  const term = (await grading()).data.terms[0].id;
+  await call('ana', '/api/grades/override', { course: c, target: 'final', member: ana.id, grade: 8 }, 403);
+  await call('docente', '/api/grades/override', { course: c, target: 'otro', member: ana.id, grade: 8 }, 400);
+  await call('docente', '/api/grades/override', { course: c, target: 'term', ref: 'no-existe', member: ana.id, grade: 8 }, 404);
+  await call('docente', '/api/grades/override', { course: c, target: 'quiz', ref: 'no-existe', member: ana.id, grade: 8 }, 404);
+  await call('docente', '/api/grades/override', { course: c, target: 'final', member: ana.id, grade: 11 }, 400);
+  const fin = await call('docente', '/api/grades/override', { course: c, target: 'final', member: ana.id, grade: 8 });
+  assert.equal(fin.kind, 'grade-override');
+  await call('docente', '/api/grades/override', { course: c, target: 'term', ref: term, member: ana.id, grade: 6 });
+  await call('docente', '/api/grades/override', { course: c, target: 'quiz', ref: quiz.id, member: ana.id, grade: 9.5 });
+  const vistos = (await course()).records.filter((r) => r.kind === 'grade-override');
+  assert.equal(vistos.length, 3, 'Quien enseña recibe las tres capturas');
+  const propias = (await call('ana', '/api/course?id=' + c)).records.filter((r) => r.kind === 'grade-override');
+  assert.equal(propias.length, 3, 'El alumno recibe las suyas');
+  await call('docente', '/api/grades/override', { course: c, target: 'final', member: ana.id, grade: 7 }, 409); // sin la revisión
+  await call('docente', '/api/grades/override', { course: c, target: 'final', member: ana.id, revision: fin.revision, grade: null });
+  assert.equal((await course()).records.filter((r) => r.kind === 'grade-override').length, 2, 'Vaciar la casilla vuelve al cálculo');
+  checks += 4;
+}
+
 console.log(`PASS: ${checks} verificaciones de la 12.26 — parciales con peso en la final, categorías por parcial y de toda la materia, distribución y calificaciones que no cuentan, evaluaciones y foros enlazados desde el libro, y la categoría en el editor de la actividad.`);

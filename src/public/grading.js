@@ -29,7 +29,7 @@ function orderedTasks(tasks = records('task')) {
  * Calificación de un alumno. Con final = true y la regla activa, las actividades vencidas sin calificar valen 0;
  * si no, se excluye lo no calificado y se normalizan los pesos restantes (como siempre en Enlace).
  */
-function computeGrade({ tasks, grades, settings, weights, attendancePercent = null, now = Date.now(), final = false, dueOf = (task) => task.data.due, quizzes = [], quizGrades = new Map(), categoryGrades = new Map() }) {
+function computeGrade({ tasks, grades, settings, weights, attendancePercent = null, now = Date.now(), final = false, dueOf = (task) => task.data.due, quizzes = [], quizGrades = new Map(), categoryGrades = new Map(), termGrades = new Map() }) {
   // Evaluaciones que cuentan (12.14): solo con categorías; entran a su categoría con sus puntos y la calificación
   // del intento que marque su regla. Sin intento no cuentan (no tienen fecha de entrega que las haga vencer).
   const zeroMissing = final && settings.final.missingAsZero;
@@ -88,9 +88,11 @@ function computeGrade({ tasks, grades, settings, weights, attendancePercent = nu
     // examen, no se promedia como si sus rubros vacíos valieran 0 (12.44). `partial` es lo que lleva de lo calificado.
     const termList = (settings.terms || []).map((term) => {
       const own = categories.filter((c) => c.term === term.id);
-      const complete = own.length > 0 && own.every((c) => c.value !== null || c.source === 'attendance');
-      const full = weighted(own, true);
-      return { id: term.id, name: term.name, weight: term.weight, value: final || complete ? full : null, partial: full, complete };
+      // 12.112: una calificación del parcial capturada a mano sustituye su cálculo (y lo da por completo).
+      const manual = termGrades.has(term.id) ? Number(termGrades.get(term.id)) : null;
+      const complete = manual !== null || (own.length > 0 && own.every((c) => c.value !== null || c.source === 'attendance'));
+      const full = manual ?? weighted(own, true);
+      return { id: term.id, name: term.name, weight: term.weight, value: final || complete ? full : null, partial: full, complete, manual: manual !== null, automatic: weighted(own, true) };
     });
     const known = new Set(termList.map((t) => t.id));
     const general = categories.filter((c) => !c.term || !known.has(c.term));
@@ -191,6 +193,8 @@ function finalGrade(value, rules) {
  */
 function courseFinalGrade(result, rules) {
   if (!result) return null;
+  // 12.112: la final capturada a mano manda sobre el cálculo.
+  if (result.finalOverride !== null && result.finalOverride !== undefined) return finalGrade(result.finalOverride, rules);
   const terms = result.terms || [];
   const termIds = new Set(terms.map((term) => term.id));
   const generalCategories = (result.categories || []).filter((category) => !category.term || !termIds.has(category.term));
@@ -268,6 +272,17 @@ const secondChancesOf = (quizId) => records('quiz').filter((q) => q.data.grade?.
 
 /** Calificación de la evaluación para el alumno; con segunda oportunidad, la mejor entre la original y la(s) nueva(s). */
 function quizScore(quiz, memberId) {
+  const manual = gradeOverrideOf('quiz', quiz.id, memberId);
+  if (manual) return Number(manual.data.grade);
+  return quizAutoScore(quiz, memberId);
+}
+
+/** Calificación capturada a mano (12.112) que sustituye un cálculo: `quiz` (ref = evaluación), `term` (ref = parcial) o `final`. */
+const gradeOverrideOf = (target, ref, memberId) =>
+  records('grade-override').find((r) => r.data.target === target && r.data.ref === (ref || '') && r.data.member === memberId);
+
+/** Lo que calcula la evaluación sola (mejor de la original y sus segundas oportunidades), sin captura manual. */
+function quizAutoScore(quiz, memberId) {
   const own = quizOwnScore(quiz, memberId);
   const others = secondChancesOf(quiz.id).map((q) => quizOwnScore(q, memberId)).filter((x) => x !== null);
   const all = [own, ...others].filter((x) => x !== null);
@@ -300,7 +315,7 @@ function studentGrade(memberId, { final = false } = {}) {
   const member = current.members.find((m) => m.id === memberId);
   const tasks = records('task').filter((t) => itemApplies(t, member));
   const quizzes = countedQuizzes().filter((q) => itemApplies(q, member));
-  return computeGrade({
+  const result = computeGrade({
     quizzes,
     quizGrades: new Map(quizzes.map((q) => [q.id, quizScore(q, memberId)])),
     tasks,
@@ -309,9 +324,12 @@ function studentGrade(memberId, { final = false } = {}) {
     weights: records('weights')[0]?.data.weights,
     attendancePercent: attendancePercentFor(memberId),
     categoryGrades: new Map(records('category-grade').filter((r) => r.data.member === memberId).map((r) => [r.data.category, r.data.grade])),
+    termGrades: new Map(records('grade-override').filter((r) => r.data.target === 'term' && r.data.member === memberId).map((r) => [r.data.ref, r.data.grade])),
     final,
     dueOf: (task) => dueFor(task, memberId),
   });
+  const finalOverride = gradeOverrideOf('final', '', memberId);
+  return finalOverride ? { ...result, finalOverride: Number(finalOverride.data.grade) } : result;
 }
 
 const formatGrade = (value, decimals = 2) => (value === null || value === undefined ? '—' : Number(value).toFixed(decimals));
@@ -886,6 +904,82 @@ function categoryGradeCellHtml(category, member, value) {
     <small class="${manual ? 'manual-grade-tag' : 'category-grade-hint'}">${manual ? `${categoryPoints(category.id, manual.data.grade)} de ${max} · Manual${rawAuto === null ? '' : ` · automático: ${rawText} de ${max}`}` : `Automático: ${rawAuto === null ? '—' : `${rawText} de ${max}`}`}</small></td>`;
 }
 
+// ---- Capturas manuales que sustituyen un cálculo (12.112): evaluación, parcial y final ----------------------
+const OVERRIDE_NAMES = { quiz: 'la evaluación', term: 'el parcial', final: 'la calificación final' };
+
+/** Casilla editable: vacía usa el cálculo (que se ve tenue); con un número, ese número manda. */
+function overrideCellHtml(target, ref, member, automatic, { digits = 2, label = '', tdClass = '', shown = null, note = '' } = {}) {
+  const manual = gradeOverrideOf(target, ref, member.id);
+  const autoText = automatic === null || automatic === undefined ? '—' : formatGrade(automatic, digits);
+  const value = shown ?? (manual ? Number(manual.data.grade) : automatic);
+  if (!teaches()) return `<td class="${tdClass} ${gradeToneClass(value)}">${value === null || value === undefined ? '—' : formatGrade(value, digits)}${note}</td>`;
+  return `<td class="${tdClass} category-grade-cell ${manual ? 'is-manual' : ''} ${gradeToneClass(value)}">
+    <input class="override-input" type="number" min="0" max="10" step="0.01" inputmode="decimal" value="${esc(manual?.data.grade ?? '')}" placeholder="${esc(autoText)}"
+      data-ov-target="${esc(target)}" data-ov-ref="${esc(ref || '')}" data-ov-member="${esc(member.id)}"
+      aria-label="Calificación manual de ${esc(label || OVERRIDE_NAMES[target])} para ${esc(member.name)}" title="Escribe una calificación para sustituir el cálculo; deja vacío para volver al cálculo">
+    ${shown !== null && manual ? `<strong class="gb-scaled">${formatGrade(shown, digits)}</strong>` : ''}
+    <small class="${manual ? 'manual-grade-tag' : 'category-grade-hint'}">${manual ? `Manual · cálculo: ${autoText}` : `Cálculo: ${autoText}`}</small>${note}</td>`;
+}
+
+const overrideSaving = new Map();
+
+async function saveOverrideInput(input) {
+  const { ovTarget: target, ovRef: ref, ovMember: member } = input.dataset;
+  const raw = input.value.trim().replace(',', '.');
+  const grade = raw === '' ? null : Number(raw);
+  input.classList.remove('is-error');
+  if (grade !== null && (!Number.isFinite(grade) || grade < 0 || grade > 10)) {
+    input.classList.add('is-error');
+    toast('La calificación va de 0 a 10.');
+    input.focus();
+    return false;
+  }
+  const saved = gradeOverrideOf(target, ref, member);
+  if (grade === null ? !saved : grade === Number(saved?.data.grade)) return true;
+  const key = `${target}:${ref}:${member}`;
+  if (overrideSaving.has(key)) return overrideSaving.get(key);
+  input.classList.add('is-saving');
+  const pending = (async () => {
+    try {
+      const response = await request('/api/grades/override', { course: current.course.id, target, ref, member, revision: saved?.revision, grade });
+      const i = current.records.findIndex((r) => r.id === response.id);
+      if (response.deleted) {
+        if (i >= 0) current.records.splice(i, 1);
+      } else if (i >= 0) current.records[i] = response;
+      else current.records.push(response);
+      refreshGradebook();
+      return true;
+    } catch (error) {
+      input.classList.remove('is-saving');
+      input.classList.add('is-error');
+      toast(error.status === 409 ? 'Otra persona cambió esta calificación. Recarga la página.' : error.message);
+      input.focus();
+      return false;
+    }
+  })().finally(() => overrideSaving.delete(key));
+  overrideSaving.set(key, pending);
+  return pending;
+}
+
+document.addEventListener('change', (e) => {
+  if (e.target.matches?.('.override-input')) saveOverrideInput(e.target);
+});
+document.addEventListener('keydown', (e) => {
+  if (!e.target.matches?.('.override-input') || e.key !== 'Enter') return;
+  e.preventDefault();
+  const input = e.target;
+  const same = `.override-input[data-ov-target="${CSS.escape(input.dataset.ovTarget)}"][data-ov-ref="${CSS.escape(input.dataset.ovRef)}"]`;
+  const all = [...document.querySelectorAll(same)].filter((x) => !x.closest('tr')?.hidden);
+  const next = all[all.indexOf(input) + (e.shiftKey ? -1 : 1)];
+  const nextMember = next?.dataset.ovMember;
+  saveOverrideInput(input).then((ok) => {
+    if (!ok || !nextMember) return;
+    const target = document.querySelector(`${same}[data-ov-member="${CSS.escape(nextMember)}"]`);
+    target?.focus();
+    target?.select?.();
+  });
+});
+
 /** Guarda una captura manual de rubro. Eliminar su contenido reactiva el valor automático. */
 async function saveCategoryGradeInput(input) {
   const { cgCategory: category, cgMember: member } = input.dataset;
@@ -1133,9 +1227,11 @@ async function saveGradebookGrade(input, task, member, s, grade) {
 /** Vuelve a dibujar el libro conservando el foco, lo que se está escribiendo y el desplazamiento. */
 function refreshGradebook() {
   if (section !== 'grades') return;
-  const active = document.activeElement?.matches?.('.gb-input, .category-grade-input') ? document.activeElement : null;
+  const active = document.activeElement?.matches?.('.gb-input, .category-grade-input, .override-input') ? document.activeElement : null;
   const keep = active?.matches('.gb-input')
     ? { type: 'task', task: active.dataset.gbTask, member: active.dataset.gbMember, value: active.value }
+    : active?.matches('.override-input')
+      ? { type: 'override', selector: `.override-input[data-ov-target="${CSS.escape(active.dataset.ovTarget)}"][data-ov-ref="${CSS.escape(active.dataset.ovRef)}"][data-ov-member="${CSS.escape(active.dataset.ovMember)}"]`, value: active.value }
     : active
       ? { type: 'category', category: active.dataset.cgCategory, member: active.dataset.cgMember, value: active.value }
       : null;
@@ -1152,7 +1248,9 @@ function refreshGradebook() {
   if (again) [again.scrollLeft, again.scrollTop] = [left, top];
   window.scrollTo(0, y);
   if (keep) {
-    const input = keep.type === 'task'
+    const input = keep.type === 'override'
+      ? document.querySelector(keep.selector)
+      : keep.type === 'task'
       ? document.querySelector(`.gb-input[data-gb-task="${CSS.escape(keep.task)}"][data-gb-member="${CSS.escape(keep.member)}"]`)
       : document.querySelector(`.category-grade-input[data-cg-category="${CSS.escape(keep.category)}"][data-cg-member="${CSS.escape(keep.member)}"]`);
     if (input) {
