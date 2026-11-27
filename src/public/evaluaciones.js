@@ -451,7 +451,8 @@ function quizModal(old) {
 
 // ---- Safe Exam Browser (12.27) ----------------------------------------------------------------
 
-const isSafeExamBrowser = () => /\bSEB\//.test(navigator.userAgent || '');
+// 12.108: el de iPhone/iPad no siempre anuncia «SEB/» en el User-Agent; su API de JavaScript sí está siempre.
+const isSafeExamBrowser = () => /\bSEB\b/.test(navigator.userAgent || '') || Boolean(globalThis.SafeExamBrowser);
 
 /** Enlace para abrir la evaluación en SEB (sebs:// descarga la configuración que arma Enlace y la abre en SEB). */
 const sebLink = (quizId) => `${location.protocol === 'https:' ? 'sebs' : 'seb'}://${location.host}/seb/${encodeURIComponent(quizId)}.seb`;
@@ -471,6 +472,11 @@ const sebNeededHere = (settings) => Boolean(settings?.needsSeb) && (!settings.se
 
 /** Aviso para el alumno fuera de SEB (12.30): el botón, dónde descargarlo y qué hacer en un teléfono Android. */
 function sebRequiredHtml(quizId) {
+  // Ya dentro de SEB: volver a abrir la configuración da «Loading New SEB Settings Not Allowed». Se explica qué hacer.
+  if (isSafeExamBrowser()) {
+    return `<div class="seb-notice warning-note" id="sebRequired"><p>Ya estás en <b>Safe Exam Browser</b>, pero Enlace no recibió su llave de seguridad.</p>
+      <p>Toca el botón de recargar de Safe Exam Browser y vuelve a intentarlo. Si sigue igual, sal de Safe Exam Browser con su botón de apagado y vuelve a abrir la evaluación desde Safari con «Abrir en Safe Exam Browser». Si aun así no puedes, avisa a tu docente.</p></div>`;
+  }
   if (isAndroid()) {
     return `<div class="seb-notice warning-note" id="sebRequired"><p>Esta evaluación solo se puede presentar en <b>Safe Exam Browser</b>, que <b>no existe para Android</b>.</p>
       <p>Preséntala desde una <b>computadora</b> (Windows o Mac) o un <b>iPad o iPhone</b> con Safe Exam Browser instalado: entra a Enlace ahí, abre esta evaluación y toca «Abrir en Safe Exam Browser».</p>
@@ -1943,7 +1949,7 @@ async function examLockCall(action, extra = {}, keepalive = false) {
   const state = examState;
   if (!state) return null;
   const body = JSON.stringify({ course: current.course.id, quiz: state.quizId, attempt: state.attempt, ...extra });
-  const r = await fetch('/api/attempt/' + action, { method: 'POST', credentials: 'same-origin', keepalive, headers: { 'Content-Type': 'application/json', 'X-Aula-Request': '1', ...deviceHeaders() }, body });
+  const r = await fetch('/api/attempt/' + action, { method: 'POST', credentials: 'same-origin', keepalive, headers: { 'Content-Type': 'application/json', 'X-Aula-Request': '1', ...deviceHeaders(), ...(await sebJsHeaders()) }, body });
   const data = await r.json().catch(() => ({}));
   if (!r.ok) throw Object.assign(new Error(data.error || 'No se pudo completar la operación.'), { status: r.status });
   return data;

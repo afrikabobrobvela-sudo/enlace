@@ -67,13 +67,41 @@ function toast(t) {
 const appleTouchDevice = () => /iPhone|iPad|iPod/i.test(navigator.userAgent || '') || (/Macintosh|MacIntel/.test(navigator.userAgent + ' ' + (navigator.platform || '')) && navigator.maxTouchPoints > 1);
 const deviceHeaders = () => (appleTouchDevice() ? { 'X-Enlace-Ios': '1' } : {});
 
+/**
+ * 12.108: Safe Exam Browser en iPhone/iPad no agrega sus cabeceras (X-SafeExamBrowser-ConfigKeyHash) a las solicitudes
+ * que hace la página con fetch, solo a la navegación. Su API de JavaScript (`SafeExamBrowser.security`, la que usa
+ * Moodle) sí da los mismos valores: SHA-256(dirección de la página + llave). Se mandan con la dirección de la página y
+ * el servidor los revisa igual (`sebAllows()`).
+ */
+async function sebJsHeaders() {
+  const security = globalThis.SafeExamBrowser?.security;
+  if (!security) return {};
+  if (typeof security.updateKeys === 'function') {
+    await new Promise((resolve) => {
+      const timer = setTimeout(resolve, 1500);
+      try {
+        security.updateKeys(() => {
+          clearTimeout(timer);
+          resolve();
+        });
+      } catch {
+        clearTimeout(timer);
+        resolve();
+      }
+    });
+  }
+  const ck = String(security.configKey || '');
+  const bek = String(security.browserExamKey || '');
+  return ck || bek ? { 'X-Enlace-Seb-Ck': ck, 'X-Enlace-Seb-Bek': bek, 'X-Enlace-Seb-Url': location.href } : {};
+}
+
 async function request(path, data, method = 'POST') {
   if (previewAsStudent && data !== undefined && path.startsWith('/api/'))
     throw new Error(PREVIEW_READONLY);
   const r = await fetch(path, {
     method: data === undefined ? 'GET' : method,
     credentials: 'same-origin',
-    headers: data === undefined ? {} : { 'Content-Type': 'application/json', 'X-Aula-Request': '1', ...deviceHeaders() },
+    headers: data === undefined ? {} : { 'Content-Type': 'application/json', 'X-Aula-Request': '1', ...deviceHeaders(), ...(await sebJsHeaders()) },
     body: data === undefined ? undefined : JSON.stringify(data)
   });
   const b = await r.json();
