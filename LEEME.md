@@ -1,9 +1,14 @@
-# Enlace · versión 12.108
+# Enlace · versión 12.109
 
 Plataforma académica independiente para docentes y alumnos de cualquier academia (nació en una academia de Física), con interfaz inspirada en Brightspace.
 No es el código de D2L Brightspace ni una plataforma oficial de ninguna institución.
 
 Esta versión se despliega en **tu propia cuenta de Cloudflare** (Workers + D1 + R2, plan gratuito) y ya no depende de ChatGPT Sites.
+
+## Novedades de la versión 12.109 (segunda oportunidad: cuenta la mejor)
+
+- En la configuración de una evaluación, sección «Calificación», hay una opción nueva: **«Es segunda oportunidad de»**, donde eliges la evaluación original. Así la segunda oportunidad no cuenta aparte: en la original se toma la **mejor calificación de las dos** para cada alumno (quien no presente la segunda conserva la de la original). La categoría y los puntos son los de la original.
+- Para una segunda oportunidad que ya creaste: ábrela, elige la original en «Es segunda oportunidad de» y guarda. El libro y «Mis calificaciones» se actualizan solos; no cambia ningún intento.
 
 ## Novedades de la versión 12.108 (Safe Exam Browser en iPhone)
 

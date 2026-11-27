@@ -333,6 +333,15 @@ const todos = await saveQuiz({ title: 'SEB en todos', questions: [mixed[1]], set
 assert.deepEqual(todos.data.settings.seb, { required: true }, 'Marcar los tres equipos es exigirlo a todos');
 checks += 10;
 
+// ---- 12.109: segunda oportunidad ----------------------------------------------------------------
+const original = await saveQuiz({ title: 'Original', questions: [mixed[1]] });
+const segunda = await saveQuiz({ title: 'Segunda', questions: [mixed[1]], grade: { replaces: original.id, category: 'x' } });
+assert.deepEqual(segunda.data.grade, { replaces: original.id }, 'Solo guarda de cuál es segunda oportunidad');
+await saveQuiz({ title: 'Tercera', questions: [mixed[1]], grade: { replaces: segunda.id } }, 400);
+await saveQuiz({ title: 'Original', questions: [mixed[1]], grade: { replaces: tipos.id } }, 400, original);
+await saveQuiz({ title: 'Nada', questions: [mixed[1]], grade: { replaces: 'no-existe' } }, 400);
+checks += 1;
+
 // ---- 12.31: resumen del monitor (quién terminó, con qué calificación, y quién no ha empezado) ------------
 const resumen = await call('docente', `/api/exam/monitor?course=${c}&quiz=${parcial.id}`);
 const anaRow = resumen.finished.find((r) => r.name === 'ana');

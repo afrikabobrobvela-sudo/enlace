@@ -1455,7 +1455,22 @@ const routes = {
           if (found.n !== images.length) fail('Una imagen de las preguntas no es válida. Vuelve a subirla.');
         }
         // Cuenta en la calificación: dentro de una categoría (de actividades) del curso, con su valor en puntos.
-        if (input.grade?.category) {
+        // 12.109: segunda oportunidad de otra evaluación del curso: no cuenta aparte; en la original cuenta la mejor de las dos.
+        if (input.grade?.replaces) {
+          const original = await one(
+            db,
+            `SELECT id, json_extract(data, '$.grade.replaces') AS chained,
+                    EXISTS (SELECT 1 FROM aula_records r WHERE r.course=?2 AND r.kind='quiz' AND r.deleted_at IS NULL AND json_extract(r.data, '$.grade.replaces')=?3) AS hasSecond
+             FROM aula_records WHERE id=?1 AND course=?2 AND kind='quiz' AND deleted_at IS NULL`,
+            String(input.grade.replaces),
+            body.course,
+            String(previous?.id ?? body.id ?? ''),
+          );
+          if (!original || original.id === (previous?.id ?? body.id)) fail('Elige la evaluación original de esta segunda oportunidad.');
+          if (original.chained) fail('Esa evaluación ya es una segunda oportunidad: elige la evaluación original.');
+          if (original.hasSecond) fail('Esta evaluación ya tiene su propia segunda oportunidad; no puede ser a la vez segunda oportunidad de otra.');
+          data.grade = { replaces: original.id };
+        } else if (input.grade?.category) {
           const category = await one(db, "SELECT id FROM aula_grade_categories WHERE id=? AND course=? AND source='tasks'", String(input.grade.category), body.course);
           if (!category) fail('Elige una categoría de calificación del curso.');
           const points = Number(input.grade.points ?? 10);

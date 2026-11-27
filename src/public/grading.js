@@ -257,7 +257,18 @@ function attemptKeyOf(memberId) {
 }
 
 /** Calificación de una evaluación para un alumno según su regla (mejor, último o promedio); null sin intentos. */
+/** Segundas oportunidades de una evaluación (12.109): las que dicen `grade.replaces` = su id. */
+const secondChancesOf = (quizId) => records('quiz').filter((q) => q.data.grade?.replaces === quizId);
+
+/** Calificación de la evaluación para el alumno; con segunda oportunidad, la mejor entre la original y la(s) nueva(s). */
 function quizScore(quiz, memberId) {
+  const own = quizOwnScore(quiz, memberId);
+  const others = secondChancesOf(quiz.id).map((q) => quizOwnScore(q, memberId)).filter((x) => x !== null);
+  const all = [own, ...others].filter((x) => x !== null);
+  return all.length ? Math.max(...all) : null;
+}
+
+function quizOwnScore(quiz, memberId) {
   const key = attemptKeyOf(memberId);
   const attempts = records('attempt')
     .filter((a) => a.data.quiz === quiz.id && a.author === key)
@@ -275,7 +286,7 @@ function quizScore(quiz, memberId) {
 const countedQuizzes = () => {
   const settings = gradingSettings();
   if (settings.scheme !== 'categories') return [];
-  return records('quiz').filter((q) => q.data.grade?.category && settings.categories.some((c) => c.id === q.data.grade.category));
+  return records('quiz').filter((q) => !q.data.grade?.replaces && q.data.grade?.category && settings.categories.some((c) => c.id === q.data.grade.category));
 };
 
 function studentGrade(memberId, { final = false } = {}) {
@@ -349,9 +360,10 @@ function myGradesHtml() {
       const counted = counts.includes(q);
       const shown = attempts.map((a) => a.data.score).filter((x) => x !== null && x !== undefined);
       const best = counted ? quizScore(q, member.id) : shown.length ? Math.max(...shown) : null;
+      const original = q.data.grade?.replaces ? find(q.data.grade.replaces) : null;
       const note = [
         attempts.length ? `${attempts.length} ${attempts.length === 1 ? 'intento' : 'intentos'}` : '',
-        counted ? `cuenta en ${(() => {
+        original ? `segunda oportunidad de «${original.data.title}»: cuenta la mejor de las dos` : counted ? `cuenta en ${(() => {
           const c = cats.find((x) => x.id === q.data.grade.category);
           return c ? categoryLabel(c, grading) : 'la calificación';
         })()} · ${QUIZ_POLICIES[q.data.grade.policy] || QUIZ_POLICIES.best}` : 'no cuenta en el promedio',
@@ -475,7 +487,7 @@ function newCategoryDraft(tasks) {
           { key: 'n2', name: 'Tareas', weight: 40, source: 'tasks', term: '', distribution: 'manual', dropLow: 0, dropHigh: 0 },
         ],
     tasks: Object.fromEntries(tasks.map((t) => [t.id, { category: t.data.category || '', points: t.data.points ?? 1 }])),
-    quizzes: Object.fromEntries(records('quiz').map((q) => [q.id, { category: q.data.grade?.category || '', points: q.data.grade?.points ?? 10, policy: q.data.grade?.policy || 'best' }])),
+    quizzes: Object.fromEntries(records('quiz').filter((q) => !q.data.grade?.replaces).map((q) => [q.id, { category: q.data.grade?.category || '', points: q.data.grade?.points ?? 10, policy: q.data.grade?.policy || 'best' }])),
     forums: Object.fromEntries(records('forum').filter((f) => !graded.has(f.id)).map((f) => [f.id, { category: '', points: 1 }])),
   };
 }
@@ -576,7 +588,7 @@ function categoriesFormHtml(tasks) {
   const chosen = typeof selectedSections === 'function' ? selectedSections().filter((x) => x !== SECTION_NONE) : [];
   const inView = (r) => !chosen.length || !r.data.sections?.length || r.data.sections.some((x) => chosen.includes(x));
   tasks = tasks.filter(inView);
-  const quizList = records('quiz').filter(inView);
+  const quizList = records('quiz').filter((q) => inView(q) && !q.data.grade?.replaces);
   const forumList = records('forum').filter((f) => draft.forums[f.id] && inView(f));
   const items =
     tasks.map((t) => itemRow('task', t.id, t.data.title, forumTask.get(t.id) ? 'Foro' : 'Actividad', draft.tasks[t.id] || { points: 1 })).join('') +

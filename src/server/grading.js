@@ -234,6 +234,8 @@ export const gradingRoutes = {
     for (const item of wantsQuizzes ? body.quizzes : []) {
       const data = quizzes.get(item?.quiz);
       if (!data) continue;
+      // 12.109: una segunda oportunidad cuenta con la categoría de su evaluación original; aquí no se toca.
+      if (data.grade?.replaces) continue;
       if (seen.has(item.quiz)) fail(`La evaluación «${data.title}» está repetida.`);
       seen.add(item.quiz);
       const category = categoryOf(item, 'evaluaciones');
