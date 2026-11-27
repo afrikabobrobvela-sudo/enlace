@@ -165,6 +165,17 @@ check((page.match(/class="category-grade-input"/g) || []).length === 6, 'El libr
   check(row2.indexOf('Prácticas<div class="muted">50 %') < row2.indexOf('Exámenes<div class="muted">50 %') && row2.indexOf('Exámenes<div class="muted">50 %') < row2.indexOf('>Práctica<') && row2.indexOf('>Práctica<') < row2.indexOf('>Examen<') && !head.includes('Subtotal'), 'Los exámenes van al final del resumen y de los bloques; cada actividad en el bloque de su rubro'); }
 check(/final-grade grade-low">2<\/td>/.test(page), 'Sofía: Exámenes 4×50 % y Prácticas vacío → la final queda en 2');
 check(page.includes('Promedio parcial por categorías'));
+// 12.102: con parciales, cada parcial tiene su columna con su calificación entera y la final promedia esas enteras.
+{
+  const gr = JSON.parse(run("JSON.stringify(current.records.find((r) => r.kind === 'grading').data)"));
+  run(`(() => { const d = current.records.find((r) => r.kind === 'grading').data; d.terms = [{ id: 'p1', name: 'Parcial 1', weight: 50 }, { id: 'p2', name: 'Parcial 2', weight: 50 }]; d.categories[0].term = 'p1'; d.categories[1].term = 'p2'; d.categories[0].weight = 100; d.categories[1].weight = 100; })()`);
+  run(`renderGrades();`);
+  const pg = run("$('#main').innerHTML");
+  check(pg.includes('Calificación<div class="muted">Parcial 1</div>') && pg.includes('Calificación<div class="muted">Parcial 2</div>') && pg.includes('con la calificación entera de cada parcial') && !pg.includes('Promedio actual'), 'Con parciales: una columna por parcial y la final sin el promedio actual encimado (12.102)');
+  check(run(`(() => { const r = { terms: [{ id: 'p1', weight: 50, value: 8.4 }, { id: 'p2', weight: 50, value: 10 }], categories: [{ term: 'p1' }, { term: 'p2' }] }; return courseFinalGrade(r, { passing: 6 }).value; })()`) === 9 && run(`courseFinalGrade({ terms: [{ id: 'p1', weight: 50, value: 8.4 }, { id: 'p2', weight: 50, value: 9 }], categories: [{ term: 'p1' }, { term: 'p2' }] }, { passing: 6 }).value`) === 8, 'La final promedia las calificaciones enteras de los parciales (8.4 → 8; 8 y 9 → 8.5 → 8; 8 y 10 → 9)');
+  run(`(() => { const d = current.records.find((r) => r.kind === 'grading').data; Object.assign(d, ${JSON.stringify(gr)}); d.terms = ${JSON.stringify(gr.terms ?? null)}; if (d.terms === null) delete d.terms; })()`);
+  run(`(() => { const d = current.records.find((r) => r.kind === 'grading').data; d.categories = ${JSON.stringify(gr.categories)}; })()`);
+}
 run("download = (name, text) => downloads.push(text); exportGrades();");
 const csv = downloads[0].replace(/^\uFEFF/, '').split('\r\n');
 check(csv[0].includes('"Calificación final","Exámenes (50 %)","Prácticas (50 %)"'), 'La exportación incluye final y categorías');
