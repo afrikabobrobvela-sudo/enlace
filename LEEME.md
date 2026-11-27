@@ -1,9 +1,15 @@
-# Enlace · versión 12.101
+# Enlace · versión 12.102
 
 Plataforma académica independiente para docentes y alumnos de cualquier academia (nació en una academia de Física), con interfaz inspirada en Brightspace.
 No es el código de D2L Brightspace ni una plataforma oficial de ninguna institución.
 
 Esta versión se despliega en **tu propia cuenta de Cloudflare** (Workers + D1 + R2, plan gratuito) y ya no depende de ChatGPT Sites.
+
+## Novedades de la versión 12.102 (columnas de parcial y final en el libro)
+
+- En el libro de calificaciones, cada parcial tiene su propia columna «Calificación» con su calificación entera (8.4 se muestra como 8, con la misma regla de redondeo de siempre). Un parcial que aún no termina muestra lo que lleva, con «En curso» debajo (sus rubros vacíos cuentan 0).
+- La columna «Calificación final» ya solo muestra la final: el promedio de las calificaciones enteras de los parciales (8 y 9 → 8.5 → 8; 8 y 10 → 9). Ya no aparece «Promedio actual» encimado debajo cuando el curso tiene parciales.
+- La exportación usa las mismas calificaciones enteras de cada parcial.
 
 ## Novedades de la versión 12.101 (signo negativo en el examen)
 
