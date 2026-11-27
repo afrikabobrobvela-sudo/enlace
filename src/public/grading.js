@@ -194,11 +194,17 @@ function courseFinalGrade(result, rules) {
   const terms = result.terms || [];
   const termIds = new Set(terms.map((term) => term.id));
   const generalCategories = (result.categories || []).filter((category) => !category.term || !termIds.has(category.term));
-  if (!terms.length || generalCategories.length) return finalGrade(result.value, rules);
-  if (!terms.some((term) => term.value !== null)) return null;
-  const totalWeight = terms.reduce((sum, term) => sum + Number(term.weight || 0), 0);
+  if (!terms.length) return finalGrade(result.value, rules);
+  // 12.111: cada parcial entra con su calificación entera (la misma que se ve en su columna) y los rubros de toda la
+  // materia con su valor; antes, con rubros generales, la final se sacaba de los parciales con decimales.
+  const parts = [
+    ...terms.map((term) => ({ value: term.value === null ? null : finalGrade(term.value, rules).value, weight: Number(term.weight || 0) })),
+    ...generalCategories.map((category) => ({ value: category.value, weight: Number(category.weight || 0) })),
+  ];
+  if (!parts.some((part) => part.value !== null)) return null;
+  const totalWeight = parts.reduce((sum, part) => sum + part.weight, 0);
   if (!totalWeight) return null;
-  const average = terms.reduce((sum, term) => sum + (finalGrade(term.value, rules)?.value ?? 0) * term.weight, 0) / totalWeight;
+  const average = parts.reduce((sum, part) => sum + (part.value ?? 0) * part.weight, 0) / totalWeight;
   return finalGrade(average, rules);
 }
 
@@ -386,7 +392,9 @@ function myGradesHtml() {
             result.terms?.length
               ? `<section class="panel"><h2>Por parcial</h2><ul class="my-grade-list">${result.terms
                   .map((t) => {
-                    const grade = finalGrade(t.value, grading.final);
+                    // 12.111: el mismo valor que entra a la calificación final (y que ve el docente en el libro).
+                    const counted = studentGrade(member.id, { final: true }).terms?.find((x) => x.id === t.id);
+                    const grade = t.value === null ? null : finalGrade(counted?.value ?? t.value, grading.final);
                     // Parcial en curso (12.44): le faltan rubros por calificar; no tiene calificación de parcial todavía.
                     const label = grade !== null ? formatGrade(grade.value, 0) : t.partial !== null && t.partial !== undefined ? 'En curso' : 'Sin calificar';
                     return `<li class="my-grade-item"><div class="my-grade-row is-static"><span class="my-grade-title">${esc(t.name)}<small>${t.weight} % de la calificación final</small></span><span class="my-grade-value ${grade === null ? 'is-pending' : tone(grade.value)}">${label}</span></div></li>`;
