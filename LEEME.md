@@ -1,9 +1,16 @@
-# Enlace · versión 12.110
+# Enlace · versión 12.111
 
 Plataforma académica independiente para docentes y alumnos de cualquier academia (nació en una academia de Física), con interfaz inspirada en Brightspace.
 No es el código de D2L Brightspace ni una plataforma oficial de ninguna institución.
 
 Esta versión se despliega en **tu propia cuenta de Cloudflare** (Workers + D1 + R2, plan gratuito) y ya no depende de ChatGPT Sites.
+
+## Novedades de la versión 12.111 (la final cuadra con las columnas de los parciales)
+
+- La columna de cada parcial y la calificación final salían de cálculos distintos, así que podían no cuadrar (por ejemplo, Parcial 1 = 4 y Parcial 2 = 6 con una final de 4):
+  - Con la regla «las actividades vencidas sin calificar cuentan como 0 en la calificación final», la final usaba los parciales con esos ceros, pero la columna del parcial los mostraba sin ellos.
+  - Con rubros de «Toda la materia», la final promediaba los parciales con decimales en lugar de su calificación entera.
+- Ahora la columna de cada parcial muestra exactamente el número que entra a la final (con la regla de vencidas si está activa), y la final siempre promedia esas calificaciones enteras (más los rubros de toda la materia con su peso). Lo mismo en «Mis calificaciones» del alumno y en la exportación.
 
 ## Novedades de la versión 12.110 (código distinto para el segundo intento)
 
