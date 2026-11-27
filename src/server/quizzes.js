@@ -330,6 +330,11 @@ function examFields(input) {
   if (!input || input.enabled !== true) return null;
   const password = String(input.password ?? '').trim();
   if (password && (password.length < 4 || password.length > 30)) fail('La contraseña del examen debe tener de 4 a 30 caracteres.');
+  // 12.110: código distinto para empezar el 2.º intento y los siguientes (quien ya presentó no puede volver a empezar
+  // fuera del salón con el código que ya conoce).
+  const retryPassword = String(input.retryPassword ?? '').trim();
+  if (retryPassword && (retryPassword.length < 4 || retryPassword.length > 30)) fail('El código del siguiente intento debe tener de 4 a 30 caracteres.');
+  if (retryPassword && retryPassword.toLowerCase() === password.toLowerCase()) fail('El código del siguiente intento debe ser distinto de la contraseña del primero.');
   let place = null;
   if (input.place) {
     const lat = Number(input.place.lat);
@@ -350,7 +355,7 @@ function examFields(input) {
   // prepareDevice (12.91): antes de empezar, el alumno confirma que activó «No molestar» y fijó la pantalla.
   // requireAnswer (12.95): con una pregunta a la vez, no puede avanzar ni enviar sin contestar la que tiene en pantalla.
   return {
-    enabled: true, password, oneByOne, noBack: oneByOne && input.noBack === true, requireAnswer: oneByOne && input.requireAnswer === true, place, lockOnLeave, lockGrace: lockOnLeave ? lockGrace : 0,
+    enabled: true, password, ...(retryPassword ? { retryPassword } : {}), oneByOne, noBack: oneByOne && input.noBack === true, requireAnswer: oneByOne && input.requireAnswer === true, place, lockOnLeave, lockGrace: lockOnLeave ? lockGrace : 0,
     submitAfterLocks: lockOnLeave ? submitAfterLocks : 0,
     lockPlatform: input.lockPlatform === true, prepareDevice: input.prepareDevice !== false,
   };
@@ -365,12 +370,16 @@ export function publicSettings(settings) {
   if (seb) rest.needsSeb = true;
   if (seb?.devices) rest.sebDevices = seb.devices;
   if (!rest.exam) return startCode ? { ...rest, needsCode: true } : rest;
-  const { password, place, ...exam } = rest.exam;
-  return { ...rest, ...(startCode || password ? { needsCode: true } : {}), exam: { ...exam, needsPassword: Boolean(startCode || password), checksLocation: Boolean(place) } };
+  const { password, retryPassword, place, ...exam } = rest.exam;
+  return {
+    ...rest,
+    ...(startCode || password ? { needsCode: true } : {}),
+    exam: { ...exam, needsPassword: Boolean(startCode || password), ...(retryPassword ? { needsRetryCode: true } : {}), checksLocation: Boolean(place) },
+  };
 }
 
 /** Código que el alumno debe escribir para empezar: el de su sección o, si no hay, la contraseña del modo examen. */
-export const startCodeOf = (settings) => settings?.startCode || settings?.exam?.password || '';
+export const startCodeOf = (settings, attempt = 1) => (attempt > 1 && settings?.exam?.retryPassword) || settings?.startCode || settings?.exam?.password || '';
 
 /**
  * Eventos que envía el navegador durante el examen (salir de la pantalla, de pantalla completa, copiar o pegar,
