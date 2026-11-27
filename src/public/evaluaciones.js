@@ -1551,6 +1551,8 @@ function startExam(quizId, data, collect) {
   form.addEventListener('input', () => queueExamSave());
   form.addEventListener('change', () => queueExamSave());
   for (const type of ['copy', 'cut', 'paste', 'contextmenu', 'dragstart', 'drop']) form.addEventListener(type, examBlockCopy);
+  // 12.104: sin seleccionar el texto de las preguntas (el menú del teléfono tiene «Buscar en la web», «Traducir»…).
+  form.addEventListener('selectstart', examBlockSelect);
   document.addEventListener('visibilitychange', examAwayCheck);
   window.addEventListener('blur', examAwayCheck);
   window.addEventListener('focus', examAwayCheck);
@@ -1605,6 +1607,7 @@ function examTick() {
 /** Safari puede mandar `pagehide` (y no `visibilitychange`) al bloquear el teléfono o cambiar de pestaña. */
 function examPageHide() {
   if (!examState || isSafeExamBrowser()) return;
+  examCover(true);
   markExamAway(Date.now());
 }
 
@@ -1692,7 +1695,7 @@ function stopExam() {
   window.removeEventListener('offline', examNetworkCheck);
   clearInterval(examState.focusPoll);
   clearInterval(examState.beat);
-  document.body.classList.remove('exam-running', 'exam-shield');
+  document.body.classList.remove('exam-running', 'exam-shield', 'exam-covered');
   document.getElementById('examFullscreenBar')?.remove();
   document.getElementById('examConfirm')?.remove();
   clearTimeout(examState.blurTimer);
@@ -1767,6 +1770,16 @@ function examCaptureKey(e) {
 }
 
 /** Tapa el examen unos segundos (lo que alcance a salir en la captura es la pantalla en blanco). */
+function examCover(on) {
+  document.body.classList.toggle('exam-covered', Boolean(on && examState));
+}
+
+/** Seleccionar texto solo dentro de las casillas de respuesta. */
+function examBlockSelect(e) {
+  if (e.target?.closest?.('input, textarea, [contenteditable="true"]')) return;
+  e.preventDefault();
+}
+
 function examShield() {
   document.body.classList.add('exam-shield');
   clearTimeout(examState?.shieldTimer);
@@ -1790,6 +1803,9 @@ function examAwayCheck() {
   const hidden = document.visibilityState === 'hidden';
   // Un selector nativo abierto (relacionar, ordenar) le quita el foco a la ventana sin salir de la página (12.30).
   const away = hidden || (!document.hasFocus() && !examSelectOpen());
+  // 12.104: en cuanto la página pierde el foco se tapa el examen, para que la miniatura de las pestañas o de las
+  // aplicaciones recientes no muestre la pregunta (el teléfono toma esa imagen al salir; es lo mejor que se puede).
+  examCover(away);
   // 12.91: se llama también cada EXAM_FOCUS_POLL_MS (por si el teléfono no avisa), así que no reinicia lo que ya corre.
   if (!away) {
     clearTimeout(state.blurTimer);

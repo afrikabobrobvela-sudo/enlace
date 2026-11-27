@@ -1195,3 +1195,10 @@ dialog.unsaved-ask .dialog-actions { justify-content: flex-end; }
 
 /* 12.103: aviso de examen en cada pregunta (sale en las capturas; texto ≥ 12 px y gris legible). */
 .exam-ai-note { margin: 2px 0 10px; font-size: 12px; line-height: 1.35; color: var(--ink-faint); user-select: none; -webkit-user-select: none; }
+
+/* 12.104: en el examen no se selecciona el texto de las preguntas (solo el de las casillas de respuesta)… */
+body.exam-running #quizAttempt { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+body.exam-running #quizAttempt :is(input, textarea, [contenteditable="true"]) { -webkit-user-select: text; user-select: text; -webkit-touch-callout: default; }
+/* …y al perder el foco se tapa, para que la miniatura de pestañas o aplicaciones recientes no muestre la pregunta. */
+body.exam-covered #main { visibility: hidden; }
+body.exam-covered::after { content: 'Examen en curso · vuelve a esta página para continuar'; position: fixed; inset: 0; display: grid; place-items: center; padding: 24px; text-align: center; background: var(--surface, #fff); color: var(--ink); font-weight: 600; z-index: 9999; }
