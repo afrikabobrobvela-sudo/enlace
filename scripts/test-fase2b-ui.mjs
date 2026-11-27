@@ -139,7 +139,7 @@ check(!run("$('#main').innerHTML").includes('name="team"'), 'Sofía no tiene equ
 
 // ---- Tabla de calificaciones: final y categorías ----
 let categoryCell = run("categoryGradeCellHtml({ id: 'E', name: 'Exámenes', weight: 50, source: 'tasks', automaticValue: 4 }, current.members[2], 4)");
-check(categoryCell.includes('class="category-grade-input"') && categoryCell.includes('value=""') && categoryCell.includes('placeholder="4.00"') && !categoryCell.includes('Doble clic'), 'Los rubros muestran una casilla editable directa con el cálculo automático como referencia');
+check(categoryCell.includes('class="category-grade-input"') && categoryCell.includes('value="4"') && categoryCell.includes('data-cg-auto="4"') && categoryCell.includes('placeholder="4.00"') && !categoryCell.includes('Doble clic'), 'Los rubros muestran una casilla editable directa con el cálculo automático dentro (12.113)');
 run("current.records.push({ id: 'cg', kind: 'category-grade', revision: 1, data: { category: 'E', member: 'm-sofia', grade: 6.6 } })");
 categoryCell = run("categoryGradeCellHtml({ id: 'E', name: 'Exámenes', weight: 50, source: 'tasks', automaticValue: 4 }, current.members[2], 6.6)");
 check(categoryCell.includes('manual-grade-tag') && categoryCell.includes('value="6.6"') && categoryCell.includes('automático: 4.00'), 'La celda distingue una captura manual y conserva la referencia automática');
@@ -147,7 +147,7 @@ run("current.records.pop()");
 // 12.60: con máximo 8, la casilla muestra los puntos (2.50 de 8) y en grande lo que vale sobre 10 (3.13).
 run("current.records.find((r) => r.kind === 'grading').data.categories[0].maxScore = 8");
 categoryCell = run("categoryGradeCellHtml({ id: 'E', name: 'Exámenes', weight: 50, source: 'tasks', automaticValue: 3.125, rawAutomatic: 2.5 }, current.members[2], 3.125)");
-check(categoryCell.includes('placeholder="2.50"') && categoryCell.includes('class="gb-scaled"') && categoryCell.includes('3.13 <small>/10</small>') && categoryCell.includes('Automático: 2.50 de 8') && categoryCell.includes('max="8"'), 'Con calificación máxima, el automático se ve en puntos y su valor sobre 10 en grande (12.60)');
+check(categoryCell.includes('placeholder="2.50"') && categoryCell.includes('value="2.5"') && categoryCell.includes('class="gb-scaled"') && categoryCell.includes('3.13 <small>/10</small>') && categoryCell.includes('Automático: 2.50 de 8') && categoryCell.includes('max="8"'), 'Con calificación máxima, el automático se ve en puntos y su valor sobre 10 en grande (12.60)');
 run("delete current.records.find((r) => r.kind === 'grading').data.categories[0].maxScore");
 run(`section = 'grades'; gradeTab = 'entry'; renderGrades();`);
 page = run("$('#main').innerHTML");
@@ -163,7 +163,7 @@ check((page.match(/class="category-grade-input"/g) || []).length === 6, 'El libr
 { const head = page.slice(page.indexOf('<thead>'), page.indexOf('</thead>')), row2 = head.slice(head.indexOf('</tr><tr>')), at = (x) => head.indexOf(x);
   check(at('>Asistencia<') > 0 && at('>Asistencia<') < at('>Rubros<') && at('>Rubros<') < at('Calificación final') && at('Calificación final') < at('⊟ Prácticas') && at('⊟ Prácticas') < at('⊟ Exámenes'), 'Resumen al inicio (asistencia, rubros, final) y después los bloques de actividades (12.60)');
   check(row2.indexOf('Prácticas<div class="muted">50 %') < row2.indexOf('Exámenes<div class="muted">50 %') && row2.indexOf('Exámenes<div class="muted">50 %') < row2.indexOf('>Práctica<') && row2.indexOf('>Práctica<') < row2.indexOf('>Examen<') && !head.includes('Subtotal'), 'Los exámenes van al final del resumen y de los bloques; cada actividad en el bloque de su rubro'); }
-check(/class="final-grade grade-low category-grade-cell[^"]*"[^>]*>\s*<input class="override-input"[^>]*placeholder="2"[^>]*data-ov-target="final"/.test(page), 'Sofía: Exámenes 4×50 % y Prácticas vacío → la final queda en 2');
+check(/class="final-grade grade-low category-grade-cell[^"]*"[^>]*>\s*<input class="override-input"[^>]*value="2" placeholder="2"[^>]*data-ov-auto="2" data-ov-target="final"/.test(page), 'Sofía: Exámenes 4×50 % y Prácticas vacío → la final queda en 2');
 check(page.includes('Promedio parcial por categorías'));
 // 12.112: capturas manuales que sustituyen un cálculo (evaluación, parcial, final).
 {
@@ -198,6 +198,23 @@ check(page.includes('Promedio parcial por categorías'));
   check(ov.terms === '4,6' && ov.final === 5, 'Los parciales capturados a mano entran a la final: 4 y 6 → 5 (12.112)');
   check(ov.finalManual === 7, 'La final capturada a mano manda (12.112)');
   check(ov.cells, 'El libro tiene casillas editables de evaluación, parcial y final (12.112)');
+}
+// 12.113: la casilla trae el cálculo dentro; dejarlo igual no crea una captura manual, cambiarlo sí.
+{
+  const r = await run(`(async () => {
+    const calls = [], real = request;
+    request = async (path, body) => { if (!path.startsWith('/api/grades/')) return real(path, body); calls.push(path); return { id: 'nuevo', kind: 'grade-override', revision: 1, data: { ...body } }; };
+    const fake = (value, auto) => ({ value, dataset: { ovTarget: 'final', ovRef: '', ovMember: 'm-sofia', ovAuto: auto, cgCategory: 'E', cgMember: 'm-sofia', cgAuto: auto }, classList: { add() {}, remove() {} }, focus() {} });
+    await saveOverrideInput(fake('6', '6'));
+    await saveCategoryGradeInput(fake('4', '4'));
+    const same = calls.length;
+    await saveOverrideInput(fake('8', '6'));
+    await saveCategoryGradeInput(fake('5', '4'));
+    request = real;
+    current.records = current.records.filter((x) => x.id !== 'nuevo' && x.id !== 'category-grade:E:m-sofia');
+    return { same, after: calls.join() };
+  })()`);
+  check(r.same === 0 && r.after === '/api/grades/override,/api/grades/category', 'Dejar el cálculo tal cual no guarda nada; cambiar el número lo captura a mano (12.113)');
 }
 // 12.109: segunda oportunidad: en la original cuenta la mejor de las dos; la segunda no cuenta aparte.
 {

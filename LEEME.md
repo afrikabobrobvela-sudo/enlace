@@ -1,9 +1,16 @@
-# Enlace · versión 12.112
+# Enlace · versión 12.113
 
 Plataforma académica independiente para docentes y alumnos de cualquier academia (nació en una academia de Física), con interfaz inspirada en Brightspace.
 No es el código de D2L Brightspace ni una plataforma oficial de ninguna institución.
 
 Esta versión se despliega en **tu propia cuenta de Cloudflare** (Workers + D1 + R2, plan gratuito) y ya no depende de ChatGPT Sites.
+
+## Novedades de la versión 12.113 (el cálculo se corrige dentro de la casilla)
+
+- En el libro, las casillas calculadas solas (rubros, evaluaciones en línea, parciales y final) ya traen el número **dentro** de la casilla, no como texto gris de ejemplo. Antes parecía que solo se podían llenar las vacías.
+- Se corrigen como cualquier calificación: pon el cursor, cambia el número y pulsa Enter o sal de la casilla. Abajo queda «Manual · cálculo: X».
+- Pasar por una casilla sin cambiar el número no guarda nada: sigue siendo cálculo y se actualiza solo.
+- Para volver al cálculo, borra el número y sal de la casilla.
 
 ## Novedades de la versión 12.112 (corregir a mano cualquier calificación del libro)
 

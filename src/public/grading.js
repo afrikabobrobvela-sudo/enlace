@@ -880,26 +880,31 @@ const categoryMax = (id) => {
 };
 const categoryPoints = (id, grade) => (grade === null || grade === undefined || grade === '' ? '' : Math.round(Number(grade) * categoryMax(id) / 10 * 100) / 100);
 
+/** Valor del cálculo para ponerlo dentro de la casilla (12.113): así se corrige como cualquier número escrito. */
+const autoInputValue = (value, digits = 2) => (value === null || value === undefined || value === '' || !Number.isFinite(Number(value)) ? '' : String(Number(Number(value).toFixed(digits))));
+
 function categoryGradeCellHtml(category, member, value) {
   if (category.source !== 'tasks' || !teaches()) return `<td class="category-col ${gradeToneClass(value)}">${formatGrade(value)}</td>`;
   const manual = categoryGradeOf(member.id, category.id);
   const automatic = category.automaticValue ?? (manual ? null : value);
   const automaticText = formatGrade(automatic);
   const max = categoryMax(category.id);
-  const input = (valueText, placeholder) => `<input class="category-grade-input" type="number" min="0" max="${max}" step="0.01" inputmode="decimal"
-      value="${esc(valueText)}" placeholder="${esc(placeholder)}" data-category-grade
+  // Sin captura manual, la casilla trae el cálculo como valor (12.113): antes era solo un texto gris de ejemplo y
+  // parecía que no se podía cambiar. `data-cg-auto` evita guardar el cálculo tal cual como si fuera manual.
+  const input = (valueText, placeholder, autoText) => `<input class="category-grade-input" type="number" min="0" max="${max}" step="0.01" inputmode="decimal"
+      value="${esc(valueText)}" placeholder="${esc(placeholder)}" data-category-grade data-cg-auto="${esc(autoText)}"
       data-cg-category="${esc(category.id)}" data-cg-member="${esc(member.id)}"
-      aria-label="Calificación manual de ${esc(categoryLabel(category))} para ${esc(member.name)}" title="Escribe una calificación manual; deja vacío para usar el cálculo automático">`;
+      aria-label="Calificación manual de ${esc(categoryLabel(category))} para ${esc(member.name)}" title="Cambia el número para capturarlo a mano; bórralo para volver al cálculo automático">`;
   if (max === 10)
     return `<td class="category-col category-grade-cell ${manual ? 'is-manual' : ''} ${gradeToneClass(value)}">
-    ${input(manual?.data.grade ?? '', automaticText)}
+    ${input(manual ? manual.data.grade : autoInputValue(automatic), automaticText, autoInputValue(automatic))}
     <small class="${manual ? 'manual-grade-tag' : 'category-grade-hint'}">${manual ? `Manual${automatic === null ? '' : ` · automático: ${automaticText}`}` : `Automático: ${automaticText}`}</small></td>`;
   // Con calificación máxima (12.60): la casilla y el automático están en puntos sobre el máximo (lo que sacó el
   // alumno) y debajo, en grande, lo que vale sobre 10 y lo que entra al promedio.
   const rawAuto = category.rawAutomatic !== undefined ? category.rawAutomatic : automatic === null ? null : (automatic * max) / 10;
   const rawText = rawAuto === null ? '—' : formatGrade(rawAuto);
   return `<td class="category-col category-grade-cell ${manual ? 'is-manual' : ''} ${gradeToneClass(value)}">
-    ${input(categoryPoints(category.id, manual?.data.grade), rawText)}
+    ${input(manual ? categoryPoints(category.id, manual.data.grade) : autoInputValue(rawAuto), rawText, autoInputValue(rawAuto))}
     ${value === null || value === undefined ? '' : `<strong class="gb-scaled" title="${esc(`Sobre 10, con calificación máxima ${max}`)}">${formatGrade(value)} <small>/10</small></strong>`}
     <small class="${manual ? 'manual-grade-tag' : 'category-grade-hint'}">${manual ? `${categoryPoints(category.id, manual.data.grade)} de ${max} · Manual${rawAuto === null ? '' : ` · automático: ${rawText} de ${max}`}` : `Automático: ${rawAuto === null ? '—' : `${rawText} de ${max}`}`}</small></td>`;
 }
@@ -914,9 +919,9 @@ function overrideCellHtml(target, ref, member, automatic, { digits = 2, label = 
   const value = shown ?? (manual ? Number(manual.data.grade) : automatic);
   if (!teaches()) return `<td class="${tdClass} ${gradeToneClass(value)}">${value === null || value === undefined ? '—' : formatGrade(value, digits)}${note}</td>`;
   return `<td class="${tdClass} category-grade-cell ${manual ? 'is-manual' : ''} ${gradeToneClass(value)}">
-    <input class="override-input" type="number" min="0" max="10" step="0.01" inputmode="decimal" value="${esc(manual?.data.grade ?? '')}" placeholder="${esc(autoText)}"
-      data-ov-target="${esc(target)}" data-ov-ref="${esc(ref || '')}" data-ov-member="${esc(member.id)}"
-      aria-label="Calificación manual de ${esc(label || OVERRIDE_NAMES[target])} para ${esc(member.name)}" title="Escribe una calificación para sustituir el cálculo; deja vacío para volver al cálculo">
+    <input class="override-input" type="number" min="0" max="10" step="0.01" inputmode="decimal" value="${esc(manual ? manual.data.grade : autoInputValue(automatic, digits))}" placeholder="${esc(autoText)}"
+      data-ov-auto="${esc(autoInputValue(automatic, digits))}" data-ov-target="${esc(target)}" data-ov-ref="${esc(ref || '')}" data-ov-member="${esc(member.id)}"
+      aria-label="Calificación manual de ${esc(label || OVERRIDE_NAMES[target])} para ${esc(member.name)}" title="Cambia el número para sustituir el cálculo; bórralo para volver al cálculo">
     ${shown !== null && manual ? `<strong class="gb-scaled">${formatGrade(shown, digits)}</strong>` : ''}
     <small class="${manual ? 'manual-grade-tag' : 'category-grade-hint'}">${manual ? `Manual · cálculo: ${autoText}` : `Cálculo: ${autoText}`}</small>${note}</td>`;
 }
@@ -935,7 +940,15 @@ async function saveOverrideInput(input) {
     return false;
   }
   const saved = gradeOverrideOf(target, ref, member);
-  if (grade === null ? !saved : grade === Number(saved?.data.grade)) return true;
+  if (grade === null ? !saved : grade === Number(saved?.data.grade)) {
+    if (grade === null) {
+      input.value = input.dataset.ovAuto; // vuelve a mostrar el cálculo en la casilla
+      refreshGradebook();
+    }
+    return true;
+  }
+  // Sin captura previa, dejar el mismo número del cálculo no es una captura manual.
+  if (!saved && input.dataset.ovAuto !== '' && grade === Number(input.dataset.ovAuto)) return true;
   const key = `${target}:${ref}:${member}`;
   if (overrideSaving.has(key)) return overrideSaving.get(key);
   input.classList.add('is-saving');
@@ -994,7 +1007,14 @@ async function saveCategoryGradeInput(input) {
     return false;
   }
   const saved = categoryGradeOf(member, category);
-  if (points === null ? !saved : points === categoryPoints(category, saved?.data.grade)) return true;
+  if (points === null ? !saved : points === categoryPoints(category, saved?.data.grade)) {
+    if (points === null) {
+      input.value = input.dataset.cgAuto; // vuelve a mostrar el cálculo en la casilla
+      refreshGradebook();
+    }
+    return true;
+  }
+  if (!saved && input.dataset.cgAuto && points === Number(input.dataset.cgAuto)) return true;
   const grade = points === null ? null : Math.round(points * 10 / max * 10000) / 10000;
   const key = `${category}:${member}`;
   if (categoryGradeSaving.has(key)) return categoryGradeSaving.get(key);
