@@ -565,6 +565,58 @@ export const gradingRoutes = {
     return json({ ok: true, max, changed: results[1].meta?.changes ?? 0 });
   },
 
+  // 12.112: calificación capturada a mano que sustituye un cálculo del libro: una evaluación en línea (`quiz`), la de
+  // un parcial (`term`) o la final de la materia (`final`, ref ''). `grade: null` la quita y vuelve el cálculo.
+  'POST /api/grades/override': async ({ db, user, request }) => {
+    const body = await readJson(request);
+    requireTeacher(await access(db, user, body.course));
+    const target = String(body.target || '');
+    if (!['quiz', 'term', 'final'].includes(target)) fail('Calificación no válida.');
+    const ref = target === 'final' ? '' : String(body.ref || '');
+    const [member, settings, quiz] = await Promise.all([
+      one(db, "SELECT id FROM aula_members WHERE id=? AND course=? AND role='student'", body.member, body.course),
+      target === 'term' ? one(db, 'SELECT terms FROM aula_grade_settings WHERE course=?', body.course) : null,
+      target === 'quiz' ? one(db, "SELECT id FROM aula_records WHERE id=? AND course=? AND kind='quiz' AND deleted_at IS NULL", ref, body.course) : null,
+    ]);
+    if (!member) fail('Alumno no encontrado.', 404);
+    if (target === 'quiz' && !quiz) fail('Evaluación no encontrada.', 404);
+    if (target === 'term' && !parseTerms(settings?.terms).some((t) => t.id === ref)) fail('Parcial no encontrado.', 404);
+    const id = `grade-override:${target}:${ref}:${member.id}`;
+    const existing = await one(db, "SELECT * FROM aula_records WHERE id=? AND course=? AND kind='grade-override'", id, body.course);
+    if (existing && body.revision !== existing.revision) fail('Esta calificación cambió. Recarga antes de guardar.', 409);
+    if (!existing && body.revision) fail('Esta calificación cambió. Recarga antes de guardar.', 409);
+    if (body.grade === null || body.grade === '') {
+      if (!existing) return json({ deleted: true, id });
+      const deleted = await run(db, "DELETE FROM aula_records WHERE id=? AND course=? AND kind='grade-override' AND revision=?", id, body.course, existing.revision);
+      if (!deleted.meta.changes) fail('Esta calificación cambió. Recarga antes de guardar.', 409);
+      return json({ deleted: true, id });
+    }
+    const grade = Number(body.grade);
+    if (!Number.isFinite(grade) || grade < 0 || grade > 10) fail('La calificación va de 0 a 10.');
+    const now = nowIso();
+    const data = JSON.stringify({ target, ref, member: member.id, grade });
+    if (existing) {
+      const changed = await run(
+        db,
+        "UPDATE aula_records SET author=?,data=?,revision=revision+1,updated=? WHERE id=? AND course=? AND kind='grade-override' AND revision=?",
+        user.id,
+        data,
+        now,
+        id,
+        body.course,
+        existing.revision,
+      );
+      if (!changed.meta.changes) fail('Esta calificación cambió. Recarga antes de guardar.', 409);
+    } else {
+      try {
+        await run(db, "INSERT INTO aula_records (id,course,kind,author,data,revision,created,updated) VALUES (?,?,'grade-override',?,?,1,?,?)", id, body.course, user.id, data, now, now);
+      } catch {
+        fail('Esta calificación cambió. Recarga antes de guardar.', 409);
+      }
+    }
+    return json(categoryGradeRecord(await one(db, 'SELECT * FROM aula_records WHERE id=?', id)));
+  },
+
   'POST /api/grades/category': async ({ db, user, request }) => {
     const body = await readJson(request);
     requireTeacher(await access(db, user, body.course));

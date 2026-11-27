@@ -1,9 +1,19 @@
-# Enlace · versión 12.111
+# Enlace · versión 12.112
 
 Plataforma académica independiente para docentes y alumnos de cualquier academia (nació en una academia de Física), con interfaz inspirada en Brightspace.
 No es el código de D2L Brightspace ni una plataforma oficial de ninguna institución.
 
 Esta versión se despliega en **tu propia cuenta de Cloudflare** (Workers + D1 + R2, plan gratuito) y ya no depende de ChatGPT Sites.
+
+## Novedades de la versión 12.112 (corregir a mano cualquier calificación del libro)
+
+- En el libro de calificaciones ahora se puede escribir a mano en todas las casillas con calificación:
+  - **Evaluaciones en línea (exámenes):** cada evaluación que cuenta tiene su columna dentro del bloque de su rubro.
+  - **Calificación de cada parcial.**
+  - **Calificación final.**
+  - (Las actividades y los rubros ya se podían capturar.)
+- Debajo de cada casilla se ve el cálculo («Cálculo: 6»). Si escribes un número, ese número manda y la casilla se marca «Manual · cálculo: …»; si la vacías, vuelve el cálculo. Enter pasa al siguiente alumno.
+- La calificación manual de un examen entra al rubro como si fuera la del intento; la de un parcial entra a la final; la final manual reemplaza el promedio. El alumno ve el resultado en «Mis calificaciones». Los intentos no se modifican.
 
 ## Novedades de la versión 12.111 (la final cuadra con las columnas de los parciales)
 

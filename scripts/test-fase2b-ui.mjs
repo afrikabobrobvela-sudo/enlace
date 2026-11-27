@@ -163,8 +163,42 @@ check((page.match(/class="category-grade-input"/g) || []).length === 6, 'El libr
 { const head = page.slice(page.indexOf('<thead>'), page.indexOf('</thead>')), row2 = head.slice(head.indexOf('</tr><tr>')), at = (x) => head.indexOf(x);
   check(at('>Asistencia<') > 0 && at('>Asistencia<') < at('>Rubros<') && at('>Rubros<') < at('Calificación final') && at('Calificación final') < at('⊟ Prácticas') && at('⊟ Prácticas') < at('⊟ Exámenes'), 'Resumen al inicio (asistencia, rubros, final) y después los bloques de actividades (12.60)');
   check(row2.indexOf('Prácticas<div class="muted">50 %') < row2.indexOf('Exámenes<div class="muted">50 %') && row2.indexOf('Exámenes<div class="muted">50 %') < row2.indexOf('>Práctica<') && row2.indexOf('>Práctica<') < row2.indexOf('>Examen<') && !head.includes('Subtotal'), 'Los exámenes van al final del resumen y de los bloques; cada actividad en el bloque de su rubro'); }
-check(/final-grade grade-low">2<\/td>/.test(page), 'Sofía: Exámenes 4×50 % y Prácticas vacío → la final queda en 2');
+check(/class="final-grade grade-low category-grade-cell[^"]*"[^>]*>\s*<input class="override-input"[^>]*placeholder="2"[^>]*data-ov-target="final"/.test(page), 'Sofía: Exámenes 4×50 % y Prácticas vacío → la final queda en 2');
 check(page.includes('Promedio parcial por categorías'));
+// 12.112: capturas manuales que sustituyen un cálculo (evaluación, parcial, final).
+{
+  const ov = run(`(() => {
+    const before = current.records.length;
+    const d = current.records.find((r) => r.kind === 'grading').data;
+    const saved = JSON.stringify(d);
+    d.terms = [{ id: 'p1', name: 'Parcial 1', weight: 50 }, { id: 'p2', name: 'Parcial 2', weight: 50 }];
+    d.categories[0].term = 'p1'; d.categories[1].term = 'p2'; d.categories[0].weight = 100; d.categories[1].weight = 100;
+    current.records.push(
+      { id: 'qx', kind: 'quiz', revision: 1, data: { title: 'Parcial en línea', visible: true, questions: [], grade: { category: 'E', points: 10, policy: 'best' } } },
+      { id: 'atx', kind: 'attempt', author: 'u-sofia', revision: 1, data: { quiz: 'qx', attempt: 1, score: 3 } },
+      { id: 'o1', kind: 'grade-override', revision: 1, data: { target: 'quiz', ref: 'qx', member: 'm-sofia', grade: 9 } },
+    );
+    const qx = current.records.find((r) => r.id === 'qx');
+    const out = { quiz: quizScore(qx, 'm-sofia'), auto: quizAutoScore(qx, 'm-sofia') };
+    current.records.push({ id: 'o2', kind: 'grade-override', revision: 1, data: { target: 'term', ref: 'p1', member: 'm-sofia', grade: 4 } }, { id: 'o3', kind: 'grade-override', revision: 1, data: { target: 'term', ref: 'p2', member: 'm-sofia', grade: 6 } });
+    const fr = studentGrade('m-sofia', { final: true });
+    out.terms = fr.terms.map((t) => t.value).join();
+    out.final = courseFinalGrade(fr, { passing: 6 }).value;
+    current.records.push({ id: 'o4', kind: 'grade-override', revision: 1, data: { target: 'final', ref: '', member: 'm-sofia', grade: 7 } });
+    out.finalManual = courseFinalGrade(studentGrade('m-sofia', { final: true }), { passing: 6 }).value;
+    renderGrades();
+    const pg = $('#main').innerHTML;
+    out.cells = ['data-ov-target="quiz"', 'data-ov-target="term"', 'data-ov-target="final"'].every((x) => pg.includes(x)) && pg.includes('Parcial en línea');
+    current.records.splice(before);
+    Object.assign(d, JSON.parse(saved));
+    if (!JSON.parse(saved).terms) delete d.terms;
+    return out;
+  })()`);
+  check(ov.quiz === 9 && ov.auto === 3, 'La evaluación capturada a mano sustituye su calificación (12.112)');
+  check(ov.terms === '4,6' && ov.final === 5, 'Los parciales capturados a mano entran a la final: 4 y 6 → 5 (12.112)');
+  check(ov.finalManual === 7, 'La final capturada a mano manda (12.112)');
+  check(ov.cells, 'El libro tiene casillas editables de evaluación, parcial y final (12.112)');
+}
 // 12.109: segunda oportunidad: en la original cuenta la mejor de las dos; la segunda no cuenta aparte.
 {
   const sc = run(`(() => {
