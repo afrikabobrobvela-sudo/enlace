@@ -222,6 +222,28 @@ check(page.includes('Promedio parcial por categorías'));
   })()`);
   check(r.shown !== null && Number(r.shown) === Number(Number(r.counted).toFixed(2)) && r.counted < r.plain, 'Los rubros del libro muestran la vencida sin entregar como 0, igual que el parcial (12.114)');
 }
+// 12.115: el borrador y la actividad oculta no cuentan (el alumno no los recibe); así su promedio y el del libro coinciden.
+{
+  const r = run(`(() => {
+    const before = current.records.length;
+    const base = studentGrade('m-sofia').categories.find((c) => c.id === 'E').value;
+    current.records.push(
+      { id: 'b1', kind: 'task', revision: 1, data: { title: 'Borrador', visible: true, category: 'E', points: 1 } },
+      { id: 'sb1', kind: 'submission', revision: 1, data: { task: 'b1', member: 'm-sofia', grade: 10, published: false, manual: true } },
+      { id: 'b2', kind: 'task', revision: 1, data: { title: 'Oculta', visible: false, category: 'E', points: 1 } },
+      { id: 'sb2', kind: 'submission', revision: 1, data: { task: 'b2', member: 'm-sofia', grade: 10, published: true, manual: true } },
+    );
+    if (typeof indexed === 'function') try { indexed(true); } catch {}
+    const withDrafts = studentGrade('m-sofia').categories.find((c) => c.id === 'E').value;
+    current.records.find((x) => x.id === 'sb1').data.published = true;
+    if (typeof indexed === 'function') try { indexed(true); } catch {}
+    const published = studentGrade('m-sofia').categories.find((c) => c.id === 'E').value;
+    current.records.splice(before);
+    if (typeof indexed === 'function') try { indexed(true); } catch {}
+    return { base, withDrafts, published };
+  })()`);
+  check(r.withDrafts === r.base && r.published > r.base, 'El borrador y la actividad oculta no cuentan; al publicarse, sí (12.115)');
+}
 // 12.113: la casilla trae el cálculo dentro; dejarlo igual no crea una captura manual, cambiarlo sí.
 {
   const r = await run(`(async () => {

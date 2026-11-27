@@ -1,9 +1,19 @@
-# Enlace · versión 12.114
+# Enlace · versión 12.115
 
 Plataforma académica independiente para docentes y alumnos de cualquier academia (nació en una academia de Física), con interfaz inspirada en Brightspace.
 No es el código de D2L Brightspace ni una plataforma oficial de ninguna institución.
 
 Esta versión se despliega en **tu propia cuenta de Cloudflare** (Workers + D1 + R2, plan gratuito) y ya no depende de ChatGPT Sites.
+
+## Novedades de la versión 12.115 (el alumno ve la misma calificación que tú)
+
+- El promedio solo cuenta lo que el alumno ya puede ver. Antes, el libro contaba cosas que al alumno no le llegaban, y por eso su calificación salía distinta de la tuya:
+  - calificaciones guardadas como **borrador**;
+  - actividades **ocultas**;
+  - evaluaciones **sin publicar**.
+- Para que un borrador cuente, publícalo: en el encabezado de la actividad aparece «Publicar N borradores».
+- En «Mis calificaciones», el número grande del alumno es ahora la **calificación final**, la misma de tu columna «Calificación final»; debajo sigue el promedio de lo ya calificado.
+- Pendiente: si una evaluación oculta su calificación al alumno (resultados sin mostrar o con fecha de liberación), tú la sigues viendo en el promedio y él no hasta que se libere.
 
 ## Novedades de la versión 12.114 (los rubros cuadran con el parcial)
 

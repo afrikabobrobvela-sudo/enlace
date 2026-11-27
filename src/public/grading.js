@@ -314,13 +314,20 @@ const countedQuizzes = () => {
 function studentGrade(memberId, { final = false } = {}) {
   // Solo lo dirigido a su sección (lo de otras secciones no le cuenta).
   const member = current.members.find((m) => m.id === memberId);
-  const tasks = records('task').filter((t) => itemApplies(t, member));
-  const quizzes = countedQuizzes().filter((q) => itemApplies(q, member));
+  // 12.115: solo cuenta lo que el alumno recibe, para que su promedio y el del libro coincidan: actividades y
+  // evaluaciones visibles (y ya publicadas) y calificaciones publicadas; un borrador no cuenta hasta publicarse.
+  const released = (r) => r.data.visible !== false && !(r.data.publishAt && Date.parse(r.data.publishAt) > Date.now());
+  const tasks = records('task').filter((t) => released(t) && itemApplies(t, member));
+  const quizzes = countedQuizzes().filter((q) => released(q) && itemApplies(q, member));
+  const publishedGrade = (task) => {
+    const s = gradeOf(memberId, task.id);
+    return s && s.data.published !== false ? s.data.grade ?? null : null;
+  };
   const result = computeGrade({
     quizzes,
     quizGrades: new Map(quizzes.map((q) => [q.id, quizScore(q, memberId)])),
     tasks,
-    grades: new Map(tasks.map((t) => [t.id, gradeOf(memberId, t.id)?.data.grade ?? null])),
+    grades: new Map(tasks.map((t) => [t.id, publishedGrade(t)])),
     settings: gradingSettings(),
     weights: records('weights')[0]?.data.weights,
     attendancePercent: attendancePercentFor(memberId),
@@ -354,6 +361,8 @@ function myGradesHtml() {
   const weighted = !cats.length && weights && tasks.every((t) => Number.isFinite(weights[t.id]));
   const result = studentGrade(member.id);
   const avg = result.value;
+  // 12.115: el número grande es la calificación final, la misma de la columna «Calificación final» del libro.
+  const fin = courseFinalGrade(studentGrade(member.id, { final: true }), grading.final);
   const tone = (value) => (value === null ? '' : value >= grading.final.passing ? 'grade-pass' : 'grade-low');
   const now = Date.now();
   const taskItems = tasks
@@ -402,8 +411,9 @@ function myGradesHtml() {
   const scheme = cats.length ? 'por categorías' : weighted ? 'ponderado' : 'simple';
   return `<h1>Mis calificaciones</h1>
     <section class="my-grade-summary">
-      <p class="my-grade-big ${tone(avg)}">${formatGrade(avg)}</p>
-      <div><h2>Promedio parcial</h2><p class="muted">Promedio ${scheme}, de 0 a 10, de lo ya calificado${result.terms?.some((t) => t.complete) && result.terms.some((t) => !t.complete) ? ` (solo ${result.terms.filter((t) => t.complete).map((t) => esc(t.name)).join(", ")}; lo demás sigue en curso)` : ""}.</p></div>
+      <p class="my-grade-big ${tone(fin?.value ?? null)}">${fin ? formatGrade(fin.value, 0) : '—'}</p>
+      <div><h2>Calificación final</h2><p class="muted">La misma que registra tu docente en el libro de calificaciones${grading.final.missingAsZero ? '; lo vencido que no entregaste cuenta 0' : ''}.</p>
+      <p class="muted">Promedio ${scheme} de lo ya calificado: <strong>${formatGrade(avg)}</strong>${result.terms?.some((t) => t.complete) && result.terms.some((t) => !t.complete) ? ` (solo ${result.terms.filter((t) => t.complete).map((t) => esc(t.name)).join(", ")}; lo demás sigue en curso)` : ""}.</p></div>
       ${myAttendanceSummaryHtml(member)}
     </section>
     ${
