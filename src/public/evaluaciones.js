@@ -343,14 +343,19 @@ document.addEventListener('click', (e) => {
 });
 
 /** ¿Cuenta en la calificación? Solo con categorías: la evaluación entra a una categoría con su valor en puntos. */
-function quizGradeHtml(grade) {
+function quizGradeHtml(grade, editingId = null) {
   const settings = gradingSettings();
   const cats = settings.scheme === 'categories' ? settings.categories.filter((c) => c.source !== 'attendance') : [];
   if (!cats.length) {
     return `<fieldset class="quiz-settings"><legend>Calificación</legend><p class="muted">Para que esta evaluación cuente en el promedio, organiza la calificación del curso por categorías (Calificaciones → Administrar calificaciones). Mientras tanto, sus resultados se ven aquí y en «Mis calificaciones» sin sumarse.</p></fieldset>`;
   }
   const policy = grade?.policy || 'best';
-  return `<fieldset class="quiz-settings"><legend>Calificación</legend><div class="quiz-grid">
+  // 12.109: segunda oportunidad de otra evaluación: en la original cuenta la mejor de las dos.
+  const originals = records('quiz').filter((q) => q.id !== editingId && !q.data.grade?.replaces);
+  const replaces = `<label>Es segunda oportunidad de<select name="gradeReplaces"><option value="">No (evaluación normal)</option>${originals
+    .map((q) => `<option value="${esc(q.id)}" ${grade?.replaces === q.id ? 'selected' : ''}>${esc(q.data.title)}</option>`)
+    .join('')}</select><small class="muted">No cuenta aparte: en la evaluación original se toma la mejor calificación de las dos (quien no la presente conserva la original). La categoría y los puntos son los de la original.</small></label>`;
+  return `<fieldset class="quiz-settings"><legend>Calificación</legend>${replaces}<div class="quiz-grid">
     <label>Cuenta en la calificación<select name="gradeCategory">${gradebookCategoryOptions(grade?.category, 'No cuenta (solo práctica)')}</select></label>
     <label>Valor dentro de la categoría (puntos)<input name="gradePoints" type="number" min="0.1" max="1000" step="0.1" value="${esc(grade?.points ?? 10)}"></label>
     <label>Con varios intentos, cuenta<select name="gradePolicy">${Object.entries(QUIZ_POLICIES)
@@ -389,7 +394,7 @@ function quizModal(old) {
         <p class="muted">Si otros grupos aún no presentan, desmarca «Qué preguntas acertó» o pon aquí la fecha y hora en que termina el último grupo: hasta entonces nadie ve su calificación ni sus aciertos, y después se muestran solos.</p></fieldset>` +
       examSettingsHtml(settings.exam) +
       sebSettingsHtml(settings.seb) +
-      quizGradeHtml(old?.data.grade) +
+      quizGradeHtml(old?.data.grade, old?.id) +
       visible(old?.data.visible ?? false, old?.data.publishAt || '', [], false) +
       conditionsEditorHtml(old) +
       `<div id="quizQuestions"></div><datalist id="quizPools"></datalist>
@@ -418,7 +423,11 @@ function quizModal(old) {
           visible: f.get('visible') === 'on',
           publishAt: iso(f.get('publishAt')),
           sections: courseSections().length ? readQuizSections(f) : [],
-          grade: f.get('gradeCategory') ? { category: f.get('gradeCategory'), points: Number(f.get('gradePoints')), policy: f.get('gradePolicy') } : null,
+          grade: f.get('gradeReplaces')
+            ? { replaces: String(f.get('gradeReplaces')) }
+            : f.get('gradeCategory')
+              ? { category: f.get('gradeCategory'), points: Number(f.get('gradePoints')), policy: f.get('gradePolicy') }
+              : null,
           settings: {
             attempts: Number(f.get('attempts')),
             timeLimit: Number(f.get('timeLimit')),

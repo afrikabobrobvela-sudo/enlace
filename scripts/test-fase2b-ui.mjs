@@ -165,6 +165,26 @@ check((page.match(/class="category-grade-input"/g) || []).length === 6, 'El libr
   check(row2.indexOf('Prácticas<div class="muted">50 %') < row2.indexOf('Exámenes<div class="muted">50 %') && row2.indexOf('Exámenes<div class="muted">50 %') < row2.indexOf('>Práctica<') && row2.indexOf('>Práctica<') < row2.indexOf('>Examen<') && !head.includes('Subtotal'), 'Los exámenes van al final del resumen y de los bloques; cada actividad en el bloque de su rubro'); }
 check(/final-grade grade-low">2<\/td>/.test(page), 'Sofía: Exámenes 4×50 % y Prácticas vacío → la final queda en 2');
 check(page.includes('Promedio parcial por categorías'));
+// 12.109: segunda oportunidad: en la original cuenta la mejor de las dos; la segunda no cuenta aparte.
+{
+  const sc = run(`(() => {
+    const before = current.records.length;
+    current.records.push(
+      { id: 'qa', kind: 'quiz', revision: 1, data: { title: 'Parcial', visible: true, questions: [], grade: { category: 'E', points: 10, policy: 'best' } } },
+      { id: 'qb', kind: 'quiz', revision: 1, data: { title: 'Segunda oportunidad', visible: true, questions: [], grade: { replaces: 'qa' } } },
+      { id: 'at1', kind: 'attempt', author: 'u-sofia', revision: 1, data: { quiz: 'qa', attempt: 1, score: 4 } },
+      { id: 'at2', kind: 'attempt', author: 'u-sofia', revision: 1, data: { quiz: 'qb', attempt: 1, score: 8.5 } },
+    );
+    if (typeof indexed === 'function') try { indexed(true); } catch {}
+    const qa = current.records.find((r) => r.id === 'qa');
+    const out = { best: quizScore(qa, 'm-sofia'), counted: countedQuizzes().map((q) => q.id).join() };
+    current.records.find((r) => r.id === 'at2').data.score = 3;
+    out.keeps = quizScore(qa, 'm-sofia');
+    current.records.splice(before);
+    return out;
+  })()`);
+  check(sc.best === 8.5 && sc.keeps === 4 && !sc.counted.includes('qb') && sc.counted.includes('qa'), 'Segunda oportunidad: cuenta la mejor de las dos y no cuenta aparte (12.109)');
+}
 // 12.102: con parciales, cada parcial tiene su columna con su calificación entera y la final promedia esas enteras.
 {
   const gr = JSON.parse(run("JSON.stringify(current.records.find((r) => r.kind === 'grading').data)"));
