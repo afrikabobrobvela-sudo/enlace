@@ -1,9 +1,15 @@
-# Enlace · versión 12.106
+# Enlace · versión 12.107
 
 Plataforma académica independiente para docentes y alumnos de cualquier academia (nació en una academia de Física), con interfaz inspirada en Brightspace.
 No es el código de D2L Brightspace ni una plataforma oficial de ninguna institución.
 
 Esta versión se despliega en **tu propia cuenta de Cloudflare** (Workers + D1 + R2, plan gratuito) y ya no depende de ChatGPT Sites.
+
+## Novedades de la versión 12.107 (Safe Exam Browser solo en iPhone y iPad)
+
+- En la configuración de la evaluación, al marcar «Exigir Safe Exam Browser» aparece «¿A quién se le exige?»: **A todos** (como antes) o **Solo en iPhone y iPad**. Con la segunda, quien entra desde un iPhone o iPad (también con «Solicitar sitio de escritorio» en Safari) no puede empezar fuera de Safe Exam Browser y ve el botón «Abrir en Safe Exam Browser»; en Android y computadora se presenta normal, con el bloqueo al salir y lo demás.
+- Es una medida disuasiva: la detección usa lo que anuncia el navegador. Un alumno con iPhone puede presentar desde una computadora o un Android, que tienen las protecciones normales.
+- Avisa a tus alumnos con iPhone que instalen Safe Exam Browser (gratis en la App Store) antes del examen.
 
 ## Novedades de la versión 12.106 (enviar el examen al N.º bloqueo)
 

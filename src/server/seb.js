@@ -84,9 +84,19 @@ export function sebPlist(settings) {
  * ¿La solicitud viene de Safe Exam Browser con una configuración permitida? La de Enlace para esta evaluación siempre
  * vale; además, las llaves de un archivo .seb propio del docente, si pegó alguna. true si la evaluación no lo exige.
  */
+/**
+ * 12.107: ¿la solicitud viene de un iPhone o iPad? Por el User-Agent (también el de SEB en iOS) o por la cabecera que
+ * manda Enlace cuando el navegador es táctil y se anuncia como Mac («Solicitar sitio de escritorio»). Es disuasivo:
+ * quien controle su navegador puede ocultarlo, igual que el resto de las señales del modo examen.
+ */
+export const fromAppleTouch = (request) => /iPhone|iPad|iPod/i.test(request.headers.get('User-Agent') || '') || request.headers.get('X-Enlace-Ios') === '1';
+
+/** ¿Esta evaluación le exige SEB a esta solicitud? (todas, o solo las de iPhone y iPad) */
+const sebApplies = (seb, request) => Boolean(seb?.required) && (seb.only !== 'ios' || fromAppleTouch(request));
+
 export async function sebAllows(quiz, request) {
   const seb = quiz.data.settings?.seb;
-  if (!seb?.required) return true;
+  if (!sebApplies(seb, request)) return true;
   const url = request.url.split('#')[0];
   const sent = [request.headers.get('X-SafeExamBrowser-ConfigKeyHash'), request.headers.get('X-SafeExamBrowser-RequestHash')]
     .map((h) => String(h || '').trim().toLowerCase())
@@ -99,7 +109,7 @@ export async function sebAllows(quiz, request) {
 
 /** ¿La evaluación exige SEB y la solicitud viene de él con su configuración? (entonces no hay «salidas» que contar) */
 export async function sebVerified(quiz, request) {
-  return Boolean(quiz.data.settings?.seb?.required) && (await sebAllows(quiz, request));
+  return sebApplies(quiz.data.settings?.seb, request) && (await sebAllows(quiz, request));
 }
 
 /**

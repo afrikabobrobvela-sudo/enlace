@@ -302,9 +302,11 @@ const SEB_KEY = /^[0-9a-f]{64}$/;
 /** `{ seb: { required, keys } }` si la evaluación exige Safe Exam Browser. */
 function sebFields(input) {
   if (!input || input.required !== true) return {};
+  // 12.107: `only: 'ios'` = se exige solo a quien presenta desde iPhone o iPad.
+  const only = input.only === 'ios' ? { only: 'ios' } : {};
   const keys = [...new Set((Array.isArray(input.keys) ? input.keys : String(input.keys ?? '').split(/[\s,;]+/)).map((k) => String(k).trim().toLowerCase()).filter(Boolean))];
   if (keys.length > 10 || keys.some((k) => !SEB_KEY.test(k))) fail('Cada llave de Safe Exam Browser tiene 64 caracteres hexadecimales (0-9 y a-f). Puedes pegar hasta 10, o dejarlo vacío para usar la configuración de Enlace.');
-  return { seb: { required: true, ...(keys.length ? { keys } : {}) } };
+  return { seb: { required: true, ...only, ...(keys.length ? { keys } : {}) } };
 }
 
 // ---- Modo examen ---------------------------------------------------------------------------------
@@ -358,6 +360,7 @@ export function publicSettings(settings) {
   const { startCode, seb, ...rest } = settings;
   // Safe Exam Browser: el alumno sabe que se exige, no las llaves.
   if (seb) rest.needsSeb = true;
+  if (seb?.only === 'ios') rest.sebOnly = 'ios';
   if (!rest.exam) return startCode ? { ...rest, needsCode: true } : rest;
   const { password, place, ...exam } = rest.exam;
   return { ...rest, ...(startCode || password ? { needsCode: true } : {}), exam: { ...exam, needsPassword: Boolean(startCode || password), checksLocation: Boolean(place) } };
