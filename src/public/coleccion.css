@@ -1192,3 +1192,6 @@ dialog.unsaved-ask .dialog-actions { justify-content: flex-end; }
 .quiz-sign { min-width: 44px; min-height: 44px; padding: 0 10px; border: 1px solid var(--line); border-radius: 10px; background: #fff; color: var(--ink); font-size: 22px; font-weight: 700; line-height: 1; cursor: pointer; }
 .quiz-sign:hover { background: #f2f6f9; }
 .quiz-sign:disabled { opacity: 0.5; cursor: default; }
+
+/* 12.103: aviso de examen en cada pregunta (sale en las capturas; texto ≥ 12 px y gris legible). */
+.exam-ai-note { margin: 2px 0 10px; font-size: 12px; line-height: 1.35; color: var(--ink-faint); user-select: none; -webkit-user-select: none; }
