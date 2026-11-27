@@ -107,12 +107,26 @@ export async function sebAllows(quiz, request) {
   const seb = quiz.data.settings?.seb;
   if (!sebApplies(seb, request)) return true;
   const url = request.url.split('#')[0];
-  const sent = [request.headers.get('X-SafeExamBrowser-ConfigKeyHash'), request.headers.get('X-SafeExamBrowser-RequestHash')]
-    .map((h) => String(h || '').trim().toLowerCase())
-    .filter((h) => SEB_KEY.test(h));
-  if (!sent.length) return false;
+  const clean = (values) => values.map((h) => String(h || '').trim().toLowerCase()).filter((h) => SEB_KEY.test(h));
+  const sent = clean([request.headers.get('X-SafeExamBrowser-ConfigKeyHash'), request.headers.get('X-SafeExamBrowser-RequestHash')]);
+  // 12.108: SEB en iPhone/iPad no pone sus cabeceras en las solicitudes fetch; la página manda lo que da su API de
+  // JavaScript (SHA-256 de la dirección de la página + llave) con esa dirección, que debe ser de este mismo sitio.
+  const fromJs = clean([request.headers.get('X-Enlace-Seb-Ck'), request.headers.get('X-Enlace-Seb-Bek')]);
+  const pageUrl = String(request.headers.get('X-Enlace-Seb-Url') || '');
+  let pages = [];
+  if (fromJs.length && pageUrl.length <= 2048) {
+    try {
+      if (new URL(pageUrl).origin === new URL(request.url).origin) pages = [...new Set([pageUrl, pageUrl.split('#')[0]])];
+    } catch {
+      pages = [];
+    }
+  }
+  if (!sent.length && !pages.length) return false;
   const keys = [await sebConfigKey(sebSettings(new URL(request.url).origin, quiz)), ...(seb.keys || [])];
-  for (const key of keys) if (sent.includes(await sha256hex(url + key))) return true;
+  for (const key of keys) {
+    if (sent.length && sent.includes(await sha256hex(url + key))) return true;
+    for (const page of pages) if (fromJs.includes(await sha256hex(page + key))) return true;
+  }
   return false;
 }
 

@@ -1,9 +1,14 @@
-# Enlace · versión 12.107
+# Enlace · versión 12.108
 
 Plataforma académica independiente para docentes y alumnos de cualquier academia (nació en una academia de Física), con interfaz inspirada en Brightspace.
 No es el código de D2L Brightspace ni una plataforma oficial de ninguna institución.
 
 Esta versión se despliega en **tu propia cuenta de Cloudflare** (Workers + D1 + R2, plan gratuito) y ya no depende de ChatGPT Sites.
+
+## Novedades de la versión 12.108 (Safe Exam Browser en iPhone)
+
+- Dentro de Safe Exam Browser en iPhone/iPad no se podía empezar: Enlace no reconocía a SEB (su identificación no siempre dice «SEB/») y SEB para iOS no agrega su llave a las solicitudes internas de la página. Ahora Enlace usa la API de JavaScript de SEB (la misma que usa Moodle) para mandar la llave, y reconoce a SEB también por ella.
+- Si dentro de SEB algo falla, ya no aparece el botón «Abrir en Safe Exam Browser» (que provocaba «Loading New SEB Settings Not Allowed»), sino qué hacer: recargar o salir de SEB y volver a abrir desde Safari.
 
 ## Novedades de la versión 12.107 (Safe Exam Browser por tipo de equipo)
 

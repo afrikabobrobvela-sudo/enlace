@@ -304,6 +304,22 @@ const iphone = { 'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac
 const android = { 'User-Agent': 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 Chrome/130.0 Mobile Safari/537.36' };
 assert.equal((await call('ana', '/api/attempt/start', { course: c, quiz: soloIos.id }, 403, iphone)).needsSeb, true, 'iPhone en Safari: no puede empezar');
 assert.equal((await call('luis', '/api/attempt/start', { course: c, quiz: soloIos.id }, 403, { 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Safari/605.1.15', 'X-Enlace-Ios': '1' })).needsSeb, true, 'iPhone con «sitio de escritorio» (se anuncia como Mac): tampoco');
+// 12.108: SEB en iPhone no pone cabeceras en fetch; la página manda lo de su API de JavaScript (dirección de la página + llave).
+const keyOf = async (quizId) => {
+  const x = await (await worker.fetch(new Request(`https://t.local/seb/${quizId}.seb`), env)).text();
+  const d2 = {};
+  for (const [, k, v] of x.matchAll(/<key>([^<]+)<\/key>\n\t(<true\/>|<false\/>|<integer>-?\d+<\/integer>|<string>[^<]*<\/string>)/g)) d2[k] = v === '<true/>' ? true : v === '<false/>' ? false : v.startsWith('<integer>') ? Number(v.slice(9, -10)) : v.slice(8, -9).replace(/&amp;/g, '&');
+  delete d2.originatorVersion;
+  const ks = Object.keys(d2).sort((a2, b2) => a2.toLowerCase().localeCompare(b2.toLowerCase(), 'en'));
+  return [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`{${ks.map((k) => `${JSON.stringify(k)}:${JSON.stringify(d2[k])}`).join(',')}}`)))].map((b) => b.toString(16).padStart(2, '0')).join('');
+};
+const iosKey = await keyOf(soloIos.id);
+const pagina = `https://t.local/#c=${c}&s=quiz&d=${soloIos.id}`;
+await call('ana', '/api/attempt/start', { course: c, quiz: soloIos.id }, 403, { ...iphone, 'X-Enlace-Seb-Ck': await hashWith('https://otro.sitio/#x', iosKey), 'X-Enlace-Seb-Url': 'https://otro.sitio/#x' });
+await call('ana', '/api/attempt/start', { course: c, quiz: soloIos.id }, 403, { ...iphone, 'X-Enlace-Seb-Ck': 'f'.repeat(64), 'X-Enlace-Seb-Url': pagina });
+await call('ana', '/api/attempt/start', { course: c, quiz: soloIos.id }, 200, { ...iphone, 'X-Enlace-Seb-Ck': await hashWith(pagina, iosKey), 'X-Enlace-Seb-Url': pagina });
+await call('ana', '/api/attempt', { course: c, quiz: soloIos.id, answers: { 0: 0 } }, 201, { ...iphone, 'X-Enlace-Seb-Ck': await hashWith(pagina.split('#')[0], iosKey), 'X-Enlace-Seb-Url': pagina });
+checks += 4;
 const evaStart = await call('eva', '/api/attempt/start', { course: c, quiz: soloIos.id }, 200, android);
 await call('eva', '/api/attempt/away', { course: c, quiz: soloIos.id, attempt: evaStart.attempt }, 200, android);
 assert.equal((await call('eva', '/api/attempt/back', { course: c, quiz: soloIos.id, attempt: evaStart.attempt, seconds: 3 }, 200, android)).locked, true, 'En Android presenta normal y las salidas sí bloquean');
