@@ -438,7 +438,8 @@ function renderGrades() {
     // si está activa); antes la columna usaba el promedio sin esa regla y no cuadraba con la final.
     const result = studentGrade(m.id), avg = result.value, finalResult = studentGrade(m.id, { final: true }), fin = courseFinalGrade(finalResult, grading.final);
     const pct = attendancePercentFor(m.id);
-    const catCell = (c) => { const r = result.categories.find(x => x.id === c.id); return categoryGradeCellHtml(r || c, m, r?.value ?? null); };
+    // 12.114: los rubros muestran lo mismo que entra a su parcial (con «lo no entregado cuenta 0» si está activa).
+    const catCell = (c) => { const r = finalResult.categories.find(x => x.id === c.id); return categoryGradeCellHtml(r || c, m, r?.value ?? null); };
     const termCell = (t) => {
       const tr = (result.terms || []).find(x => x.id === t.id);
       const tf = (finalResult.terms || []).find(x => x.id === t.id);
@@ -1039,7 +1040,7 @@ function exportGrades() {
       s = "'" + s;
     return '"' + s.replace(/"/g, '""') + '"';
   };
-  const rows = [['Matrícula', 'Alumno', ...(courseSections().length ? ['Sección'] : []), 'Promedio parcial', 'Calificación final', ...(cats.length ? grading.terms || [] : []).map(t => `${t.name} (${t.weight} %)`), ...cats.map(c => `${categoryLabel(c, grading)} (${c.weight} %)`), ...ts.map(t => t.data.title)], ...gradebookStudents().map(m => { const result = studentGrade(m.id); return [m.matricula, m.name, ...(courseSections().length ? [sectionName(m.section)] : []), result.value?.toFixed(2) || '', courseFinalGrade(studentGrade(m.id, { final: true }), grading.final)?.value.toFixed(0) ?? '', ...(studentGrade(m.id, { final: true }).terms || []).map(t => finalGrade(t.value, grading.final)?.value.toFixed(0) ?? ''), ...result.categories.map(c => c.value === null ? '' : c.value.toFixed(2)), ...ts.map(t => itemApplies(t, m) ? gradeOf(m.id, t.id)?.data.grade ?? '' : 'n/a')]; })];
+  const rows = [['Matrícula', 'Alumno', ...(courseSections().length ? ['Sección'] : []), 'Promedio parcial', 'Calificación final', ...(cats.length ? grading.terms || [] : []).map(t => `${t.name} (${t.weight} %)`), ...cats.map(c => `${categoryLabel(c, grading)} (${c.weight} %)`), ...ts.map(t => t.data.title)], ...gradebookStudents().map(m => { const result = studentGrade(m.id); return [m.matricula, m.name, ...(courseSections().length ? [sectionName(m.section)] : []), result.value?.toFixed(2) || '', courseFinalGrade(studentGrade(m.id, { final: true }), grading.final)?.value.toFixed(0) ?? '', ...(studentGrade(m.id, { final: true }).terms || []).map(t => finalGrade(t.value, grading.final)?.value.toFixed(0) ?? ''), ...studentGrade(m.id, { final: true }).categories.map(c => c.value === null ? '' : c.value.toFixed(2)), ...ts.map(t => itemApplies(t, m) ? gradeOf(m.id, t.id)?.data.grade ?? '' : 'n/a')]; })];
   download('calificaciones.csv', '\uFEFF' + rows.map(r => r.map(quote).join(',')).join('\r\n'), 'text/csv;charset=utf-8');
 }
 document.addEventListener('click', async (e) => {

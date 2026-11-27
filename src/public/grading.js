@@ -29,7 +29,7 @@ function orderedTasks(tasks = records('task')) {
  * Calificación de un alumno. Con final = true y la regla activa, las actividades vencidas sin calificar valen 0;
  * si no, se excluye lo no calificado y se normalizan los pesos restantes (como siempre en Enlace).
  */
-function computeGrade({ tasks, grades, settings, weights, attendancePercent = null, now = Date.now(), final = false, dueOf = (task) => task.data.due, quizzes = [], quizGrades = new Map(), categoryGrades = new Map(), termGrades = new Map() }) {
+function computeGrade({ tasks, grades, settings, weights, attendancePercent = null, now = Date.now(), final = false, dueOf = (task) => task.data.due, submitted = () => false, quizzes = [], quizGrades = new Map(), categoryGrades = new Map(), termGrades = new Map() }) {
   // Evaluaciones que cuentan (12.14): solo con categorías; entran a su categoría con sus puntos y la calificación
   // del intento que marque su regla. Sin intento no cuentan (no tienen fecha de entrega que las haga vencer).
   const zeroMissing = final && settings.final.missingAsZero;
@@ -38,7 +38,8 @@ function computeGrade({ tasks, grades, settings, weights, attendancePercent = nu
     if (grade !== null && grade !== undefined) return grade;
     const due = dueOf(task);
     const overdue = task.data.visible !== false && due && Date.parse(due) < now;
-    return zeroMissing && overdue ? 0 : null;
+    // 12.114: lo entregado que el docente aún no califica no es «no entregado»: no cuenta como 0.
+    return zeroMissing && overdue && !submitted(task) ? 0 : null;
   };
   let sum = 0;
   let total = 0;
@@ -327,6 +328,7 @@ function studentGrade(memberId, { final = false } = {}) {
     termGrades: new Map(records('grade-override').filter((r) => r.data.target === 'term' && r.data.member === memberId).map((r) => [r.data.ref, r.data.grade])),
     final,
     dueOf: (task) => dueFor(task, memberId),
+    submitted: (task) => hasSubmission(gradeOf(memberId, task.id)),
   });
   const finalOverride = gradeOverrideOf('final', '', memberId);
   return finalOverride ? { ...result, finalOverride: Number(finalOverride.data.grade) } : result;
@@ -419,7 +421,7 @@ function myGradesHtml() {
                   })
                   .join('')}</ul></section>`
               : ''
-          }<section class="panel"><h2>Por categoría</h2><ul class="my-grade-list">${result.categories
+          }<section class="panel"><h2>Por categoría</h2><ul class="my-grade-list">${studentGrade(member.id, { final: true }).categories
             .map((c) => `<li class="my-grade-item"><div class="my-grade-row is-static"><span class="my-grade-title">${esc(categoryLabel(c, grading))}<small>${c.weight} % ${c.term ? 'del parcial' : 'del promedio'}</small></span><span class="my-grade-value ${c.value === null ? 'is-pending' : tone(c.value)}">${c.value === null ? 'Sin calificar' : formatGrade(c.value)}</span></div></li>`)
             .join('')}</ul></section>`
         : ''

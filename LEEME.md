@@ -1,9 +1,16 @@
-# Enlace · versión 12.113
+# Enlace · versión 12.114
 
 Plataforma académica independiente para docentes y alumnos de cualquier academia (nació en una academia de Física), con interfaz inspirada en Brightspace.
 No es el código de D2L Brightspace ni una plataforma oficial de ninguna institución.
 
 Esta versión se despliega en **tu propia cuenta de Cloudflare** (Workers + D1 + R2, plan gratuito) y ya no depende de ChatGPT Sites.
+
+## Novedades de la versión 12.114 (los rubros cuadran con el parcial)
+
+- Con la regla «lo no entregado cuenta 0» activada, la calificación de cada parcial y la final ya contaban como 0 las actividades vencidas sin calificación. Las columnas de los rubros (Tareas, Laboratorio…) no lo hacían, así que el parcial no cuadraba con lo que se veía: por ejemplo, Tareas en 10 y el parcial en 6.
+- Ahora los rubros del libro, la exportación y «Mis calificaciones» del alumno muestran el mismo valor que entra al parcial y a la final.
+- Una actividad que el alumno **sí entregó** y que todavía no calificas ya no cuenta como 0: solo cuenta como 0 lo vencido que no se entregó.
+- Si no quieres que lo no entregado cuente 0, desactiva la regla en Calificaciones → Administrar calificaciones.
 
 ## Novedades de la versión 12.113 (el cálculo se corrige dentro de la casilla)
 
