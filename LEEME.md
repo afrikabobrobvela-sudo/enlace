@@ -1,9 +1,14 @@
-# Enlace · versión 12.103
+# Enlace · versión 12.104
 
 Plataforma académica independiente para docentes y alumnos de cualquier academia (nació en una academia de Física), con interfaz inspirada en Brightspace.
 No es el código de D2L Brightspace ni una plataforma oficial de ninguna institución.
 
 Esta versión se despliega en **tu propia cuenta de Cloudflare** (Workers + D1 + R2, plan gratuito) y ya no depende de ChatGPT Sites.
+
+## Novedades de la versión 12.104 (sin seleccionar texto y examen tapado al salir)
+
+- En modo examen ya no se puede seleccionar el texto de las preguntas (ni con pulsación larga en el iPhone), así el menú del teléfono no ofrece «Buscar en la web», «Traducir» o «Compartir». Las casillas de respuesta se escriben igual que antes.
+- En cuanto la página del examen pierde el foco (otra pestaña, la vista de pestañas, aplicaciones recientes) el examen se tapa con «Examen en curso · vuelve a esta página para continuar», para que la miniatura de la ventana no muestre la pregunta. Al volver se destapa solo. Depende del teléfono: si el sistema toma la miniatura antes de que la página reaccione, puede alcanzar a verse; pruébalo con el alumno de prueba. «Rodea para buscar» de Android sobre la pantalla no se puede bloquear desde una página web (sí se registra como salida si sale de la página).
 
 ## Novedades de la versión 12.103 (aviso contra el uso de IA en el examen)
 

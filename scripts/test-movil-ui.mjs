@@ -31,6 +31,7 @@ const load = (file, transform = (s) => s) => vm.runInContext(transform(readFileS
 for (const file of ['fecha.js', 'richtext.js', 'compress.js', 'trash.js', 'reactivos.js', 'evaluaciones.js', 'banco.js', 'oficina.js', 'resultados.js', 'd2l.js', 'importar.js', 'foros.js', 'condiciones.js', 'importaciones.js', 'secciones.js', 'especial.js', 'foto.js', 'pendientes.js', 'calendario.js', 'navegacion.js', 'movil.js', 'registro.js', 'workspace.js', 'preview.js', 'attendance.js', 'teams.js', 'grading.js', 'rubrics.js']) load(file);
 load('app.js', (s) => s.replace('\ninit();', '\n'));
 const run = (code) => vm.runInContext(code, context);
+context.__covered = () => bodyClasses.has('exam-covered');
 let checks = 0;
 const check = (condition, message) => {
   assert(condition, message);
@@ -216,11 +217,13 @@ const examOfflineResult = await run(`(async () => {
   // Sale a otra aplicación (modo avión): el aviso no llega, pero la salida queda guardada.
   document.visibilityState = 'hidden';
   examAwayCheck();
+  var coveredAway = __covered();
   var storedAway = JSON.parse(saved['enlace-examen:q9:1']).awaySince;
   await wait(30);
   document.visibilityState = 'visible';
   focused = true;
   examAwayCheck();
+  var coveredBack = __covered();
   await wait(0); await wait(0); await wait(0);
   var left = examState.events.find((e) => e.kind === 'left');
   var storedEvents = JSON.parse(saved['enlace-examen:q9:1']).events;
@@ -241,8 +244,9 @@ const examOfflineResult = await run(`(async () => {
   focused = true; examAwayCheck();
   examState = null;
   globalThis.fetch = original;
-  return { storedAway: Boolean(storedAway), callsAway: calls.some((u) => u.endsWith('/away')), callsBack: calls.some((u) => u.endsWith('/back')), left, storedLeft: storedEvents.some((e) => e.kind === 'left' && !e.judged), recovered, pollDelay: pollAwaySince ? pollAwaySince - t0 : null };
+  return { storedAway: Boolean(storedAway), callsAway: calls.some((u) => u.endsWith('/away')), callsBack: calls.some((u) => u.endsWith('/back')), left, coveredAway, coveredBack, storedLeft: storedEvents.some((e) => e.kind === 'left' && !e.judged), recovered, pollDelay: pollAwaySince ? pollAwaySince - t0 : null };
 })()`);
+check(examOfflineResult.coveredAway === true && examOfflineResult.coveredBack === false, 'Al salir se tapa el examen (la miniatura de pestañas no muestra la pregunta) y al volver se destapa (12.104)');
 check(examOfflineResult.storedAway && examOfflineResult.callsAway && examOfflineResult.callsBack, 'Sin conexión se intentan /away y /back, y la salida abierta queda guardada en el teléfono');
 check(examOfflineResult.left && !examOfflineResult.left.judged && examOfflineResult.storedLeft, 'Si /back no contesta, la salida queda sin juzgar (la decide el servidor al volver la conexión) y guardada');
 check(examOfflineResult.recovered && examOfflineResult.recovered.seconds >= 39 && !examOfflineResult.recovered.judged, 'Al retomar tras recargar estando fuera, la salida abierta se recupera con su duración');
