@@ -548,6 +548,7 @@ function examSettingsHtml(exam) {
     <label class="check-label"><input type="checkbox" name="exam" ${exam?.enabled ? 'checked' : ''}> Activar: pantalla completa, sin copiar ni pegar, y registro de cada vez que el alumno sale de la página</label>
     <div class="exam-options" ${exam?.enabled ? '' : 'hidden'}>
       <label>Contraseña para empezar (opcional; la dictas en el salón. Si pones un código por sección, manda el de la sección)<input name="examPassword" value="${esc(exam?.password || '')}" maxlength="30" autocomplete="off" placeholder="Por ejemplo: gauss"></label>
+      <label>Código distinto para el 2.º intento y los siguientes (opcional)<input name="examRetryPassword" value="${esc(exam?.retryPassword || '')}" maxlength="30" autocomplete="off" placeholder="Por ejemplo: newton"><small class="muted">Así quien ya presentó el primero no puede empezar otro intento fuera del salón con el código que ya conoce. Se lo dictas cuando presente de nuevo.</small></label>
       <label class="check-label"><input type="checkbox" name="oneByOne" ${exam?.oneByOne ? 'checked' : ''}> Una pregunta a la vez</label>
       <label class="check-label"><input type="checkbox" name="noBack" ${exam?.noBack ? 'checked' : ''}> Sin regresar a preguntas anteriores (requiere "una pregunta a la vez")</label>
       <label class="check-label"><input type="checkbox" name="requireAnswer" ${exam?.requireAnswer ? 'checked' : ''}> Obligar a contestar cada pregunta antes de avanzar o enviar (requiere "una pregunta a la vez")</label>
@@ -608,6 +609,7 @@ function readExamSettings(f) {
   return {
     enabled: true,
     password: String(f.get('examPassword') || '').trim(),
+    retryPassword: String(f.get('examRetryPassword') || '').trim(),
     oneByOne,
     noBack: oneByOne && f.get('noBack') === 'on',
     requireAnswer: oneByOne && f.get('requireAnswer') === 'on',
@@ -1532,7 +1534,7 @@ function examIntroHtml(exam, used) {
     <form id="examStart" class="real-form">
       ${resuming ? '<p class="real-status">Tienes este examen en curso: continúa donde ibas.</p>' : ''}
       ${exam.prepareDevice !== false && !resuming ? examPrepareHtml() : ''}
-      ${exam.needsPassword && !resuming ? '<label>Código que dio tu docente<input name="password" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="30"></label>' : ''}
+      ${(used && exam.needsRetryCode) || exam.needsPassword ? (resuming ? '' : `<label>${used && exam.needsRetryCode ? 'Código para este intento (es distinto al del primero; te lo da tu docente)' : 'Código que dio tu docente'}<input name="password" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="30"></label>`) : ''}
       <p class="form-error error" hidden></p>
       <button class="primary">${resuming ? 'Continuar examen' : used ? 'Comenzar otro intento' : 'Comenzar examen'}</button>
     </form></section>`;

@@ -1,9 +1,14 @@
-# Enlace · versión 12.109
+# Enlace · versión 12.110
 
 Plataforma académica independiente para docentes y alumnos de cualquier academia (nació en una academia de Física), con interfaz inspirada en Brightspace.
 No es el código de D2L Brightspace ni una plataforma oficial de ninguna institución.
 
 Esta versión se despliega en **tu propia cuenta de Cloudflare** (Workers + D1 + R2, plan gratuito) y ya no depende de ChatGPT Sites.
+
+## Novedades de la versión 12.110 (código distinto para el segundo intento)
+
+- En el modo examen, junto a «Contraseña para empezar», hay un campo nuevo: **«Código distinto para el 2.º intento y los siguientes»**. Si lo llenas, el primer intento se empieza con la contraseña de siempre y el 2.º (y los siguientes) solo con este código nuevo. Así, quien ya presentó y se salió no puede empezar su otro intento fuera del salón con el código que ya conoce.
+- Debe ser distinto de la contraseña del primero. Retomar un intento ya empezado (por ejemplo, tras recargar) no pide código. Con códigos por sección, el del 2.º intento manda sobre el de la sección.
 
 ## Novedades de la versión 12.109 (segunda oportunidad: cuenta la mejor)
 

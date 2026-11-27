@@ -192,5 +192,19 @@ await call('fer', '/api/attempt/progress', ctx(corte, { answers: { 0: 0 }, posit
 await call('fer', '/api/attempt', ctx(corte, { answers: { 0: 0, 1: 1 } }), 409);
 checks += 7;
 
+// ---- 12.110: código distinto para el 2.º intento ----
+const conIntentos = (exam, status = 201) => call('docente', '/api/record', { course: c, kind: 'quiz', data: { title: 'Dos intentos', visible: true, questions: preguntas, settings: { attempts: 2, exam: { enabled: true, ...exam } } } }, status);
+await conIntentos({ password: 'gauss', retryPassword: 'Gauss' }, 400);
+const dos = await conIntentos({ password: 'gauss', retryPassword: 'newton' });
+const vistoDos = (await call('eva', '/api/course?id=' + c)).records.find((r) => r.id === dos.id).data.settings;
+assert(vistoDos.exam.needsRetryCode && !JSON.stringify(vistoDos).includes('newton') && !JSON.stringify(vistoDos).includes('gauss'), 'El alumno no recibe los códigos');
+await call('eva', '/api/attempt/start', ctx(dos, { password: 'newton' }), 400);
+await call('eva', '/api/attempt/start', ctx(dos, { password: 'gauss' }));
+await call('eva', '/api/attempt', ctx(dos, { answers: { 0: 1, 1: 0 } }), 201);
+await call('eva', '/api/attempt/start', ctx(dos, { password: 'gauss' }), 400);
+const segundo = await call('eva', '/api/attempt/start', ctx(dos, { password: 'newton' }));
+assert.equal(segundo.attempt, 2, 'El 2.º intento empieza solo con su código');
+checks += 3;
+
 assert.deepEqual(store.raw().prepare('PRAGMA foreign_key_check').all(), []);
 console.log(`PASS: ${checks} verificaciones del examen sin señal — salidas en modo avión que llegan tarde y bloquean, sin doble bloqueo, salidas cortas repetidas, silencio medido por el servidor, retomar tras perder la conexión, monitor en vivo y preparar el teléfono.`);

@@ -1814,7 +1814,7 @@ const routes = {
         assertTimeLeft(quiz); // un intento nuevo nunca nace vencido (no se gasta ningún intento)
         // El código de su sección o la contraseña del modo examen (los dicta el docente en el salón) solo se pide al
         // empezar; retomar tras recargar no lo pide.
-        const code = startCodeOf(quiz.data.settings);
+        const code = startCodeOf(quiz.data.settings, attempt);
         if (code) {
           // Cada código cuenta como fallo ANTES de compararlo (una sola instrucción, condicionada a los topes): así
           // varias solicitudes en paralelo no pueden probar más códigos que los permitidos. Si acierta, se descuenta.
