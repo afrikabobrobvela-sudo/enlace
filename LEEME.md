@@ -1,9 +1,15 @@
-# Enlace · versión 12.115
+# Enlace · versión 12.116
 
 Plataforma académica independiente para docentes y alumnos de cualquier academia (nació en una academia de Física), con interfaz inspirada en Brightspace.
 No es el código de D2L Brightspace ni una plataforma oficial de ninguna institución.
 
 Esta versión se despliega en **tu propia cuenta de Cloudflare** (Workers + D1 + R2, plan gratuito) y ya no depende de ChatGPT Sites.
+
+## Novedades de la versión 12.116 (entregas después de una calificación capturada)
+
+- Si ya tenías una calificación capturada para un alumno (por ejemplo, un 0 por no entregar, una importación o una calificación en bloque), reabrías la actividad y el alumno entregaba, el archivo sí se guardaba, pero la actividad seguía diciendo «Sin entrega» o «Captura manual».
+- Ahora esa entrega aparece como entregada y queda «sin revisar» para que la califiques. Las entregas que ya quedaron así antes se corrigen solas al publicar esta versión: no se modifica la base de datos.
+- Si la actividad permite una sola entrega, el alumno ya no puede volver a entregar después de esa.
 
 ## Novedades de la versión 12.115 (el alumno ve la misma calificación que tú)
 

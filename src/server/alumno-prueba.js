@@ -65,7 +65,7 @@ const STATE_SQL = `SELECT m.id, m.role, m.section,
     (SELECT count(*) FROM aula_attempts a WHERE a.course=?1 AND a.user_id=?2) AS attempts,
     (SELECT count(*) FROM aula_attempt_starts s JOIN aula_records r ON r.id=s.quiz AND r.course=?1
        WHERE s.user_id=?2 AND NOT EXISTS (SELECT 1 FROM aula_attempts a WHERE a.quiz=s.quiz AND a.user_id=s.user_id AND a.attempt=s.attempt)) AS running,
-    (SELECT count(*) FROM aula_submissions b WHERE b.course=?1 AND b.member=m.id AND b.manual=0) AS submissions
+    (SELECT count(*) FROM aula_submissions b WHERE b.course=?1 AND b.member=m.id AND b.submitted<>'') AS submissions
   FROM aula_members m WHERE m.course=?1 AND m.email=?3`;
 
 /**
