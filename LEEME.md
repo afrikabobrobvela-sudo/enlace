@@ -18,7 +18,7 @@ Esta versión se despliega en **tu propia cuenta de Cloudflare** (Workers + D1 +
   - actividades **ocultas**;
   - evaluaciones **sin publicar**.
 - Para que un borrador cuente, publícalo: en el encabezado de la actividad aparece «Publicar N borradores».
-- En «Mis calificaciones», el número grande del alumno es ahora la **calificación final**, la misma de tu columna «Calificación final»; debajo sigue el promedio de lo ya calificado.
+- En «Mis calificaciones», el número grande del alumno es ahora la **calificación final**, la misma de tu columna «Calificación final»; con parciales ya no aparece el «promedio parcial» (cada parcial sale abajo).
 - Pendiente: si una evaluación oculta su calificación al alumno (resultados sin mostrar o con fecha de liberación), tú la sigues viendo en el promedio y él no hasta que se libere.
 
 ## Novedades de la versión 12.114 (los rubros cuadran con el parcial)

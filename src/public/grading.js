@@ -413,7 +413,7 @@ function myGradesHtml() {
     <section class="my-grade-summary">
       <p class="my-grade-big ${tone(fin?.value ?? null)}">${fin ? formatGrade(fin.value, 0) : '—'}</p>
       <div><h2>Calificación final</h2><p class="muted">La misma que registra tu docente en el libro de calificaciones${grading.final.missingAsZero ? '; lo vencido que no entregaste cuenta 0' : ''}.</p>
-      <p class="muted">Promedio ${scheme} de lo ya calificado: <strong>${formatGrade(avg)}</strong>${result.terms?.some((t) => t.complete) && result.terms.some((t) => !t.complete) ? ` (solo ${result.terms.filter((t) => t.complete).map((t) => esc(t.name)).join(", ")}; lo demás sigue en curso)` : ""}.</p></div>
+      ${result.terms?.length ? '' : `<p class="muted">Promedio ${scheme} de lo ya calificado: <strong>${formatGrade(avg)}</strong>.</p>`}</div>
       ${myAttendanceSummaryHtml(member)}
     </section>
     ${
