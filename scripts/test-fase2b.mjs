@@ -217,6 +217,25 @@ const unica = await task({ title: 'Una sola entrega', groupCategory: 'Laboratori
 await call('ana', '/api/record', { course: c, kind: 'submission', data: { task: unica.id, body: 'Hecho' } }, 201);
 assert.match((await call('luis', '/api/record', { course: c, kind: 'submission', data: { task: unica.id, body: 'Otra' } }, 403)).error, /una sola entrega/);
 
+// 12.116: el docente capturó un 0 (registro manual), reabrió la actividad y el alumno entregó: ya es una entrega.
+{
+  const reabierta = await task({ title: 'Reabierta', allowResubmit: false });
+  await call('docente', '/api/grade', { course: c, task: reabierta.id, member: id('rosa'), grade: 0 });
+  let row = (await call('rosa', '/api/course?id=' + c)).records.find((r) => r.kind === 'submission' && r.data.task === reabierta.id);
+  assert.equal(row.data.manual, true);
+  await call('rosa', '/api/record', { course: c, kind: 'submission', id: row.id, revision: row.revision, data: { task: reabierta.id, body: 'Ya entregué' } });
+  row = (await course()).records.find((r) => r.kind === 'submission' && r.data.task === reabierta.id && r.data.member === id('rosa'));
+  assert.deepEqual([row.data.manual, row.data.body, row.data.grade], [false, 'Ya entregué', null], 'La entrega sobre una captura manual cuenta como entrega');
+  assert.equal(store.raw().prepare('SELECT manual FROM aula_submissions WHERE id=?').get(row.id).manual, 0);
+  // Una sola entrega: ya no puede volver a entregar.
+  await call('rosa', '/api/record', { course: c, kind: 'submission', id: row.id, revision: row.revision, data: { task: reabierta.id, body: 'Otra' } }, 403);
+  // Filas que quedaron así antes de la corrección (manual=1 con fecha de entrega) también se ven como entrega.
+  store.raw().prepare('UPDATE aula_submissions SET manual=1 WHERE id=?').run(row.id);
+  row = (await course()).records.find((r) => r.id === row.id);
+  assert.equal(row.data.manual, false, 'Una fila antigua con fecha de entrega se muestra como entrega');
+  checks += 4;
+}
+
 assert.deepEqual(store.raw().prepare('PRAGMA foreign_key_check').all(), []);
 store.close();
 console.log(`PASS: ${checks} verificaciones de la fase 2B — categorías y reglas finales, banco de rúbricas con permisos, evaluación con rúbrica y entregas por equipo.`);

@@ -102,7 +102,7 @@ check(element('#bottomnav').hidden === true && !bodyClasses.has('has-bottomnav')
 
 // ---- Mis calificaciones (alumno) ----
 let html = run('myGradesHtml()');
-check(html.includes('<p class="my-grade-big grade-pass">8.50</p>'), 'Promedio parcial con las actividades calificadas');
+check(/<p class="my-grade-big grade-pass">\d+<\/p>/.test(html) && html.includes('<h2>Calificación final</h2>') && html.includes('de lo ya calificado: <strong>8.50</strong>'), 'Calificación final arriba (la del libro) y el promedio de lo calificado (12.115)');
 check(html.includes('Práctica &lt;1&gt;') && !html.includes('Práctica <1>'), 'Títulos escapados');
 check(html.includes('Bien &lt;b&gt;hecho&lt;/b&gt;'), 'Comentario del docente escapado');
 check(html.includes('>Por calificar</span>') && html.includes('>Sin entrega</span>') && html.includes('>Pendiente</span>'), 'Estados de lo que no está calificado');

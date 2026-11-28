@@ -58,6 +58,7 @@ result = run('computeGrade({ tasks, grades, settings, attendancePercent: 90, fin
 check(close(result.categories[1].value, 5), 'Final: la tarea vencida sin calificar vale 0; la oculta no cuenta');
 check(close(result.value, 6.6), 'Final: 7×0.6 + 5×0.3 + 9×0.1 = 6.6');
 check(close(run("computeGrade({ tasks, grades, settings: { ...settings, final: { ...settings.final, missingAsZero: false } }, attendancePercent: 90, final: true }).value"), 8.1));
+check(close(run("computeGrade({ tasks, grades, settings, attendancePercent: 90, final: true, submitted: (t) => t.id === 'ta2' }).categories[1].value"), 10), 'Final: lo entregado y aún sin calificar no cuenta como 0 (12.114)');
 // 12.60: la calificación máxima del rubro escala su cálculo automático (como el examen en línea): 2.5 de 8 = 3.125,
 // con tope 10; la captura manual ya está sobre 10 y no se vuelve a escalar; la asistencia no se toca.
 run(`var curveSettings = (max) => ({ scheme: 'categories', final: settings.final, categories: [{ id: 'X', name: 'Exámenes', weight: 100, source: 'tasks', maxScore: max }] });
@@ -198,6 +199,50 @@ check(page.includes('Promedio parcial por categorías'));
   check(ov.terms === '4,6' && ov.final === 5, 'Los parciales capturados a mano entran a la final: 4 y 6 → 5 (12.112)');
   check(ov.finalManual === 7, 'La final capturada a mano manda (12.112)');
   check(ov.cells, 'El libro tiene casillas editables de evaluación, parcial y final (12.112)');
+}
+// 12.114: con «lo no entregado cuenta 0», los rubros del libro muestran lo mismo que entra al parcial y a la final.
+{
+  const r = run(`(() => {
+    const before = current.records.length;
+    const d = current.records.find((r) => r.kind === 'grading').data;
+    const saved = JSON.stringify(d);
+    d.final.missingAsZero = true;
+    current.records.push({ id: 'vencida', kind: 'task', revision: 1, data: { title: 'Vencida', visible: true, due: '2000-01-01T00:00', category: 'E', points: 1 } });
+    if (typeof indexed === 'function') try { indexed(true); } catch {}
+    renderGrades();
+    const html = $('#main').innerHTML;
+    const at = html.indexOf('data-cg-category="E" data-cg-member="m-sofia"'), head = html.slice(0, at), from = head.lastIndexOf('data-cg-auto="') + 14;
+    const m = at > 0 ? [null, head.slice(from, head.indexOf('"', from))] : null;
+    const counted = studentGrade('m-sofia', { final: true }).categories.find((c) => c.id === 'E').value;
+    const plain = studentGrade('m-sofia').categories.find((c) => c.id === 'E').value;
+    current.records.splice(before);
+    Object.assign(d, JSON.parse(saved));
+    renderGrades();
+    return { shown: m ? m[1] : null, counted, plain };
+  })()`);
+  check(r.shown !== null && Number(r.shown) === Number(Number(r.counted).toFixed(2)) && r.counted < r.plain, 'Los rubros del libro muestran la vencida sin entregar como 0, igual que el parcial (12.114)');
+}
+// 12.115: el borrador y la actividad oculta no cuentan (el alumno no los recibe); así su promedio y el del libro coinciden.
+{
+  const r = run(`(() => {
+    const before = current.records.length;
+    const base = studentGrade('m-sofia').categories.find((c) => c.id === 'E').value;
+    current.records.push(
+      { id: 'b1', kind: 'task', revision: 1, data: { title: 'Borrador', visible: true, category: 'E', points: 1 } },
+      { id: 'sb1', kind: 'submission', revision: 1, data: { task: 'b1', member: 'm-sofia', grade: 10, published: false, manual: true } },
+      { id: 'b2', kind: 'task', revision: 1, data: { title: 'Oculta', visible: false, category: 'E', points: 1 } },
+      { id: 'sb2', kind: 'submission', revision: 1, data: { task: 'b2', member: 'm-sofia', grade: 10, published: true, manual: true } },
+    );
+    if (typeof indexed === 'function') try { indexed(true); } catch {}
+    const withDrafts = studentGrade('m-sofia').categories.find((c) => c.id === 'E').value;
+    current.records.find((x) => x.id === 'sb1').data.published = true;
+    if (typeof indexed === 'function') try { indexed(true); } catch {}
+    const published = studentGrade('m-sofia').categories.find((c) => c.id === 'E').value;
+    current.records.splice(before);
+    if (typeof indexed === 'function') try { indexed(true); } catch {}
+    return { base, withDrafts, published };
+  })()`);
+  check(r.withDrafts === r.base && r.published > r.base, 'El borrador y la actividad oculta no cuentan; al publicarse, sí (12.115)');
 }
 // 12.113: la casilla trae el cálculo dentro; dejarlo igual no crea una captura manual, cambiarlo sí.
 {

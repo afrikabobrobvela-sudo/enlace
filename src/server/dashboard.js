@@ -287,7 +287,7 @@ export const dashboardRoutes = {
             db,
             `WITH teach AS (${TEACHER_COURSES})
              SELECT t.id, t.title, t.course, t.due, t.end_at, t.visible,
-               (SELECT count(*) FROM aula_submissions s WHERE s.task=t.id AND s.submitted!='' AND s.manual=0) AS submitted,
+               (SELECT count(*) FROM aula_submissions s WHERE s.task=t.id AND s.submitted!='') AS submitted,
                (SELECT count(*) FROM aula_submissions s WHERE s.task=t.id AND s.submitted!='' AND s.grade IS NULL) AS to_grade
              FROM teach CROSS JOIN aula_tasks t ON t.course=teach.course AND t.deleted_at IS NULL
              WHERE t.due BETWEEN ?2 AND ?3 ORDER BY t.due LIMIT 300`,

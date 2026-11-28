@@ -66,7 +66,9 @@ export function submissionRecord(row) {
       fileIds: parseJson(row.file_ids, []),
       submitted: row.submitted,
       late: row.late === 1,
-      manual: row.manual === 1,
+      // 12.116: una fila capturada por el docente que después recibió la entrega del alumno (antes no se quitaba la
+      // marca) es una entrega: tiene fecha de envío. Las capturas manuales nunca la tienen.
+      manual: row.manual === 1 && !row.submitted,
       grade: row.grade,
       feedback: row.feedback,
       gradedAt: row.graded_at || '',
@@ -552,7 +554,7 @@ export async function saveSubmission(db, { course, user, id, revision, input, va
 
   const existing = await one(db, 'SELECT * FROM aula_submissions WHERE task=? AND member=?', task.id, member.id);
   if (existing) {
-    if (task.allow_resubmit !== 1 && existing.manual !== 1) fail('Esta actividad permite una sola entrega.', 403);
+    if (task.allow_resubmit !== 1 && (existing.manual !== 1 || existing.submitted)) fail('Esta actividad permite una sola entrega.', 403);
     if (!previous || previous.id !== existing.id) fail('Ya existe una entrega. Recarga antes de actualizarla.', 409);
   }
 
@@ -581,7 +583,7 @@ export async function saveSubmission(db, { course, user, id, revision, input, va
     if (task.allow_resubmit !== 1 && teammates.length) {
       const done = await one(
         db,
-        'SELECT 1 AS x FROM aula_submissions WHERE task=? AND manual=0 AND member IN (SELECT value FROM json_each(?))',
+        "SELECT 1 AS x FROM aula_submissions WHERE task=? AND submitted<>'' AND member IN (SELECT value FROM json_each(?))",
         task.id,
         JSON.stringify(teammates.map((m) => m.id)),
       );
@@ -608,7 +610,7 @@ export async function saveSubmission(db, { course, user, id, revision, input, va
   if (existing) {
     const result = await run(
       db,
-      `UPDATE aula_submissions SET author=?,body=?,file_ids=?,submitted=?,late=?,grade=NULL,feedback='',published=1,graded_by=NULL,
+      `UPDATE aula_submissions SET author=?,body=?,file_ids=?,submitted=?,late=?,manual=0,grade=NULL,feedback='',published=1,graded_by=NULL,
          graded_at=NULL,rubric_scores=NULL,revision=revision+1,updated=? WHERE id=? AND revision=?`,
       user.id,
       body,
